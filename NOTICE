@@ -1,0 +1,14 @@
+grok-mermaid
+Copyright 2026 Alexey Zaytsev
+
+This product is a TypeScript port of the terminal Mermaid renderer from
+grok-build:
+
+  https://github.com/xai-org/grok-build
+  crates/codegen/xai-grok-markdown/src/mermaid.rs
+  Copyright 2023-2026 SpaceXAI
+  Licensed under the Apache License, Version 2.0
+
+The layout algorithms, glyph tables, parser behaviour, and test corpus are
+derived from that file. Both the original and this port are distributed under
+the Apache License, Version 2.0; see LICENSE.
