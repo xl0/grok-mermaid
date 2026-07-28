@@ -1,62 +1,44 @@
 # Plan
 
 Port the terminal Mermaid renderer from `xai-org/grok-build`
-(`crates/codegen/xai-grok-markdown/src/mermaid.rs`, ~3.6k lines) to a modern
-TypeScript library.
+(`crates/codegen/xai-grok-markdown/src/mermaid.rs`) to a modern TypeScript
+library.
 
-Reference checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`.
-
-**Intent:** output-compatible with the Rust original. Same layout decisions,
-same glyphs, same fallbacks. Where the port deviates it must be deliberate and
-recorded in `CODE.md`. The public API is idiomatic TS (semantic spans, no
-ratatui types); everything under it mirrors the Rust structure closely enough
-that upstream changes can be diffed across.
+**Intent:** output-compatible with the Rust original — same layout decisions,
+same glyphs, same fallbacks. Deviations must be deliberate and recorded in
+`CODE.md`. The public API is idiomatic TS (semantic spans, no ratatui types);
+everything under it mirrors the Rust structure closely enough to diff against
+upstream when it changes.
 
 Cargo has no usable toolchain here, so golden files cannot be generated from
-the Rust build. Tests are ported from the upstream `mod tests` instead — that
-suite is thorough (~90 cases) and mostly asserts on rendered text.
+the Rust build. The upstream `mod tests` suite was ported instead.
 
 ## [x] Skeleton
 
-package.json, tsconfig (tsgo), biome, license + attribution, public types,
-stub `render`, smoke test.
+Package, tsgo, biome, Apache-2.0 + NOTICE attribution, public types.
 
-## [ ] Unicode width
+## [x] Renderer
 
-`charWidth` / `stringWidth` matching the `unicode-width` crate: control and
-combining marks 0, East Asian Wide/Fullwidth 2, else 1. Range tables generated
-into `src/width-data.ts` by `scripts/gen-width-data.ts`; zero runtime deps.
+Width tables generated from Unicode 17; canvas with direction-bit glyph
+resolution; label cleaning; all five parsers; graph and sequence layout;
+fallback box; `toAnsi` helper.
 
-## [ ] Canvas
+## [x] Tests
 
-Cell grid (char, class, mask, style, occupied), bit-mask junction glyphs,
-dotted/thick variants, vertical/horizontal flips, run-grouping into spans.
-
-## [ ] Parsers
-
-Statement splitting, label cleaning (HTML tags, entities, markdown), then
-`parseGraph`, `parseState`, `parseClass`, `parseEr`, `parseSequence`.
-
-## [ ] Layout
-
-Ranking (DFS DAG, back edges ignored), crossing minimisation, barycenter
-position assignment, track assignment for buses and lanes, TD and LR placement,
-edge routing, subgraph frames, class/ER compartment boxes.
-
-## [ ] Sequence layout
-
-Separate pass: participant columns, gap solving, messages, notes, dividers.
-
-## [ ] Fallback
-
-Framed source box, width-driven chunking, too-wide hint.
-
-## [ ] Tests
-
-Port the upstream suite. Internals it pokes (`parseGraph`, `wrapLabel`,
-`decodeHtmlEntities`, `computeRanks`, …) are exported from module files and
-imported directly by tests, not re-exported from the public entry point.
+161 passing. Upstream suite ported, plus new width and span-contract tests.
 
 ## [ ] Ship
 
-`toAnsi` helper, build via tsgo, README examples verified against real output.
+- README examples regenerated from real output rather than hand-written.
+- Decide whether `render` should accept a `Cls` remap or stay minimal.
+- Publish: `npm publish` once the name is confirmed free.
+
+## Open questions
+
+- **`stringWidth` is a plain sum of code point widths.** `unicode-width` 0.2
+  additionally handles emoji ZWJ sequences and prepended concatenation marks at
+  the *string* level, so `👨‍👩‍👧` measures 2 there and 6 here. Only affects labels
+  containing emoji sequences. Fix if it ever matters; not worth the table now.
+- Upstream `render` takes `max_width: Option<usize>` and is called per-repaint
+  by the pager. If a consumer wants incremental relayout on resize, the parse
+  step could be cached separately from layout — not needed until asked for.

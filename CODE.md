@@ -1,39 +1,107 @@
 # Code
 
 TypeScript port of the terminal Mermaid renderer from `xai-org/grok-build`
-(`crates/codegen/xai-grok-markdown/src/mermaid.rs`). Reference checkout lives at
-`~/.cache/checkouts/github.com/xai-org/grok-build`.
+(`crates/codegen/xai-grok-markdown/src/mermaid.rs`, ~3.6k lines). Reference
+checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`.
 
 ## Layout
 
 ```
 src/
-  index.ts       public entry: render(), re-exported types
+  index.ts       public entry: render(), tries each grammar then falls back
   types.ts       Cls / Span / MermaidArt / RenderOptions
+  ansi.ts        toAnsi() convenience over the span classes
+  width.ts       display widths; width-data.ts is generated, do not edit
+  canvas.ts      cell grid, direction-bit glyph resolution, flips, span runs
+  labels.ts      entity decoding, tag/markdown stripping, wrapping, fitting
+  graph.ts       shared model: Node/Edge/Group/Graph + caps
+  parse.ts       all five grammars, source text -> model
+  layout.ts      rank, order, place, route, draw (flowchart/state/class/ER)
+  layout-seq.ts  sequence diagrams (own model, own geometry)
+  fallback.ts    framed source box + too-wide hint
+scripts/
+  gen-width-data.ts   regenerates src/width-data.ts from the UCD
 ```
 
 ## Public API
 
-`render(src, { maxWidth })` returns `{ plain, styled }` or `null` for blank
-input. `plain[i]` and `styled[i]` are the same row; `plain` is right-trimmed,
-`styled` is that row split into `{ text, cls }` runs.
+`render(src, { maxWidth })` returns `{ plain, styled }`, or `null` only for
+blank input. Everything else always produces art: unsupported grammars and
+over-wide diagrams fall back to a framed copy of the source.
+
+`plain[i]` and `styled[i]` are the same row, and `styled[i]` joined is exactly
+`plain[i]` — enforced by `test/spans.test.ts` across a corpus of every diagram
+type.
 
 `Cls` is semantic (`border`/`text`/`edge`/`edgeLabel`/`title`/`hint`/`none`),
 never a colour. This replaces the Rust `MermaidStyles` struct: layout no longer
-depends on the theme, so a render survives a theme change and is plain JSON
-(worker-transferable).
+depends on the theme, so a render survives a theme change and is plain JSON,
+hence worker-transferable.
+
+## How the renderer works
+
+Edges accumulate as **direction bits** per cell (`U`/`D`/`L`/`R`) rather than
+glyphs, so crossings and junctions resolve correctly regardless of draw order;
+`finalizeMask` turns bits into characters at the end, applying the per-cell
+line style (dotted/thick). `occupied` marks box interiors that edge bits must
+not overwrite.
+
+Layout is Sugiyama-shaped: longest-path ranking over the DAG (back edges
+dropped by DFS colouring), barycenter reordering within ranks to cut crossings,
+then barycenter relaxation for cross-axis positions. Edges between adjacent
+ranks share horizontal **bus** rows; skip and back edges route around the
+diagram through vertical **lanes**. Track packing lets edges sharing an
+endpoint reuse one row, which is why a merge draws a single arrowhead.
+
+`BT`/`RL` reuse the `TD`/`LR` layout and flip the finished canvas, so text is
+never mirrored — `flipHorizontal` reverses each text run back to reading order.
+
+Subgraphs recurse: each is laid out into its own canvas, then blitted into a
+framed box in its parent scope. An edge is drawn in the innermost scope holding
+both endpoints; one crossing a boundary attaches to the frame.
+
+## Deliberate deviations from upstream
+
+- **Box outlines are `border`, not `edge`.** Upstream classifies box corners as
+  border and the sides as edge, which renders every box two-tone under any
+  theme where the two differ. Characters are unaffected; only classification
+  changed. All ported tests assert on `plain`, and they pass unchanged.
+- **Blank canvas rows emit no spans.** Upstream trims trailing blanks from its
+  plain lines but not its styled ones, so an empty row yielded a full-width run
+  of spaces. Emitting `[]` is what makes the `styled == plain` invariant hold.
+- **Semantic span classes** instead of ratatui `Line`/`Span` + `MermaidStyles`.
 
 ## Porting notes
 
-- **`noUncheckedIndexedAccess` is off.** The Rust distinguishes `chars[i]`
-  (panics, always guarded) from `chars.get(i)` (returns `Option`, branched on).
-  TS's `arr[i] === undefined` reproduces the `.get()` case exactly, and the
-  guarded cases are already guarded. Enabling the flag would mean ~500 `!`
-  assertions for no safety gained.
-- Rust `usize` saturating arithmetic (`saturating_sub`, `abs_diff`) has no TS
-  equivalent — subtraction that could go negative must be clamped explicitly.
-  Unclamped, a negative index silently reads `undefined` instead of behaving
-  like the original.
+- **`noUncheckedIndexedAccess` is off.** Rust distinguishes `chars[i]` (panics,
+  so always guarded) from `chars.get(i)` (returns `Option`, branched on). TS's
+  `arr[i] === undefined` reproduces the `.get()` case exactly, and the guarded
+  cases are already guarded. Enabling it would mean ~500 `!` assertions for no
+  safety gained.
+- **Saturating arithmetic.** Rust `usize` never goes negative; `saturating_sub`
+  is spelled `sat(a, b)` here. Unclamped, a negative index would silently read
+  `undefined` instead of clamping.
+- **Integer division.** Rust `/` on `usize` truncates; `half()` and
+  `Math.ceil` stand in for `/ 2` and `div_ceil(2)`.
+- **`asciiLower`/`asciiUpper`**, not `toLowerCase`. Rust's `to_ascii_lowercase`
+  preserves length; `'İ'.toLowerCase()` does not, which would desync the
+  offsets `parseNoteAnchor` slices with.
+- **Char arrays.** Where Rust iterates `Vec<char>`, the port uses `[...s]` so
+  indices are code points, not UTF-16 units.
+- Control characters are written as `String.fromCharCode(n)`, never as literals
+  in source — the `CONT` sentinel is NUL and would otherwise be invisible.
+
+## Tests
+
+161 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
+intent preserved; names reworded). `test/width.test.ts` and
+`test/spans.test.ts` are new — the latter covers the span contract, which
+upstream has no equivalent of.
+
+Cargo has no usable toolchain in this environment and `~/.cargo` is not
+writable, so golden files cannot be generated from the Rust build to diff
+against. The ported suite is the only cross-check.
 
 ## Tooling
 

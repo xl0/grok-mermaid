@@ -208,7 +208,7 @@ function sortByBarycenter(row: number[], neigh: number[][], pos: number[]): void
   for (let i = 0; i < keyed.length; i++) row[i] = keyed[i].v
 }
 
-function countCrossings(edges: Edge[], ranks: number[], pos: number[]): number {
+export function countCrossings(edges: Edge[], ranks: number[], pos: number[]): number {
   const adjacent = edges
     .filter((e) => e.from !== e.to && ranks[e.to] === ranks[e.from] + 1)
     .map((e) => [ranks[e.from], pos[e.from], pos[e.to]] as const)
@@ -826,13 +826,15 @@ export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape
   canvas.set(x, bottom, rounded ? '╰' : '└', 'border')
   canvas.set(right, bottom, rounded ? '╯' : '┘', 'border')
 
+  // The perimeter is drawn as bits so edges can tee into it, but it is the box
+  // outline, so it claims `border` rather than `edge`.
   for (let cx = x + 1; cx < right; cx++) {
-    canvas.addBits(cx, y, L | R)
-    canvas.addBits(cx, bottom, L | R)
+    canvas.addBits(cx, y, L | R, 'border')
+    canvas.addBits(cx, bottom, L | R, 'border')
   }
   for (let cy = y + 1; cy < bottom; cy++) {
-    canvas.addBits(x, cy, U | D)
-    canvas.addBits(right, cy, U | D)
+    canvas.addBits(x, cy, U | D, 'border')
+    canvas.addBits(right, cy, U | D, 'border')
   }
 
   for (let cy = y; cy <= bottom; cy++) {

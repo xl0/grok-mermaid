@@ -8,14 +8,24 @@ A TypeScript port of the terminal Mermaid renderer in
 Chrome, no SVG — a self-contained layout engine that emits text.
 
 ```
-╭─────────╮
-│  Start  │
-╰────┬────╯
-     │
-     ▼
-╭─────────╮
-│  Done   │
-╰─────────╯
+      ┌──────────────┐
+      │ Parse source │
+      └───────┬──────┘
+              │
+              ▼
+       ╭────────────╮
+       │ Supported? │
+       ╰──────┬─────╯
+      ┌───────┴────────┐
+      ▼yes             ▼no
+ ┌─────────┐   ┌───────────────┐
+ │ Lay out │   │ Framed source │
+ └────┬────┘   └───────┬───────┘
+      └───────┬────────┘
+              ▼
+       ┌─────────────┐
+       │ Unicode art │
+       └─────────────┘
 ```
 
 ## Install
@@ -51,10 +61,33 @@ const out = art.styled.map((row) =>
 )
 ```
 
-Classes are `border`, `text`, `edge`, `edgeLabel`, `title`, `hint`, `none`.
+| Class | What it covers |
+| --- | --- |
+| `border` | box outlines, subgraph frames, compartment rules |
+| `text` | node, participant and compartment labels |
+| `edge` | connector lines and arrowheads |
+| `edgeLabel` | text sitting on an edge |
+| `title` | the `mermaid: <kind>` header of a fallback box |
+| `hint` | the advisory note under a too-wide fallback box |
+| `none` | blank filler |
+
+`styled[i]` joined is always exactly `plain[i]`, so you can swap between them
+freely.
 
 Because layout carries no colour, a render can be cached across theme changes
 and passed across a worker boundary — the output is plain JSON.
+
+For the common case there is a helper:
+
+```ts
+import { render, toAnsi } from 'grok-mermaid'
+
+console.log(toAnsi(render(src, { maxWidth: 100 })!).join('\n'))
+```
+
+`toAnsi(art, theme)` takes `Partial<Record<Cls, string>>` of SGR parameters
+(`'2'` dim, `'36'` cyan, `'38;5;244'` for 256-colour), defaulting to a dim
+frame with cyan connectors.
 
 ## Supported diagrams
 

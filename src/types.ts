@@ -2,7 +2,7 @@
  * Semantic class of a run of cells. The renderer never knows about colour;
  * consumers map these to their own theme (see `toAnsi` for the common case).
  *
- * - `border`     box outlines and frames
+ * - `border`     box outlines, subgraph frames, compartment rules
  * - `text`       node / participant / compartment labels
  * - `edge`       connector lines and arrowheads
  * - `edgeLabel`  text sitting on an edge

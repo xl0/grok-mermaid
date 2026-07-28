@@ -58,13 +58,19 @@ export class Canvas {
     this.cls[i] = cls
   }
 
-  addBits(x: number, y: number, bits: number): void {
+  /**
+   * Accumulate direction bits on a free cell.
+   *
+   * `cls` is the class to claim the cell for; `border` cells are never
+   * reclassified, so a connector meeting a box keeps the box's styling.
+   */
+  addBits(x: number, y: number, bits: number, cls: Cls = 'edge'): void {
     if (x >= this.w || y >= this.h) return
     const i = this.idx(x, y)
     if (this.occupied[i]) return
     this.mask[i] |= bits
     this.style[i] |= this.curStyle
-    if (this.cls[i] !== 'border') this.cls[i] = 'edge'
+    if (this.cls[i] !== 'border') this.cls[i] = cls
   }
 
   /** Stamp a finished sub-canvas (a subgraph frame's contents) at an offset. */
