@@ -1,4 +1,4 @@
-import { codePointWidth, drawWidth, stringWidth } from './width.ts'
+import { measured, stringWidth } from './width.ts'
 
 /** Node labels wrap to at most this many display columns per line ... */
 export const WRAP_WIDTH = 24
@@ -254,15 +254,13 @@ export function wrapLabel(label: string, width: number, maxLines: number): strin
       }
       let chunk = ''
       let chunkW = 0
-      for (const ch of word) {
-        const cw = drawWidth(ch)
+      for (const [ch, cw] of measured(word)) {
         if (chunkW + cw > width && chunk !== '') {
           const p = lastBreak(chunk)
           const carry = p === -1 ? '' : chunk.slice(p + 1)
           lines.push(p === -1 ? chunk : chunk.slice(0, p + 1))
           chunk = carry
-          chunkW = 0
-          for (const c of carry) chunkW += drawWidth(c)
+          chunkW = stringWidth(carry)
         }
         chunk += ch
         chunkW += cw
@@ -289,8 +287,7 @@ export function wrapLabel(label: string, width: number, maxLines: number): strin
     const target = Math.max(1, width - 1)
     let s = ''
     let sw = 0
-    for (const ch of lines[lines.length - 1]) {
-      const cw = drawWidth(ch)
+    for (const [ch, cw] of measured(lines[lines.length - 1])) {
       if (sw + cw > target) break
       s += ch
       sw += cw
@@ -305,8 +302,7 @@ export function fitLabel(label: string, inner: number): string {
   if (stringWidth(label) <= inner) return label
   let out = ''
   let used = 0
-  for (const c of label) {
-    const cw = codePointWidth(c.codePointAt(0) as number)
+  for (const [c, cw] of measured(label)) {
     if (used + cw + 1 > inner) break
     out += c
     used += cw

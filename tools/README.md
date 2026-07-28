@@ -20,8 +20,13 @@ combining mark, and the zero-width set is `Default_Ignorable ∪ Grapheme_Extend
 
 ## `differential`
 
-Renders a corpus through both the Rust original and this port, and fails on
-any case where the plain output differs.
+Renders a corpus through both the Rust original and this port, classifies each
+difference, and fails only on a regression.
+
+The port deliberately measures and paints in grapheme clusters, which upstream
+does not, so any source containing a multi-code-point cluster or a standalone
+zero-width character is *expected* to differ. Anything else differing is a
+regression and fails the run.
 
 ```sh
 bun run differential

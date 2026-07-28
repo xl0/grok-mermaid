@@ -26,7 +26,7 @@ import {
 import type { ClassInfo, Edge, Head, Node, Shape } from './graph.ts'
 import { Graph } from './graph.ts'
 import { fitLabel, MAX_LABEL, MAX_LINES, WRAP_WIDTH, wrapLabel } from './labels.ts'
-import { drawWidth, stringWidth } from './width.ts'
+import { measured, stringWidth } from './width.ts'
 
 /** Cells of padding between a box border and its text. */
 const PAD = 1
@@ -1015,8 +1015,8 @@ function placeLabel(canvas: Canvas, label: string, row: number, startX: number):
   if (row >= canvas.h) return
   const text = fitLabel(label, MAX_LABEL)
   let x = startX
-  for (const c of text) {
-    const cw = drawWidth(c)
+  for (const [c, cw] of measured(text)) {
+    if (cw === 0) continue
     if (x + cw > canvas.w) break
     let blocked = false
     for (let k = 0; k < cw; k++) {

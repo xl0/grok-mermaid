@@ -38,13 +38,22 @@ rather than re-derived from the UCD.
 **This is the fidelity cutoff.** Up to this commit the port matches upstream
 byte for byte. Deviations after it are deliberate and listed below.
 
-## [ ] Deliberate divergence (post-cutoff)
+## [x] Grapheme clustering (post-cutoff)
 
-Byte-compatibility is no longer required — good-looking output is the bar. The
-differential harness stays useful as a change detector: run it, read the diff,
-and confirm each change is intended rather than accidental.
+Measure and paint in grapheme clusters, via `Intl.Segmenter`. Fixes emoji and
+combining sequences overflowing their boxes — an upstream bug the port had
+faithfully reproduced — and deletes the hand-written Unicode clustering and its
+Extended_Pictographic table. `width.ts` 147 → 73 lines, `width-data.ts` one
+column instead of two, `drawWidth`/`codePointWidth` gone from the public
+surface. Differential: 0 regressions, 1987 expected divergences.
 
-Candidates:
+## [ ] Possible further divergence
+
+Byte-compatibility is no longer the bar; good-looking output is. The
+differential harness now gates on regressions only, so each change can be
+reviewed against upstream rather than blocked by it.
+
+Candidates, none obviously worth it yet:
 - Honour `maxWidth` in the fallback box below ~12 columns (truncate the title).
 - Wrap fallback body lines on word boundaries rather than hard-chunking.
 - Revisit the `assignTracks` O(n²) compatibility scan if large diagrams show up.

@@ -67,8 +67,26 @@ const unesc = (s: string): string => {
 const esc = (s: string): string =>
   s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
 
+const { stringWidth } = await import('../../src/width.ts')
+const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' })
+
+/**
+ * This port deliberately measures and paints in grapheme clusters, which the
+ * Rust original does not, so any source containing a multi-code-point cluster
+ * or a standalone zero-width character is expected to differ. Anything else
+ * differing is a regression.
+ */
+function expectedToDiffer(src: string): boolean {
+  for (const { segment } of segmenter.segment(src)) {
+    if ([...segment].length > 1) return true
+    if (segment !== '\n' && stringWidth(segment) === 0) return true
+  }
+  return false
+}
+
 let same = 0
-const diffs: { i: number; width: string; src: string; want: string; got: string }[] = []
+const expected: number[] = []
+const regressions: { i: number; width: string; src: string; want: string; got: string }[] = []
 corpus.forEach((line, i) => {
   const tab = line.indexOf('\t')
   const width = line.slice(0, tab)
@@ -76,14 +94,19 @@ corpus.forEach((line, i) => {
   const art = render(src, width === 'none' ? {} : { maxWidth: Number(width) })
   const got = art === null ? '#NONE' : esc(art.plain.join('\n'))
   if (got === golden[i]) same++
-  else diffs.push({ i, width, src, want: golden[i], got })
+  else if (expectedToDiffer(src)) expected.push(i)
+  else regressions.push({ i, width, src, want: golden[i], got })
 })
 
-console.log(`\ncases: ${corpus.length}  identical: ${same}  differing: ${diffs.length}`)
-for (const d of diffs.slice(0, 5)) {
+console.log(`\ncases:       ${corpus.length}`)
+console.log(`identical:   ${same}`)
+console.log(`expected:    ${expected.length}  (grapheme clustering — see CODE.md)`)
+console.log(`regressions: ${regressions.length}`)
+
+for (const d of regressions.slice(0, 5)) {
   console.log(`\n===== case ${d.i} (maxWidth=${d.width})\n--- source:\n${d.src}`)
   console.log(`--- rust:\n${unesc(d.want)}`)
   console.log(`--- ours:\n${d.got === '#NONE' ? '#NONE' : unesc(d.got)}`)
 }
-if (diffs.length > 5) console.log(`\n... and ${diffs.length - 5} more`)
-process.exit(diffs.length === 0 ? 0 : 1)
+if (regressions.length > 5) console.log(`\n... and ${regressions.length - 5} more`)
+process.exit(regressions.length === 0 ? 0 : 1)

@@ -65,6 +65,12 @@ both endpoints; one crossing a boundary attaches to the frame.
 
 ## Deliberate deviations from upstream
 
+- **Grapheme clusters measure and paint as one unit** (post-cutoff). Fixes
+  emoji and combining sequences overflowing their boxes, and replaced ~60 lines
+  of hand-written Unicode clustering plus a 156-range Extended_Pictographic
+  table with `Intl.Segmenter`. Standalone zero-width characters are dropped
+  rather than given a cell — they are invisible either way, and reserving one
+  desynchronises width from what is drawn.
 - **Box outlines are `border`, not `edge`.** Upstream classifies box corners as
   border and the sides as edge, which renders every box two-tone under any
   theme where the two differ. Characters are unaffected; only classification
@@ -77,36 +83,34 @@ both endpoints; one crossing a boundary attaches to the frame.
 ## Verification
 
 `bun run differential` renders ~7180 cases through both the Rust original and
-this port and fails on any difference. **Currently 7180/7180 identical.** See
-`tools/README.md`; it needs a Rust toolchain and a grok-build checkout, and it
-copies upstream's `mermaid.rs` in at run time rather than vendoring it.
+this port. It classifies each difference and **fails only on a regression** —
+a case that diverges without involving grapheme clustering.
 
-It found four bugs the ported unit tests missed, all in width and line
-handling — see `tools/README.md` for the list. Extend `corpus.ts` when
-touching layout or width.
+Current state: 5193 identical, 1987 expected (clustering), 0 regressions.
+
+Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
+byte for byte on all 7180 cases. Divergence after it is deliberate and listed
+below. See `tools/README.md` for how to run it.
 
 ## Width handling
 
-Two width functions, deliberately inconsistent, because `unicode-width` is:
+**The grapheme cluster is the unit of both measuring and painting.** That one
+decision is what keeps a box sized for exactly what gets drawn into it.
 
-- `codePointWidth(cp)` — `UnicodeWidthChar::width(c).unwrap_or(0)`. Used when
-  painting a character into a cell. A control character is 0.
-- `stringWidth(s)` — `UnicodeWidthStr::width`. Used for sizing. A control
-  character is 1, and emoji presentation sequences fuse into one 2-column
-  cluster.
+Clustering comes from `Intl.Segmenter` (UAX #29), built into Node and Bun, so
+ZWJ sequences, skin-tone modifiers, variation selectors, keycaps, flags and
+Hangul are handled without a table. Per-code-point widths come from the
+`unicode-width` crate via `tools/width-oracle`, so they are exact by
+construction rather than re-derived from the UCD.
 
-Collapsing the two mismeasures anything containing a tab. `drawWidth` is
-`codePointWidth` floored at 1, matching `char_width(c).max(1)` at the Rust
-call sites that paint glyphs.
+`clusterWidth` takes the widest code point in the cluster, then forces 2 for an
+emoji-presentation selector or a regional-indicator pair. Zero is a real
+answer: a soft hyphen or zero-width space occupies nothing and is not painted.
 
-`src/width-data.ts` is generated from the `unicode-width` crate itself via
-`tools/width-oracle`, not re-derived from the UCD, so per-code-point widths are
-exact by construction. The string-level clustering rules are hand-written and
-cover emoji only; the crate's script ligatures (Arabic Lam-Alef, Hebrew
-Alef-Lamed, Khmer Coeng, Buginese, Lisu, Old Turkic, Tifinagh, Kirat Rai),
-emoji tag sequences, and the quote + `FE00`/`FE01`/`FE02` cases are not
-implemented — they need several more property tables and do not arise in
-diagram labels.
+The Rust original instead sizes with `UnicodeWidthStr` (which clusters) and
+paints with `UnicodeWidthChar` (which does not), so `👨‍👩‍👧` is sized for 2
+columns and painted into 8 — it overflows its own border. Splitting those two
+notions is what the port dropped.
 
 ## Known limits (shared with upstream)
 

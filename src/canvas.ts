@@ -1,5 +1,5 @@
 import type { Cls, Span } from './types.ts'
-import { drawWidth } from './width.ts'
+import { measured } from './width.ts'
 
 /**
  * Sentinel occupying the trailing column of a wide glyph. Never emitted: the
@@ -223,12 +223,17 @@ function reverseSlice(arr: string[], start: number, end: number): void {
   }
 }
 
-/** Paint `text` at `x, y`, claiming a second cell per wide glyph. */
+/**
+ * Paint `text` at `x, y`, one grapheme cluster per cell.
+ *
+ * A wide cluster claims a second cell, marked with `CONT` so the line builder
+ * emits one character for it rather than a stray space.
+ */
 export function drawText(canvas: Canvas, text: string, x: number, y: number, cls: Cls): void {
   let cur = x
-  for (const c of text) {
-    const cw = drawWidth(c)
-    canvas.set(cur, y, c, cls)
+  for (const [cluster, cw] of measured(text)) {
+    if (cw === 0) continue
+    canvas.set(cur, y, cluster, cls)
     for (let k = 1; k < cw; k++) canvas.set(cur + k, y, CONT, cls)
     cur += cw
   }
@@ -248,11 +253,11 @@ export function drawTextOverEdges(
   cls: Cls,
 ): void {
   let cur = x
-  for (const c of text) {
-    const cw = drawWidth(c)
+  for (const [cluster, cw] of measured(text)) {
+    if (cw === 0) continue
     for (let k = 0; k < cw; k++) {
       if (cur + k < canvas.w && y < canvas.h) canvas.mask[canvas.idx(cur + k, y)] = 0
-      canvas.set(cur + k, y, k === 0 ? c : CONT, cls)
+      canvas.set(cur + k, y, k === 0 ? cluster : CONT, cls)
     }
     cur += cw
   }

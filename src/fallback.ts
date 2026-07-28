@@ -8,7 +8,7 @@
 
 import { srcLines } from './labels.ts'
 import type { MermaidArt, Span } from './types.ts'
-import { drawWidth, stringWidth } from './width.ts'
+import { measured, stringWidth } from './width.ts'
 
 const TOO_WIDE_HINT =
   'This diagram is too wide to display here — open the image to view it in full.'
@@ -76,8 +76,7 @@ function chunkLine(line: string, limit: number | undefined): string[] {
   const out: string[] = []
   let cur = ''
   let curW = 0
-  for (const c of line) {
-    const cw = drawWidth(c)
+  for (const [c, cw] of measured(line)) {
     if (curW + cw > limit && cur !== '') {
       out.push(cur)
       cur = ''
