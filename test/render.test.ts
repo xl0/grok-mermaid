@@ -744,3 +744,30 @@ test('sequence rows are sentinel free', () => {
   expect(out).not.toContain(CONT)
   expect(out).toContain('solo note')
 })
+
+const ESC = String.fromCharCode(27)
+
+test('control characters never reach the output', () => {
+  for (const src of [
+    `graph TD\n A[x${CONT}y] --> B`,
+    `graph TD\n A[${ESC}[31mRED] --> B`,
+    `gantt\n title ${ESC}]8;;http://example${String.fromCharCode(7)}link`,
+  ]) {
+    const out = plain(src)
+    expect(out).not.toContain(CONT)
+    expect(out).not.toContain(ESC)
+  }
+})
+
+// A control character measures one column and paints none, so a box sized around
+// one comes out a column short. NUL is worst: it is the CONT sentinel, so the row
+// builder drops it after layout has already reserved its cell.
+test('a control character in a label does not shrink its box', () => {
+  const ls = lines(`graph TD\n A[x${CONT}y] --> B`)
+  expect(ls[0]).toBe('┌────┐')
+  expect(stringWidth(ls[1])).toBe(stringWidth(ls[0]))
+})
+
+test('a source of only control characters is blank', () => {
+  expect(render(`${CONT}${ESC}`, { maxWidth: 80 })).toBeNull()
+})

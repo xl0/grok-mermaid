@@ -25,7 +25,7 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-162 passing. Upstream suite ported, plus new width and span-contract tests.
+168 passing. Upstream suite ported, plus new width and span-contract tests.
 Fuzzed 20k generated sources: no throws, span invariant holds throughout.
 
 ## [x] Differential verification
@@ -54,9 +54,13 @@ differential harness now gates on regressions only, so each change can be
 reviewed against upstream rather than blocked by it.
 
 Candidates, none obviously worth it yet:
-- Honour `maxWidth` in the fallback box below ~12 columns (truncate the title).
+- Truncate the fallback title so the box always honours `maxWidth`. Judged not
+  worth it: only a junk header overflows a realistic viewport.
 - Wrap fallback body lines on word boundaries rather than hard-chunking.
 - Revisit the `assignTracks` O(n²) compatibility scan if large diagrams show up.
+
+Done post-cutoff: literal control characters are stripped in `render` (they
+broke box geometry and leaked ANSI into the caller's terminal).
 
 ## [ ] Ship
 

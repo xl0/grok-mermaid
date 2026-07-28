@@ -78,6 +78,12 @@ both endpoints; one crossing a boundary attaches to the frame.
 - **Blank canvas rows emit no spans.** Upstream trims trailing blanks from its
   plain lines but not its styled ones, so an empty row yielded a full-width run
   of spaces. Emitting `[]` is what makes the `styled == plain` invariant hold.
+- **Literal control characters are stripped at the entry point.** They measure
+  one column and paint none, so a box sized around one is drawn a column short
+  of its own border; NUL additionally collides with the `CONT` sentinel and is
+  dropped after layout has paid for its cell. Upstream refuses to *decode* an
+  entity into a control character but lets a literal one through; `render`
+  closes the same hole at the one door untrusted source comes in by.
 - **Semantic span classes** instead of ratatui `Line`/`Span` + `MermaidStyles`.
 
 ## Verification
@@ -114,11 +120,20 @@ notions is what the port dropped.
 
 ## Known limits (shared with upstream)
 
-- **`maxWidth` below ~12 is not honoured by the fallback box.** The body chunks
-  to `max(8, maxWidth - 4)` and the `mermaid: <kind>` title is never truncated,
-  so a 20-column frame survives a `maxWidth: 8`. The art path always respects
-  `maxWidth` — it reports oversize and defers to the fallback. Left as-is:
-  nothing useful renders that narrow, and diverging here buys nothing.
+- **The fallback box can exceed `maxWidth`.** The body chunks to
+  `max(8, maxWidth - 4)`, so a 12-column frame survives a `maxWidth: 8`; and the
+  ` mermaid: <kind> ` title is never truncated, so the frame is at least as wide
+  as the source's first token — `stateDiagram-v2` needs 30 columns whatever
+  `maxWidth` says. Every real diagram keyword fits inside ~30, so this only
+  bites on a narrow viewport or a junk header. The art path always respects
+  `maxWidth` — it reports oversize and defers here. Left as-is: nothing useful
+  renders that narrow, and truncating the one line naming the diagram type is a
+  poor trade.
+- **An HTML entity in an unquoted label truncates the statement.**
+  `splitStatements` treats `;` outside double quotes as a statement separator,
+  so `A -->|go&#160;| B` splits mid-entity and the edge is dropped — only node
+  `A` survives. Quoting the label (`A -->|"go&#160;"| B`) works. Mermaid proper
+  wants special characters quoted anyway.
 
 ## Porting notes
 
@@ -142,7 +157,7 @@ notions is what the port dropped.
 
 ## Tests
 
-162 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+168 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which

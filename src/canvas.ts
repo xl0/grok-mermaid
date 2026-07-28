@@ -211,7 +211,9 @@ export class Canvas {
       }
       if (run !== '') spans.push({ text: run, cls: runCls })
       styled.push(spans)
-      plain.push(plainRow.replace(/\s+$/, ''))
+      // Only ASCII spaces, which is all a blank cell ever holds. Trimming `\s`
+      // would eat a trailing NBSP that `styled` keeps, desyncing the two.
+      plain.push(plainRow.replace(/ +$/, ''))
     }
     return { plain, styled }
   }

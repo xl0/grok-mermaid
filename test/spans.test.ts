@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { Canvas, drawText } from '../src/canvas.ts'
 import { render, toAnsi } from '../src/index.ts'
 
 const CORPUS: [string, string][] = [
@@ -29,6 +30,17 @@ test('every styled row reconstructs its plain row exactly', () => {
       expect(`${name}: ${joined}`).toBe(`${name}: ${row}`)
     })
   }
+})
+
+// Only ASCII spaces are blank filler. Trimming `\s` would drop a trailing NBSP
+// from `plain` while `styled` kept it — no label reaches that today, but the
+// invariant is what the whole span contract rests on.
+test('a row ending in non-ASCII whitespace still reconstructs', () => {
+  const canvas = new Canvas(6, 1)
+  drawText(canvas, 'ab ', 0, 0, 'text')
+  const { plain, styled } = canvas.toLines()
+  expect(styled[0].map((s) => s.text).join('')).toBe(plain[0])
+  expect(plain[0]).toBe('ab ')
 })
 
 test('adjacent spans never repeat a class', () => {
