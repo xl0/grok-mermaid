@@ -30,6 +30,10 @@ export interface Span {
  * Non-empty means the art is real but incomplete — some of what was written is
  * not in it. Only flowcharts warn; the other grammars refuse the whole diagram
  * instead, and `render` returns `null`.
+ *
+ * They are advisory. Do not gate rendering on them: the art is the best drawing
+ * of the source either way, and a diagram being typed or streamed warns at
+ * nearly every intermediate state. Show them alongside, or once it settles.
  */
 export interface MermaidArt {
   plain: string[]

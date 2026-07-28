@@ -88,6 +88,20 @@ recorded in `graph.warnings` and surfaces as `art.warnings`:
 Warnings never fail a render. Zero warnings on all 134 hand-written corpus
 diagrams; the fuzz corpus warns constantly, which is correct.
 
+**They are advisory and must not gate rendering.** A source being streamed warns
+at nearly every intermediate state — a label bracket is unterminated right up
+until it is typed. Streaming a five-line flowchart in 4-character chunks, the
+display flips between art and source box once if warnings are ignored and
+**eleven times** if they are gated on.
+
+The strict grammars flicker for a different, older reason: a half-written
+trailing statement fails the whole parse. Parsing up to the last newline and
+keeping the raw source only as a fallback takes sequence 7 flips → 1, class
+3 → 1, state 7 → 3. That belongs in the caller, which is the only side that
+knows whether the source is still arriving; the grammars stay strict, because
+for a finished document silently dropping a bad last line is worse than saying
+so. The recipe is in the README.
+
 Making flowchart strict was rejected: it would reject diagrams that render fine
 today and diverge from both upstream and mermaid proper.
 
@@ -231,7 +245,7 @@ notions is what the port dropped.
 
 ## Tests
 
-180 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+183 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which

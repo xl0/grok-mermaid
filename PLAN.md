@@ -25,8 +25,8 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-180 passing. Upstream suite ported, plus new width, span-contract and
-syntax-warning tests.
+183 passing. Upstream suite ported, plus new width, span-contract,
+syntax-warning and streaming-stability tests.
 Fuzzed 20k generated sources: no throws, span invariant holds throughout.
 
 ## [x] Differential verification

@@ -67,6 +67,11 @@ const art = render('graph TD\n A[Start --> B')
 An empty `warnings` means everything in the source made it into the art. Across
 the 134 hand-written diagrams in the test corpus, none warn.
 
+**Warnings are advisory — never use them to decide whether to show the art.**
+The art is the best available drawing of the source either way, and a diagram
+mid-edit is nearly always warning at some point. Surface them beside the
+diagram, or once the source stops changing.
+
 `diagramKind(src)` reads the header alone and returns `'flowchart' | 'state' |
 'class' | 'er' | 'sequence'`, or `null` for a type this renderer does not draw.
 It is what separates the two `null`s worth telling apart:
@@ -77,6 +82,31 @@ if (render(src) === null) {
   console.log(kind ? `${kind} diagram: syntax error` : 'diagram type not supported here')
 }
 ```
+
+### Streaming
+
+When the source arrives incrementally, the last line is usually half-written, so
+parse the part that has settled and keep the raw source only as a fallback:
+
+```ts
+const nl = src.lastIndexOf('\n')
+const art = (nl === -1 ? null : render(src.slice(0, nl))) ?? render(src)
+```
+
+That keeps the diagram on screen instead of alternating with the source box.
+Streaming a five-line diagram in 4-character chunks, counting how many times the
+display would change between art and source box:
+
+| | flowchart | sequence | state | class |
+| --- | --- | --- | --- | --- |
+| raw source | 1 | 7 | 7 | 3 |
+| settled, else raw | 1 | **1** | **3** | **1** |
+| raw, gated on warnings | **11** | 7 | 7 | 3 |
+
+Flowcharts are already stable on their own — they parse leniently, so a partial
+one still draws. The strict grammars reject a half-written trailing statement
+outright, which is what the settled-prefix trick fixes. The last row is why
+warnings must not gate rendering.
 
 ### Fitting a viewport
 

@@ -282,6 +282,50 @@ test('diagramKind separates an unsupported type from a malformed one', () => {
   expect(diagramKind(unsupported)).toBeNull()
 })
 
+/** How many times the display would change between art and source box. */
+function flips(src: string, frame: (prefix: string) => boolean): number {
+  const seen: boolean[] = []
+  for (let n = 4; n < src.length; n += 4) seen.push(frame(src.slice(0, n)))
+  seen.push(frame(src))
+  return seen.filter((v, i) => i > 0 && v !== seen[i - 1]).length
+}
+
+const STREAMED = `flowchart TD
+  A[User submits login form] --> B{Credentials valid?}
+  B -->|yes| C[Issue JWT access token]
+  B -->|no| D[Return 401 Unauthorized]
+  C --> E[Set refresh cookie]`
+
+test('a streaming flowchart never stops being drawable', () => {
+  // One transition, box -> art, and never back: a diagram that alternates with
+  // the source box as it streams is the thing warnings must not cause.
+  expect(flips(STREAMED, (s) => render(s) !== null)).toBe(1)
+})
+
+test('gating on warnings is what makes a streaming diagram flicker', () => {
+  // Not a recommendation — a guard on the advice in the docs. Warnings fire at
+  // most intermediate states, so gating on them is unusable while streaming.
+  const gated = flips(STREAMED, (s) => {
+    const a = render(s)
+    return a !== null && a.warnings.length === 0
+  })
+  expect(gated).toBeGreaterThan(5)
+})
+
+test('parsing the settled prefix steadies a streaming strict grammar', () => {
+  const src = `sequenceDiagram
+  participant U as User
+  participant W as Web App
+  U->>W: Submit login
+  W-->>U: Set session cookie`
+  const raw = (s: string) => render(s) !== null
+  const settled = (s: string) => {
+    const nl = s.lastIndexOf('\n')
+    return (nl === -1 ? null : render(s.slice(0, nl))) !== null || render(s) !== null
+  }
+  expect(flips(src, settled)).toBeLessThan(flips(src, raw))
+})
+
 test('diagramKind reads the header without parsing the body', () => {
   expect(diagramKind('graph TD\n A --> B')).toBe('flowchart')
   expect(diagramKind('flowchart LR')).toBe('flowchart')
