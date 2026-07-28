@@ -50,75 +50,45 @@ it out is refused.
 
 ### Syntax errors
 
-Rendering is best-effort: a source that does not fully parse still draws
-whatever it can, and says what it gave up on in `art.warnings`.
-
-Flowcharts have always been lenient — mermaid.js is too — so a malformed
-statement keeps whatever prefix parsed. That would quietly hand you a clean
-diagram missing an edge you wrote, hence the warning:
+Rendering is best-effort: a source that does not fully parse still draws what it
+can, and reports the rest in `art.warnings`.
 
 ```ts
-const art = render('graph TD\n A[Start --> B')
-// art.plain     one box labelled `Start --> B` — the edge is gone
-// art.warnings  ['node "A": label is missing its closing `]`']
+// Flowcharts are lenient, as mermaid.js is: the parseable prefix survives.
+render('graph TD\n A[Start --> B')
+// plain     one box labelled `Start --> B` — the edge you wrote is gone
+// warnings  ['node "A": label is missing its closing `]`']
+
+// The rest fail on any unreadable statement, but retry once without the last
+// line — the one a half-finished source ends on.
+render('stateDiagram-v2\n A --> B\n some garbage line')
+// plain     the A --> B transition, drawn
+// warnings  ['dropped, unreadable final line: "some garbage line"']
 ```
 
-State, class, ER and sequence diagrams are stricter: one unreadable statement
-fails the whole parse. They get a single retry without their last line, which is
-the one a half-finished source ends on:
+An empty `warnings` means the whole source made it into the art.
 
-```ts
-const art = render('stateDiagram-v2\n A --> B\n some garbage line')
-// art.plain     the A --> B transition, drawn
-// art.warnings  ['dropped, unreadable final line: "some garbage line"']
-```
+**Warnings are advisory — never gate rendering on them.** The art is the best
+available drawing either way, and a diagram mid-edit warns at nearly every
+intermediate state: a label bracket is unterminated right up until it is typed.
 
-Two bad lines, or a bad line that is not the last, still gives `null` — this
-salvages a trailing fragment, it does not hunt for a parseable subset.
-
-An empty `warnings` means everything in the source made it into the art. Across
-the 134 hand-written diagrams in the test corpus, none warn.
-
-**Warnings are advisory — never use them to decide whether to show the art.**
-The art is the best available drawing of the source either way, and a diagram
-mid-edit is nearly always warning at some point. Surface them beside the
-diagram, or once the source stops changing.
-
-`diagramKind(src)` reads the header alone and returns `'flowchart' | 'state' |
-'class' | 'er' | 'sequence'`, or `null` for a type this renderer does not draw.
-It is what separates the two `null`s worth telling apart:
+`diagramKind(src)` reads the header alone, separating the two `null`s worth
+different messages:
 
 ```ts
 if (render(src) === null) {
-  const kind = diagramKind(src)
+  const kind = diagramKind(src) // 'flowchart' | 'state' | 'class' | 'er' | 'sequence' | null
   console.log(kind ? `${kind} diagram: syntax error` : 'diagram type not supported here')
 }
 ```
 
 ### Streaming
 
-Just call `render` on each prefix — no special handling needed. Best-effort
-parsing is what makes that work: a partially arrived diagram keeps drawing
-instead of alternating with the source box.
+Call `render` on each prefix as it arrives — no special handling, no waiting for
+a complete diagram. Best-effort parsing is what keeps it drawn instead of
+alternating with the source box.
 
 <img src="https://raw.githubusercontent.com/xl0/grok-mermaid/master/docs/streaming.gif" width="900" alt="A terminal replaying a stream of Mermaid diagrams — flowcharts and a state machine drawing themselves as box-drawing art, each one growing in place without ever reverting to a block of source text.">
-
-Streaming a five-line diagram in 4-character chunks and counting how many times
-the display would change between art and source box:
-
-| | flowchart | sequence | state | class |
-| --- | --- | --- | --- | --- |
-| `render(src)` | 1 | 1 | 3 | 1 |
-| before best-effort | 1 | 7 | 7 | 3 |
-| gated on `warnings` | 11 | 7 | 7 | 3 |
-
-One change is the ideal: source box until enough has arrived to draw, then art
-for good. The state diagram's extra pair is a single early frame where only the
-header has arrived intact and there is genuinely nothing to draw.
-
-The last row is why warnings must not gate rendering — during streaming they
-fire almost continuously, since a label bracket is unterminated right up until
-the moment it is typed.
 
 ### Fitting a viewport
 
@@ -140,10 +110,7 @@ else {
 
 `sourceBox(src, maxWidth?)` frames the source in a titled box, hard-wrapping to
 `maxWidth`. It is the usual thing to show when the art does not fit or does not
-exist, but it is yours to choose, and yours to caption. Its result can still
-exceed `maxWidth`: the body wraps to `max(8, maxWidth - 4)` and the
-` mermaid: <kind> ` title is never truncated, so a long first token sets a
-floor — check its `width` if that matters.
+exist, but it is yours to choose and yours to caption.
 
 ### Colour
 
@@ -152,8 +119,7 @@ runs tagged with a semantic class, so you map classes to your own theme:
 
 <img src="https://raw.githubusercontent.com/xl0/grok-mermaid/master/docs/demo.svg" width="330" alt="A flowchart rendered as Unicode box-drawing art on a dark panel: grey box outlines, white node labels, cyan connectors and arrowheads, grey edge labels.">
 
-That image is real `render()` output painted through one such theme — it is
-generated by `bun run gen:demo`, not drawn by hand.
+That image is real `render()` output painted through one such theme.
 
 ```ts
 import { type Cls, render } from 'grok-mermaid'
@@ -178,10 +144,8 @@ const out = art.styled.map((row) =>
 | `none` | blank filler |
 
 `styled[i]` joined is always exactly `plain[i]`, so you can swap between them
-freely.
-
-Because layout carries no colour, a render can be cached across theme changes
-and passed across a worker boundary — the output is plain JSON.
+freely. A render is plain JSON: cacheable across theme changes, transferable to
+a worker.
 
 For the common case there is a helper:
 
