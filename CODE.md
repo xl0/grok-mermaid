@@ -71,6 +71,17 @@ both endpoints; one crossing a boundary attaches to the frame.
   of spaces. Emitting `[]` is what makes the `styled == plain` invariant hold.
 - **Semantic span classes** instead of ratatui `Line`/`Span` + `MermaidStyles`.
 
+## Known limits (shared with upstream)
+
+- **`maxWidth` below ~12 is not honoured by the fallback box.** The body chunks
+  to `max(8, maxWidth - 4)` and the `mermaid: <kind>` title is never truncated,
+  so a 20-column frame survives a `maxWidth: 8`. The art path always respects
+  `maxWidth` — it reports oversize and defers to the fallback. Left as-is:
+  nothing useful renders that narrow, and diverging here buys nothing.
+- **`stringWidth` sums code point widths.** `unicode-width` 0.2 additionally
+  collapses emoji ZWJ sequences at the string level, so `👨‍👩‍👧` measures 2 there
+  and 6 here. Only reachable via labels containing emoji sequences.
+
 ## Porting notes
 
 - **`noUncheckedIndexedAccess` is off.** Rust distinguishes `chars[i]` (panics,
@@ -93,7 +104,7 @@ both endpoints; one crossing a boundary attaches to the frame.
 
 ## Tests
 
-161 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+160 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which

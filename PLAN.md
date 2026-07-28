@@ -25,20 +25,20 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-161 passing. Upstream suite ported, plus new width and span-contract tests.
+160 passing. Upstream suite ported, plus new width and span-contract tests.
+Fuzzed 20k generated sources: no throws, span invariant holds throughout.
 
 ## [ ] Ship
 
-- README examples regenerated from real output rather than hand-written.
-- Decide whether `render` should accept a `Cls` remap or stay minimal.
-- Publish: `npm publish` once the name is confirmed free.
+Publish to npm once the name is confirmed free. README examples are generated
+from real output; `bun run prepublishOnly` gates on check + typecheck + tests +
+build.
 
 ## Open questions
 
-- **`stringWidth` is a plain sum of code point widths.** `unicode-width` 0.2
-  additionally handles emoji ZWJ sequences and prepended concatenation marks at
-  the *string* level, so `👨‍👩‍👧` measures 2 there and 6 here. Only affects labels
-  containing emoji sequences. Fix if it ever matters; not worth the table now.
-- Upstream `render` takes `max_width: Option<usize>` and is called per-repaint
-  by the pager. If a consumer wants incremental relayout on resize, the parse
-  step could be cached separately from layout — not needed until asked for.
+- Upstream `render` is called per repaint by the pager, re-parsing each time.
+  If a consumer wants cheap relayout on resize, parse could be cached
+  separately from layout. Not needed until someone asks.
+- Whether to expose the parsers publicly. Tests import them from module paths;
+  keeping them off the entry point leaves the API surface small.
+- Known limits inherited from upstream are listed in `CODE.md`.
