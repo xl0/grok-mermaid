@@ -24,7 +24,13 @@ src/
   fallback.ts    framed source box + too-wide hint
 scripts/
   gen-width-data.ts   regenerates src/width-data.ts from the UCD
+  gen-demo-svg.ts     regenerates docs/demo.svg, the README's colour example
 ```
+
+`docs/demo.svg` paints real `render()` output through a theme, which a markdown
+code fence cannot do — it is the only way to show what `Cls` buys. Its line
+height is one em on purpose: box-drawing glyphs span at least that, so rows
+overlap rather than gap in whatever font the viewer has.
 
 ## Public API
 
