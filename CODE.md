@@ -32,6 +32,22 @@ code fence cannot do — it is the only way to show what `Cls` buys. Its line
 height is one em on purpose: box-drawing glyphs span at least that, so rows
 overlap rather than gap in whatever font the viewer has.
 
+`docs/streaming.gif` is a screen recording, GIF rather than MP4 because npm's
+README renderer strips `<video>`. Both assets are referenced by absolute
+`raw.githubusercontent.com` URL: npm rewrites *relative* paths inconsistently
+for HTML `<img>`, and the README has to render on npm as well as GitHub.
+Regenerate from a recording with:
+
+```sh
+ffmpeg -i in.mp4 -vf "fps=12,scale=900:-1:flags=lanczos,split[a][b];\
+[a]palettegen=stats_mode=diff:max_colors=64[p];\
+[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+  -loop 0 docs/streaming.gif
+```
+
+Frame count dominates the size, not the palette — dropping to 32 colours saves
+under 10%, so fps and width are the knobs worth turning.
+
 ## Public API
 
 `render(src)` returns `{ plain, styled, width, warnings }`, or `null` when there
