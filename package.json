@@ -15,8 +15,12 @@
   "repository": "github:xl0/grok-mermaid",
   "type": "module",
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "files": [
     "dist",
+    "src",
     "NOTICE"
   ],
   "exports": {

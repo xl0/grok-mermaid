@@ -53,9 +53,13 @@ The core is colour-blind. `styled` carries the same rows as `plain`, split into
 runs tagged with a semantic class, so you map classes to your own theme:
 
 ```ts
+import { type Cls, render } from 'grok-mermaid'
+
 const art = render(src, { maxWidth: process.stdout.columns })!
 
-const theme = { border: dim, text: white, edge: cyan, edgeLabel: gray }
+const theme: Partial<Record<Cls, (s: string) => string>> = {
+  border: dim, text: white, edge: cyan, edgeLabel: gray,
+}
 const out = art.styled.map((row) =>
   row.map((span) => (theme[span.cls] ?? identity)(span.text)).join(''),
 )
