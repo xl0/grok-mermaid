@@ -32,7 +32,8 @@
     "fix": "biome check --write .",
     "test": "bun test",
     "gen:width": "bun run scripts/gen-width-data.ts",
-    "prepublishOnly": "bun run check && bun run typecheck && bun test && bun run build"
+    "prepublishOnly": "bun run check && bun run typecheck && bun test && bun run build",
+    "differential": "bun run tools/differential/run.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

@@ -1,21 +1,46 @@
 /**
  * Regenerates `src/width-data.ts`.
  *
- *   bun run gen:width
+ *   bun run gen:width      (requires a Rust toolchain)
  *
- * WIDE comes from the UCD's EastAsianWidth.txt (properties `W` and `F`,
- * including the `@missing` defaults that make unassigned CJK planes wide).
- * ZERO is derived from the running engine's Unicode tables via `\p{Mn}`,
- * `\p{Me}` and `\p{Cf}`, plus conjoining Hangul jamo, which have no combining
- * category but consume no width.
+ * Per-code-point widths come from the `unicode-width` crate itself, via the
+ * oracle in `tools/width-oracle` — the same crate, at the same version, that
+ * the Rust renderer we are porting uses. Deriving them from the UCD by hand
+ * gets the common cases right and the tail wrong (U+17D8 is three columns
+ * wide, U+2D7F is one despite being a combining mark, and the zero-width set
+ * is `Default_Ignorable ∪ Grapheme_Extend ∪ …`, not `Mn|Me|Cf`).
  *
- * Both match `unicode-width`, the crate the Rust original uses.
+ * EMOJI is Extended_Pictographic, read from the engine's own Unicode tables.
+ * It drives the string-level ZWJ rule, which the oracle cannot express.
  */
 
-const EAW_URL = 'https://www.unicode.org/Public/UCD/latest/ucd/EastAsianWidth.txt'
 const MAX_CP = 0x10ffff
 
 type Range = [number, number]
+
+/** Run the oracle, returning `[lo, hi, charWidth, strWidth]` runs. */
+async function oracleRuns(): Promise<[number, number, number, number][]> {
+  const proc = Bun.spawn(['cargo', 'run', '--release', '-q'], {
+    cwd: new URL('../tools/width-oracle', import.meta.url).pathname,
+    stdout: 'pipe',
+    stderr: 'inherit',
+  })
+  const text = await new Response(proc.stdout).text()
+  if ((await proc.exited) !== 0) throw new Error('width-oracle failed')
+
+  return text
+    .split('\n')
+    .filter((l) => l !== '')
+    .map((l) => {
+      const [lo, hi, cw, sw] = l.split(' ')
+      return [Number.parseInt(lo, 16), Number.parseInt(hi, 16), Number(cw), Number(sw)] as [
+        number,
+        number,
+        number,
+        number,
+      ]
+    })
+}
 
 /** Collapse a sorted code point list into inclusive ranges. */
 function toRanges(codePoints: number[]): Range[] {
@@ -28,81 +53,46 @@ function toRanges(codePoints: number[]): Range[] {
   return out
 }
 
-/** Parse `XXXX;W` and `XXXX..YYYY;W` data lines plus `# @missing:` defaults. */
-function parseEastAsianWidth(text: string): Range[] {
-  const explicit = new Map<number, string>()
-  const defaults: { range: Range; prop: string }[] = []
-
-  for (const line of text.split('\n')) {
-    const missing = line.match(/^#\s*@missing:\s*([0-9A-F]+)\.\.([0-9A-F]+)\s*;\s*(\w+)/i)
-    if (missing) {
-      defaults.push({
-        range: [Number.parseInt(missing[1], 16), Number.parseInt(missing[2], 16)],
-        prop: missing[3],
-      })
-      continue
-    }
-    const data = line.replace(/#.*$/, '').trim()
-    if (data === '') continue
-    const m = data.match(/^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*(\w+)$/i)
-    if (!m) throw new Error(`unparsed EastAsianWidth line: ${line}`)
-    const lo = Number.parseInt(m[1], 16)
-    const hi = m[2] ? Number.parseInt(m[2], 16) : lo
-    for (let cp = lo; cp <= hi; cp++) explicit.set(cp, m[3])
-  }
-
-  // Later @missing lines override earlier ones for overlapping ranges.
-  const fallbackFor = (cp: number): string => {
-    let prop = 'N'
-    for (const d of defaults) if (cp >= d.range[0] && cp <= d.range[1]) prop = d.prop
-    return prop
-  }
-
-  const wide: number[] = []
+/**
+ * Extended_Pictographic: the set `unicode-width` treats as emoji when deciding
+ * whether a ZWJ fuses two code points into one cluster.
+ */
+function emojiRanges(): Range[] {
+  const pictographic = /\p{Extended_Pictographic}/u
+  const out: number[] = []
   for (let cp = 0; cp <= MAX_CP; cp++) {
-    const prop = explicit.get(cp) ?? fallbackFor(cp)
-    if (prop === 'W' || prop === 'F') wide.push(cp)
+    if (pictographic.test(String.fromCodePoint(cp))) out.push(cp)
   }
-  return toRanges(wide)
+  return toRanges(out)
 }
 
-function zeroWidthRanges(): Range[] {
-  // Cf covers ZWJ/ZWNJ/ZWSP and the bidi controls. SOFT HYPHEN is Cf but
-  // occupies a column in a terminal, so unicode-width gives it 1 — match that.
-  const combining = /\p{Mn}|\p{Me}|\p{Cf}/u
-  const zero: number[] = []
-  for (let cp = 0; cp <= MAX_CP; cp++) {
-    if (cp === 0x00ad) continue
-    // Conjoining jamo compose onto the preceding syllable block.
-    if (cp >= 0x1160 && cp <= 0x11ff) {
-      zero.push(cp)
-      continue
-    }
-    if (combining.test(String.fromCodePoint(cp))) zero.push(cp)
-  }
-  return toRanges(zero)
-}
-
-function format(name: string, ranges: Range[]): string {
-  const body = ranges
-    .map(([lo, hi]) => `[0x${lo.toString(16)}, 0x${hi.toString(16)}],`)
-    .join('\n  ')
-  return `export const ${name}: [number, number][] = [\n  ${body}\n]\n`
-}
-
-const res = await fetch(EAW_URL)
-if (!res.ok) throw new Error(`${EAW_URL} -> ${res.status}`)
-const eaw = await res.text()
-const version = eaw.match(/^# EastAsianWidth-([\d.]+)\.txt/)?.[1] ?? 'unknown'
-
-const header = `// Generated by scripts/gen-width-data.ts from Unicode ${version}. Do not edit.
-// Inclusive [lo, hi] code point ranges, sorted and non-adjacent.
-
-`
+const runs = await oracleRuns()
+const widthRuns = runs
+  .map(([lo, hi, cw, sw]) => `  [0x${lo.toString(16)}, 0x${hi.toString(16)}, ${cw}, ${sw}],`)
+  .join('\n')
+const emoji = emojiRanges()
+  .map(([lo, hi]) => `  [0x${lo.toString(16)}, 0x${hi.toString(16)}],`)
+  .join('\n')
 
 await Bun.write(
   new URL('../src/width-data.ts', import.meta.url),
-  `${header}${format('WIDE', parseEastAsianWidth(eaw))}\n${format('ZERO', zeroWidthRanges())}`,
+  `// Generated by scripts/gen-width-data.ts. Do not edit.
+//
+// WIDTHS covers the whole code point space as sorted, contiguous runs of
+// [lo, hi, charWidth, strWidth], taken from the unicode-width crate.
+// charWidth is \`UnicodeWidthChar::width(c).unwrap_or(0)\`; strWidth is the
+// width of that character alone in a string. They differ: a tab is 0 and 1.
+export const WIDTHS: [number, number, number, number][] = [
+${widthRuns}
+]
+
+// Extended_Pictographic, for the string-level ZWJ clustering rule.
+export const EMOJI: [number, number][] = [
+${emoji}
+]
+`,
 )
 
-console.log(`wrote src/width-data.ts from Unicode ${version}`)
+console.log(
+  `wrote src/width-data.ts (${runs.length} width runs, ${emojiRanges().length} emoji ranges)`,
+)

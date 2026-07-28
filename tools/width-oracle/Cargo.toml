@@ -1,0 +1,9 @@
+[package]
+name = "width-oracle"
+version = "0.0.0"
+edition = "2021"
+
+# Pinned to the version grok-build's Cargo.lock resolves, so the generated
+# table matches the renderer we are porting rather than the latest release.
+[dependencies]
+unicode-width = "=0.2.0"

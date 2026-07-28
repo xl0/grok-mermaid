@@ -26,6 +26,18 @@ export const LABEL_BREAK_CHARS = ['_', '-', '.', '/']
 export const asciiLower = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase())
 export const asciiUpper = (s: string): string => s.replace(/[a-z]/g, (c) => c.toUpperCase())
 
+/**
+ * Split source into lines the way Rust's `str::lines()` does: on `\n`, with a
+ * trailing `\r` stripped, and *without* a final empty line when the input ends
+ * in a newline. `String.split` yields that extra element, which would show up
+ * as a spurious blank row inside a fallback box.
+ */
+export function srcLines(src: string): string[] {
+  const out = src.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l))
+  if (out.length > 0 && out[out.length - 1] === '') out.pop()
+  return out
+}
+
 const ALNUM = /[\p{Alphabetic}\p{N}]/u
 
 /** Matches Rust's `char::is_alphanumeric`. */

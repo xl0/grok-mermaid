@@ -7,6 +7,9 @@ checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`.
 ## Layout
 
 ```
+tools/
+  width-oracle/  emits per-code-point widths from the unicode-width crate
+  differential/  renders a corpus through Rust and TS, diffs the output
 src/
   index.ts       public entry: render(), tries each grammar then falls back
   types.ts       Cls / Span / MermaidArt / RenderOptions
@@ -71,6 +74,40 @@ both endpoints; one crossing a boundary attaches to the frame.
   of spaces. Emitting `[]` is what makes the `styled == plain` invariant hold.
 - **Semantic span classes** instead of ratatui `Line`/`Span` + `MermaidStyles`.
 
+## Verification
+
+`bun run differential` renders ~7180 cases through both the Rust original and
+this port and fails on any difference. **Currently 7180/7180 identical.** See
+`tools/README.md`; it needs a Rust toolchain and a grok-build checkout, and it
+copies upstream's `mermaid.rs` in at run time rather than vendoring it.
+
+It found four bugs the ported unit tests missed, all in width and line
+handling — see `tools/README.md` for the list. Extend `corpus.ts` when
+touching layout or width.
+
+## Width handling
+
+Two width functions, deliberately inconsistent, because `unicode-width` is:
+
+- `codePointWidth(cp)` — `UnicodeWidthChar::width(c).unwrap_or(0)`. Used when
+  painting a character into a cell. A control character is 0.
+- `stringWidth(s)` — `UnicodeWidthStr::width`. Used for sizing. A control
+  character is 1, and emoji presentation sequences fuse into one 2-column
+  cluster.
+
+Collapsing the two mismeasures anything containing a tab. `drawWidth` is
+`codePointWidth` floored at 1, matching `char_width(c).max(1)` at the Rust
+call sites that paint glyphs.
+
+`src/width-data.ts` is generated from the `unicode-width` crate itself via
+`tools/width-oracle`, not re-derived from the UCD, so per-code-point widths are
+exact by construction. The string-level clustering rules are hand-written and
+cover emoji only; the crate's script ligatures (Arabic Lam-Alef, Hebrew
+Alef-Lamed, Khmer Coeng, Buginese, Lisu, Old Turkic, Tifinagh, Kirat Rai),
+emoji tag sequences, and the quote + `FE00`/`FE01`/`FE02` cases are not
+implemented — they need several more property tables and do not arise in
+diagram labels.
+
 ## Known limits (shared with upstream)
 
 - **`maxWidth` below ~12 is not honoured by the fallback box.** The body chunks
@@ -78,9 +115,6 @@ both endpoints; one crossing a boundary attaches to the frame.
   so a 20-column frame survives a `maxWidth: 8`. The art path always respects
   `maxWidth` — it reports oversize and defers to the fallback. Left as-is:
   nothing useful renders that narrow, and diverging here buys nothing.
-- **`stringWidth` sums code point widths.** `unicode-width` 0.2 additionally
-  collapses emoji ZWJ sequences at the string level, so `👨‍👩‍👧` measures 2 there
-  and 6 here. Only reachable via labels containing emoji sequences.
 
 ## Porting notes
 
@@ -104,15 +138,14 @@ both endpoints; one crossing a boundary attaches to the frame.
 
 ## Tests
 
-160 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+162 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which
 upstream has no equivalent of.
 
-Cargo has no usable toolchain in this environment and `~/.cargo` is not
-writable, so golden files cannot be generated from the Rust build to diff
-against. The ported suite is the only cross-check.
+The unit suite alone is not sufficient: it passed while four width bugs were
+live. `bun run differential` is what actually pins fidelity.
 
 ## Tooling
 

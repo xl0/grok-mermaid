@@ -25,8 +25,29 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-160 passing. Upstream suite ported, plus new width and span-contract tests.
+162 passing. Upstream suite ported, plus new width and span-contract tests.
 Fuzzed 20k generated sources: no throws, span invariant holds throughout.
+
+## [x] Differential verification
+
+`bun run differential` diffs ~7180 rendered cases against the Rust original.
+7180/7180 identical. Found four width/line bugs the unit suite missed.
+Per-code-point widths are now generated from the `unicode-width` crate itself
+rather than re-derived from the UCD.
+
+**This is the fidelity cutoff.** Up to this commit the port matches upstream
+byte for byte. Deviations after it are deliberate and listed below.
+
+## [ ] Deliberate divergence (post-cutoff)
+
+Byte-compatibility is no longer required — good-looking output is the bar. The
+differential harness stays useful as a change detector: run it, read the diff,
+and confirm each change is intended rather than accidental.
+
+Candidates:
+- Honour `maxWidth` in the fallback box below ~12 columns (truncate the title).
+- Wrap fallback body lines on word boundaries rather than hard-chunking.
+- Revisit the `assignTracks` O(n²) compatibility scan if large diagrams show up.
 
 ## [ ] Ship
 

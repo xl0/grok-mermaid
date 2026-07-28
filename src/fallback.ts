@@ -6,6 +6,7 @@
  * the reader at the image.
  */
 
+import { srcLines } from './labels.ts'
 import type { MermaidArt, Span } from './types.ts'
 import { drawWidth, stringWidth } from './width.ts'
 
@@ -19,8 +20,7 @@ export function fallback(src: string, maxWidth: number | undefined, tooWide: boo
   const title = ` mermaid: ${header} `
   const limit = maxWidth === undefined ? undefined : Math.max(8, sat(maxWidth, 4))
 
-  const body = src
-    .split(/\r?\n/)
+  const body = srcLines(src)
     .map((l) => l.replace(/\s+$/, ''))
     .reduce<{ started: boolean; lines: string[] }>(
       (acc, l) => {

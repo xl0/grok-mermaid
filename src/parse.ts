@@ -20,7 +20,7 @@ import {
   parseDir,
   type Shape,
 } from './graph.ts'
-import { asciiLower, cleanLabel, decodeHtmlEntities, isIdChar } from './labels.ts'
+import { asciiLower, cleanLabel, decodeHtmlEntities, isIdChar, srcLines } from './labels.ts'
 
 // ---------------------------------------------------------------- statements
 
@@ -61,7 +61,7 @@ export function splitStatements(line: string, out: string[]): void {
 /** All statements in a source block, in order. */
 export function statementsOf(src: string): string[] {
   const out: string[] = []
-  for (const line of src.split(/\r?\n/)) splitStatements(line, out)
+  for (const line of srcLines(src)) splitStatements(line, out)
   return out
 }
 
