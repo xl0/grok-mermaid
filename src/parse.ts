@@ -84,6 +84,35 @@ function headerKind(statements: string[]): string | null {
   return kind === '' ? null : asciiLower(kind)
 }
 
+/** A diagram type this renderer draws. */
+export type DiagramKind = 'flowchart' | 'state' | 'class' | 'er' | 'sequence'
+
+/**
+ * The kind of diagram `src` declares, or `null` if its header names no type
+ * this renderer draws.
+ *
+ * Reads the header only — it says nothing about whether the body parses. Pair
+ * it with `render` to tell a source this renderer will never draw from one that
+ * is merely malformed:
+ *
+ * ```ts
+ * render(src) === null && diagramKind(src) !== null   // syntax error
+ * ```
+ *
+ * Each branch mirrors the header test in the matching `parseX`, so the two
+ * always agree on what they recognise.
+ */
+export function diagramKind(src: string): DiagramKind | null {
+  const kind = headerKind(statementsOf(src))
+  if (kind === null) return null
+  if (kind === 'graph' || kind === 'flowchart') return 'flowchart'
+  if (kind.startsWith('statediagram')) return 'state'
+  if (kind.startsWith('classdiagram')) return 'class'
+  if (kind === 'erdiagram') return 'er'
+  if (kind === 'sequencediagram') return 'sequence'
+  return null
+}
+
 // ----------------------------------------------------------------- flowchart
 
 export function parseGraph(src: string): Graph | null {
@@ -148,13 +177,22 @@ function parseSubgraphDecl(rest: string): [string, string] {
   return [rest, rest]
 }
 
-/** A chain of `node link node link node ...`, each link fanning out over `&`. */
+/**
+ * A chain of `node link node link node ...`, each link fanning out over `&`.
+ *
+ * Parses as far as it can and keeps the prefix, matching upstream and
+ * mermaid.js. Whatever it could not read is recorded in `graph.warnings` rather
+ * than failing the diagram — see the note on that field.
+ */
 function parseStatement(st: string, graph: Graph): void {
   const chars = [...st]
   let i = 0
 
   const head = parseNodeGroup(chars, i, graph)
-  if (!head) return
+  if (!head) {
+    graph.warnings.push(`dropped, does not start with a node: "${st}"`)
+    return
+  }
   let prev = head.group
   i = head.next
 
@@ -162,10 +200,16 @@ function parseStatement(st: string, graph: Graph): void {
     i = skipSpaces(chars, i)
     if (i >= chars.length) break
     const link = parseLink(chars, i)
-    if (!link) break
+    if (!link) {
+      graph.warnings.push(`dropped, expected a link: "${chars.slice(i).join('')}"`)
+      break
+    }
     i = skipSpaces(chars, link.next)
     const target = parseNodeGroup(chars, i, graph)
-    if (!target) break
+    if (!target) {
+      graph.warnings.push(`dropped, link has no target: "${st}"`)
+      break
+    }
     i = target.next
     for (const f of prev) {
       for (const t of target.group) {
@@ -225,15 +269,24 @@ function parseNode(
   const id = chars.slice(idStart, i).join('')
 
   const shaped = readShapeAt(chars, i)
+  if (shaped.unclosed !== undefined) {
+    graph.warnings.push(`node "${id}": label is missing its closing \`${shaped.unclosed}\``)
+  }
   const index = graph.nodeIndex(id, shaped.label, shaped.shape)
   return index === null ? null : { index, next: shaped.after }
 }
 
+/** What a shape bracket yielded. `closer` is set when the bracket never closed. */
+interface Shaped {
+  shape: Shape
+  label: string | null
+  after: number
+  /** The closing token that was expected but never found. */
+  unclosed?: string
+}
+
 /** Dispatch on the bracket following an id to pick shape and closing token. */
-function readShapeAt(
-  chars: string[],
-  i: number,
-): { shape: Shape; label: string | null; after: number } {
+function readShapeAt(chars: string[], i: number): Shaped {
   const c = chars[i]
   const n = chars[i + 1]
   if (c === '[') {
@@ -261,12 +314,7 @@ function readShapeAt(
  * the closer is ignored until the quote closes, so `A["a] b"]` is one node.
  * An unquoted label ends at the first closer, so `A[5" pipe]` keeps its quote.
  */
-function readShape(
-  chars: string[],
-  start: number,
-  closer: string,
-  shape: Shape,
-): { shape: Shape; label: string; after: number } {
+function readShape(chars: string[], start: number, closer: string, shape: Shape): Shaped {
   let j = start
   while (chars[j] === ' ' || chars[j] === '\t') j++
   const quoted = chars[j] === '"'
@@ -288,7 +336,9 @@ function readShape(
     text += c
     i++
   }
-  return { shape, label: cleanLabel(text), after: chars.length }
+  // Ran off the end still looking for the closer: everything after the opening
+  // bracket became label text, so any link operator in it was swallowed.
+  return { shape, label: cleanLabel(text), after: chars.length, unclosed: closer }
 }
 
 const isLinkChar = (c: string): boolean =>

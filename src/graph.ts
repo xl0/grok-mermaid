@@ -82,6 +82,14 @@ export class Graph {
   curGroup: number | null = null
   /** Set when a cap was hit; the caller abandons the parse. */
   overCap = false
+  /**
+   * Text the flowchart grammar could not read and silently discarded.
+   *
+   * Flowchart parsing is deliberately lenient — a malformed statement
+   * contributes whatever prefix parsed and the rest is dropped — so without
+   * these the reader gets a clean diagram that is not what they wrote.
+   */
+  warnings: string[] = []
   dir: Dir = 'down'
 
   constructor(dir: Dir = 'down') {

@@ -66,7 +66,7 @@ export function sourceBox(src: string, maxWidth?: number): MermaidArt {
   plain.push(bottom)
   styled.push([{ text: bottom, cls: 'border' }])
 
-  return { plain, styled, width: inner + 2 }
+  return { plain, styled, width: inner + 2, warnings: [] }
 }
 
 /** Hard-break a line at `limit` columns, never splitting a wide glyph. */

@@ -25,9 +25,15 @@ export interface Span {
  * `width` is the display columns the widest row needs — the number to compare
  * against the space you have. It cannot be recovered from `plain`, whose rows
  * are strings of code points, not columns.
+ *
+ * `warnings` lists source the flowchart grammar could not read and dropped.
+ * Non-empty means the art is real but incomplete — some of what was written is
+ * not in it. Only flowcharts warn; the other grammars refuse the whole diagram
+ * instead, and `render` returns `null`.
  */
 export interface MermaidArt {
   plain: string[]
   styled: Span[][]
   width: number
+  warnings: string[]
 }

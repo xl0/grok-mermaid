@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { CONT } from '../src/canvas.ts'
-import { render, sourceBox } from '../src/index.ts'
+import { diagramKind, render, sourceBox } from '../src/index.ts'
 import { stringWidth } from '../src/width.ts'
 import { countOf, lines, plain, rowOf } from './helpers.ts'
 
@@ -210,10 +210,96 @@ test('a self loop in LR', () => {
   expect(out).toContain('▶')
 })
 
+// ------------------------------------------------------------- syntax errors
+
+/** Art plus the source it silently dropped; throws if nothing was drawn. */
+function warned(src: string): string[] {
+  const art = render(src)
+  if (art === null) throw new Error('render drew nothing')
+  return art.warnings
+}
+
+test('a well-formed flowchart warns about nothing', () => {
+  for (const src of [
+    'graph TD\n A[Start] --> B[End]',
+    'flowchart LR\n A[ok] --> B{decide} --> C((done))',
+    'graph TD\n A -->|yes| B\n B -.-> C\n A ==> C',
+    'graph TD\n S --> one\n subgraph one [Group]\n A --> B\n end',
+  ]) {
+    expect(`${src}: ${warned(src).join()}`).toBe(`${src}: `)
+  }
+})
+
+test('an unterminated label is reported, not swallowed', () => {
+  // Without the warning this reads as one node called `Start --> B`: the edge
+  // the author wrote is gone and nothing says so.
+  const art = render('graph TD\n A[Start --> B')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.warnings).toEqual(['node "A": label is missing its closing `]`'])
+  expect(art.plain.join('\n')).toContain('Start --> B')
+})
+
+test('an unterminated quoted label is reported', () => {
+  expect(warned('graph TD\n A["Start] --> B')[0]).toContain('missing its closing')
+})
+
+test('text after an unreadable link is reported', () => {
+  expect(warned('graph TD\n A --> B\n total garbage here')).toEqual([
+    'dropped, expected a link: "garbage here"',
+  ])
+})
+
+test('a link with no target is reported', () => {
+  expect(warned('graph TD\n A -->')).toEqual(['dropped, link has no target: "A -->"'])
+})
+
+test('a statement that is not a node at all is reported', () => {
+  expect(warned('graph TD\n A --> B\n -->')).toEqual(['dropped, does not start with a node: "-->"'])
+})
+
+test('the known entity limit explains itself in warnings', () => {
+  // `;` inside an unquoted label splits the statement mid-entity — see CODE.md.
+  const w = warned('graph TD\n A -->|go&#160;| B')
+  expect(w.length).toBe(2)
+  expect(w[0]).toContain('link has no target')
+})
+
+test('only flowcharts warn; the strict grammars refuse outright', () => {
+  expect(render('stateDiagram-v2\n A --> B\n some garbage line')).toBeNull()
+  expect(render('classDiagram\n A --> B\n total garbage here')).toBeNull()
+  expect(render('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toBeNull()
+  expect(render('sequenceDiagram\n A->>B: hi\n garbage statement here')).toBeNull()
+})
+
+test('diagramKind separates an unsupported type from a malformed one', () => {
+  // Both render to null; only one is worth telling the author to fix.
+  const malformed = 'stateDiagram-v2\n A --> B\n some garbage line'
+  expect(render(malformed)).toBeNull()
+  expect(diagramKind(malformed)).toBe('state')
+
+  const unsupported = 'gantt\n title Plan'
+  expect(render(unsupported)).toBeNull()
+  expect(diagramKind(unsupported)).toBeNull()
+})
+
+test('diagramKind reads the header without parsing the body', () => {
+  expect(diagramKind('graph TD\n A --> B')).toBe('flowchart')
+  expect(diagramKind('flowchart LR')).toBe('flowchart')
+  expect(diagramKind('classDiagram')).toBe('class')
+  expect(diagramKind('erDiagram')).toBe('er')
+  expect(diagramKind('sequenceDiagram')).toBe('sequence')
+  expect(diagramKind('pie title x')).toBeNull()
+  expect(diagramKind('')).toBeNull()
+})
+
 // --------------------------------------------------------------- source box
 
 test('an unsupported diagram draws nothing', () => {
   expect(render('gantt\n title Plan\n section A\n task :a1, 2024-01-01, 30d')).toBeNull()
+})
+
+test('the source box carries no warnings', () => {
+  expect(sourceBox('gantt\n title Plan', 80).warnings).toEqual([])
 })
 
 test('an adversarial chain is over the cell cap', () => {

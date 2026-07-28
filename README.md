@@ -45,8 +45,38 @@ if (art) console.log(art.plain.join('\n'))
 
 `render` draws the diagram at whatever size it needs and reports that as
 `art.width`. It returns `null` when there is no art to show: blank input, a
-diagram type it does not draw, or one large enough that laying it out is
-refused.
+syntax error, a diagram type it does not draw, or one large enough that laying
+it out is refused.
+
+### Syntax errors
+
+The four strict grammars — state, class, ER, sequence — reject the whole
+diagram on any statement they cannot read, so a syntax error means `null`.
+
+Flowcharts do not, and never have: mermaid.js is lenient here and so is this,
+so a malformed statement keeps whatever prefix parsed. That would quietly hand
+you a clean diagram missing an edge you wrote, so whatever was dropped is
+listed in `art.warnings`:
+
+```ts
+const art = render('graph TD\n A[Start --> B')
+// art.plain     one box labelled `Start --> B` — the edge is gone
+// art.warnings  ['node "A": label is missing its closing `]`']
+```
+
+An empty `warnings` means everything in the source made it into the art. Across
+the 134 hand-written diagrams in the test corpus, none warn.
+
+`diagramKind(src)` reads the header alone and returns `'flowchart' | 'state' |
+'class' | 'er' | 'sequence'`, or `null` for a type this renderer does not draw.
+It is what separates the two `null`s worth telling apart:
+
+```ts
+if (render(src) === null) {
+  const kind = diagramKind(src)
+  console.log(kind ? `${kind} diagram: syntax error` : 'diagram type not supported here')
+}
+```
 
 ### Fitting a viewport
 

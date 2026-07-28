@@ -25,7 +25,8 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-169 passing. Upstream suite ported, plus new width and span-contract tests.
+180 passing. Upstream suite ported, plus new width, span-contract and
+syntax-warning tests.
 Fuzzed 20k generated sources: no throws, span invariant holds throughout.
 
 ## [x] Differential verification
@@ -58,6 +59,17 @@ union, `RenderOptions` and the `hint` class.
 
 Upstream's width gate lives on in `tools/differential/run.ts`, which is the only
 place that needs it — to keep comparing byte for byte against Rust.
+
+## [x] Syntax errors are reported, not swallowed (post-cutoff)
+
+Flowchart parsing is lenient by inheritance, so a malformed statement kept its
+prefix and dropped the rest in silence — a clean diagram missing an edge the
+author wrote. Every drop now lands in `art.warnings`: unterminated label
+brackets, text where a link was expected, links with no target, statements that
+are not nodes. Zero warnings across the 134 hand-written corpus diagrams.
+
+`diagramKind(src)` reads the header alone, separating the two `null`s a caller
+would word differently: malformed vs a type this renderer does not draw.
 
 ## [ ] Possible further divergence
 

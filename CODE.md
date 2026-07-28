@@ -34,9 +34,11 @@ overlap rather than gap in whatever font the viewer has.
 
 ## Public API
 
-`render(src)` returns `{ plain, styled, width }`, or `null` when there is no art
-to show: blank input, an unsupported grammar, or a diagram over the cell cap.
-`sourceBox(src, maxWidth?)` frames the source in a titled box.
+`render(src)` returns `{ plain, styled, width, warnings }`, or `null` when there
+is no art to show: blank input, a syntax error, an unsupported grammar, or a
+diagram over the cell cap. `sourceBox(src, maxWidth?)` frames the source in a
+titled box. `diagramKind(src)` reads the header alone, so a caller can tell a
+malformed diagram from one this renderer never draws.
 
 **Width is reported, not enforced.** Layout takes no limit and never substitutes
 the source box for art. Nothing in a diagram says whether an over-wide one
@@ -62,6 +64,36 @@ type plus a source box.
 colour. This replaces the Rust `MermaidStyles` struct: layout no longer depends
 on the theme, so a render survives a theme change and is plain JSON, hence
 worker-transferable.
+
+## Syntax errors
+
+Two behaviours, split by grammar, and only one of them is a choice.
+
+State, class, ER and sequence are **strict**: any statement they cannot read
+fails the whole parse, so `render` returns `null` and the caller shows the
+source box — reading your own source back is a fair answer to a syntax error.
+
+Flowchart is **lenient**, inherited from upstream (`parse_statement` returns
+`()` there too) and from mermaid.js itself. `parseStatement` parses as far as it
+can, keeps the prefix and drops the rest. Left alone that is the worst failure
+mode in the library: `A[Start --> B` renders one box labelled `Start --> B` with
+the author's edge silently gone, and junk text becomes a node. So every drop is
+recorded in `graph.warnings` and surfaces as `art.warnings`:
+
+- `readShape` running off the end still looking for its closer — the case the
+  cursor cannot catch, since the statement *is* fully consumed, as a label.
+- a statement not starting with a node, text where a link was expected, and a
+  link with no target — the three `break`/`return` sites in `parseStatement`.
+
+Warnings never fail a render. Zero warnings on all 134 hand-written corpus
+diagrams; the fuzz corpus warns constantly, which is correct.
+
+Making flowchart strict was rejected: it would reject diagrams that render fine
+today and diverge from both upstream and mermaid proper.
+
+`diagramKind` reads the header only, mirroring each `parseX`'s own header test,
+which is what lets a caller separate "syntax error" from "type not drawn here" —
+both of which are `null` from `render`.
 
 ## How the renderer works
 
@@ -199,7 +231,7 @@ notions is what the port dropped.
 
 ## Tests
 
-169 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+180 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which
