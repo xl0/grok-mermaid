@@ -46,7 +46,7 @@ real bugs that the ported unit tests did not:
   or source line containing a tab measured short.
 - `U+00AD` SOFT HYPHEN is zero-width, not one.
 - Rust's `str::lines()` drops the final empty line when input ends in a
-  newline; `String.split` keeps it, adding a blank row inside fallback boxes.
+  newline; `String.split` keeps it, adding a blank row inside source boxes.
 - Emoji ZWJ sequences, skin-tone modifiers, `FE0F` promotions, keycaps and
   regional-indicator pairs each measure as one 2-column cluster.
 

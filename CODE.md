@@ -11,8 +11,8 @@ tools/
   width-oracle/  emits per-code-point widths from the unicode-width crate
   differential/  renders a corpus through Rust and TS, diffs the output
 src/
-  index.ts       public entry: render(), tries each grammar then falls back
-  types.ts       Cls / Span / MermaidArt / RenderOptions
+  index.ts       public entry: render() + sourceBox(), tries each grammar
+  types.ts       Cls / Span / MermaidArt
   ansi.ts        toAnsi() convenience over the span classes
   width.ts       display widths; width-data.ts is generated, do not edit
   canvas.ts      cell grid, direction-bit glyph resolution, flips, span runs
@@ -21,7 +21,7 @@ src/
   parse.ts       all five grammars, source text -> model
   layout.ts      rank, order, place, route, draw (flowchart/state/class/ER)
   layout-seq.ts  sequence diagrams (own model, own geometry)
-  fallback.ts    framed source box + too-wide hint
+  source-box.ts  the source framed in a titled box
 scripts/
   gen-width-data.ts   regenerates src/width-data.ts from the UCD
   gen-demo-svg.ts     regenerates docs/demo.svg, the README's colour example
@@ -34,18 +34,34 @@ overlap rather than gap in whatever font the viewer has.
 
 ## Public API
 
-`render(src, { maxWidth })` returns `{ plain, styled }`, or `null` only for
-blank input. Everything else always produces art: unsupported grammars and
-over-wide diagrams fall back to a framed copy of the source.
+`render(src)` returns `{ plain, styled, width }`, or `null` when there is no art
+to show: blank input, an unsupported grammar, or a diagram over the cell cap.
+`sourceBox(src, maxWidth?)` frames the source in a titled box.
+
+**Width is reported, not enforced.** Layout takes no limit and never substitutes
+the source box for art. Nothing in a diagram says whether an over-wide one
+should be shrunk, scrolled, linked to an image or simply printed, so `width` is
+the answer and the response is the caller's:
+
+```ts
+const art = render(src)
+show(art && art.width <= cols ? art : sourceBox(src, cols))
+```
+
+`width` is the widest *painted* row, which is what a caller can act on — it
+cannot be recovered from `plain`, whose rows are strings of code points rather
+than columns.
+
+Both entry points take untrusted source, so both apply `stripControls`.
 
 `plain[i]` and `styled[i]` are the same row, and `styled[i]` joined is exactly
 `plain[i]` — enforced by `test/spans.test.ts` across a corpus of every diagram
-type.
+type plus a source box.
 
-`Cls` is semantic (`border`/`text`/`edge`/`edgeLabel`/`title`/`hint`/`none`),
-never a colour. This replaces the Rust `MermaidStyles` struct: layout no longer
-depends on the theme, so a render survives a theme change and is plain JSON,
-hence worker-transferable.
+`Cls` is semantic (`border`/`text`/`edge`/`edgeLabel`/`title`/`none`), never a
+colour. This replaces the Rust `MermaidStyles` struct: layout no longer depends
+on the theme, so a render survives a theme change and is plain JSON, hence
+worker-transferable.
 
 ## How the renderer works
 
@@ -71,6 +87,16 @@ both endpoints; one crossing a boundary attaches to the frame.
 
 ## Deliberate deviations from upstream
 
+- **`maxWidth` is gone; `width` is reported instead** (post-cutoff). Upstream
+  folds the viewport decision into `render`, which forces the library to pick a
+  response and to word it — its note tells the reader to "open the image", which
+  only its own host has. See *Public API*. Upstream's gate is reproduced in
+  `tools/differential/run.ts`, the only place that still needs it.
+- **Width is measured in painted cells, not allocated ones.** Upstream compares
+  `max_width` against the canvas it allocated; some layouts leave the rightmost
+  column blank, so a diagram that fits was declared too wide. The differential
+  reports these as `slack` — 8 cases, all ones where the port draws a diagram
+  where upstream printed the source.
 - **Grapheme clusters measure and paint as one unit** (post-cutoff). Fixes
   emoji and combining sequences overflowing their boxes, and replaced ~60 lines
   of hand-written Unicode clustering plus a 156-range Extended_Pictographic
@@ -84,21 +110,28 @@ both endpoints; one crossing a boundary attaches to the frame.
 - **Blank canvas rows emit no spans.** Upstream trims trailing blanks from its
   plain lines but not its styled ones, so an empty row yielded a full-width run
   of spaces. Emitting `[]` is what makes the `styled == plain` invariant hold.
-- **Literal control characters are stripped at the entry point.** They measure
+- **Literal control characters are stripped at both entry points.** They measure
   one column and paint none, so a box sized around one is drawn a column short
   of its own border; NUL additionally collides with the `CONT` sentinel and is
-  dropped after layout has paid for its cell. Upstream refuses to *decode* an
-  entity into a control character but lets a literal one through; `render`
-  closes the same hole at the one door untrusted source comes in by.
+  dropped after layout has paid for its cell; ESC injects ANSI into scrollback.
+  Upstream refuses to *decode* an entity into a control character but lets a
+  literal one through; `render` and `sourceBox` close the same hole at both
+  doors untrusted source comes in by.
 - **Semantic span classes** instead of ratatui `Line`/`Span` + `MermaidStyles`.
 
 ## Verification
 
 `bun run differential` renders ~7180 cases through both the Rust original and
 this port. It classifies each difference and **fails only on a regression** —
-a case that diverges without involving grapheme clustering.
+a case that diverges for a reason not on the deviations list above.
 
-Current state: 5193 identical, 1987 expected (clustering), 0 regressions.
+`run.ts` holds a `renderBounded` that reapplies upstream's `max_width` gate,
+since `render` no longer has one; that shim, and the note wrapping it needs,
+live there rather than in `src` precisely because they are upstream's behaviour
+and not the port's.
+
+Current state: 5184 identical, 1988 expected (clustering), 8 slack (painted vs
+allocated width), 0 regressions.
 
 Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
 byte for byte on all 7180 cases. Divergence after it is deliberate and listed
@@ -126,20 +159,23 @@ notions is what the port dropped.
 
 ## Known limits (shared with upstream)
 
-- **The fallback box can exceed `maxWidth`.** The body chunks to
+- **`sourceBox` can exceed its `maxWidth`.** The body chunks to
   `max(8, maxWidth - 4)`, so a 12-column frame survives a `maxWidth: 8`; and the
   ` mermaid: <kind> ` title is never truncated, so the frame is at least as wide
   as the source's first token — `stateDiagram-v2` needs 30 columns whatever
   `maxWidth` says. Every real diagram keyword fits inside ~30, so this only
-  bites on a narrow viewport or a junk header. The art path always respects
-  `maxWidth` — it reports oversize and defers here. Left as-is: nothing useful
-  renders that narrow, and truncating the one line naming the diagram type is a
-  poor trade.
+  bites on a narrow viewport or a junk header. It reports its own `width`, so a
+  caller that cares can check. Left as-is: nothing useful renders that narrow,
+  and truncating the one line naming the diagram type is a poor trade.
 - **An HTML entity in an unquoted label truncates the statement.**
   `splitStatements` treats `;` outside double quotes as a statement separator,
   so `A -->|go&#160;| B` splits mid-entity and the edge is dropped — only node
   `A` survives. Quoting the label (`A -->|"go&#160;"| B`) works. Mermaid proper
   wants special characters quoted anyway.
+- **ER entity aliases are not parsed.** `p[Person] ||--o{ a["Bank Account"]`
+  fails the grammar outright. Upstream's test for it asserts on the fallback
+  box, which merely echoes the source, so it passes without rendering anything —
+  `test/render.test.ts` records the real behaviour instead.
 
 ## Porting notes
 
@@ -163,7 +199,7 @@ notions is what the port dropped.
 
 ## Tests
 
-168 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+169 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which

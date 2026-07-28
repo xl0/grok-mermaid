@@ -36,10 +36,8 @@ const GAP_Y = 2
 /** Refuse to allocate a canvas larger than this many cells. */
 const MAX_CANVAS_CELLS = 1 << 21
 
-/** Why a diagram could not be drawn: too wide for the viewport, or too large. */
-export type Oversize = 'width' | 'cells'
-
-export type CanvasResult = { ok: true; canvas: Canvas } | { ok: false; oversize: Oversize }
+/** A laid-out canvas, or `null` when the diagram is empty or over the cell cap. */
+export type CanvasResult = Canvas | null
 
 /** Saturating subtraction; Rust's `usize` arithmetic never goes negative. */
 const sat = (a: number, b: number): number => Math.max(0, a - b)
@@ -525,13 +523,9 @@ function placeLr(
 // -------------------------------------------------------------------- canvas
 
 /** Rank, place, draw and route a graph onto a fresh canvas. */
-export function layoutCanvas(
-  graph: Graph,
-  extras: NodeExtra[],
-  maxWidth: number | undefined,
-): CanvasResult {
+export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   const n = graph.nodes.length
-  if (n === 0) return { ok: false, oversize: 'cells' }
+  if (n === 0) return null
 
   const ranks = computeRanks(graph)
   const maxRank = Math.max(...ranks, 0)
@@ -596,8 +590,7 @@ export function layoutCanvas(
     ? placeTd(ranks, maxRank, byRank, sizes, graph, placed)
     : placeLr(ranks, maxRank, byRank, sizes, graph, placed)
 
-  if (maxWidth !== undefined && plan.canvasW > maxWidth) return { ok: false, oversize: 'width' }
-  if (plan.canvasW * plan.canvasH > MAX_CANVAS_CELLS) return { ok: false, oversize: 'cells' }
+  if (plan.canvasW * plan.canvasH > MAX_CANVAS_CELLS) return null
 
   const canvas = new Canvas(plan.canvasW, plan.canvasH)
   for (let idx = 0; idx < n; idx++) {
@@ -630,7 +623,7 @@ export function layoutCanvas(
   })
 
   canvas.finalizeMask()
-  return { ok: true, canvas }
+  return canvas
 }
 
 /** Apply the direction flip a finished canvas needs for `BT` / `RL`. */
@@ -641,28 +634,22 @@ export function orient(canvas: Canvas, graph: Graph): Canvas {
 }
 
 /** Flowchart and state diagrams: plain boxes, no extra content. */
-export function layoutFlowchart(graph: Graph, maxWidth: number | undefined): CanvasResult {
+export function layoutFlowchart(graph: Graph): CanvasResult {
   const extras: NodeExtra[] = graph.nodes.map(() => ({ kind: 'plain' }))
-  const result = layoutCanvas(graph, extras, maxWidth)
-  if (result.ok) orient(result.canvas, graph)
-  return result
+  const canvas = layoutCanvas(graph, extras)
+  return canvas && orient(canvas, graph)
 }
 
 /** Class and ER diagrams: boxes divided into title / attribute / method rows. */
-export function layoutClass(
-  graph: Graph,
-  infos: ClassInfo[],
-  maxWidth: number | undefined,
-): CanvasResult {
+export function layoutClass(graph: Graph, infos: ClassInfo[]): CanvasResult {
   const extras: NodeExtra[] = graph.nodes.map((node, i) => {
     const title: string[] = []
     if (infos[i].annotation !== null) title.push(`«${infos[i].annotation}»`)
     title.push(displayGenerics(node.label))
     return { kind: 'compartments', sections: [title, infos[i].attrs, infos[i].methods] }
   })
-  const result = layoutCanvas(graph, extras, maxWidth)
-  if (result.ok) orient(result.canvas, graph)
-  return result
+  const canvas = layoutCanvas(graph, extras)
+  return canvas && orient(canvas, graph)
 }
 
 function displayGenerics(s: string): string {
@@ -692,7 +679,7 @@ const groupKey = (i: number): ItemKey => `g${i}`
  * canvas. An edge is drawn in the innermost scope containing both endpoints;
  * one crossing a subgraph boundary attaches to the frame instead of the node.
  */
-export function layoutGrouped(graph: Graph, maxWidth: number | undefined): CanvasResult {
+export function layoutGrouped(graph: Graph): CanvasResult {
   // A node whose id matches a subgraph id stands in for that subgraph.
   const proxy = new Map<number, number>()
   graph.groups.forEach((g, gi) => {
@@ -751,9 +738,8 @@ export function layoutGrouped(graph: Graph, maxWidth: number | undefined): Canva
     keep[gi] = hasNodes || hasChildren || referenced[gi]
   }
 
-  const result = buildScope(graph, null, scopeEdges, directNodes, keep, maxWidth)
-  if (result.ok) orient(result.canvas, graph)
-  return result
+  const canvas = buildScope(graph, null, scopeEdges, directNodes, keep)
+  return canvas && orient(canvas, graph)
 }
 
 function buildScope(
@@ -762,7 +748,6 @@ function buildScope(
   scopeEdges: Map<number | null, [ItemKey, ItemKey, number][]>,
   directNodes: Map<number | null, number[]>,
   keep: boolean[],
-  maxWidth: number | undefined,
 ): CanvasResult {
   const items: ItemKey[] = (directNodes.get(scope) ?? []).map(nodeKey)
   const childGroups = graph.groups
@@ -770,7 +755,7 @@ function buildScope(
     .filter((gi) => graph.groups[gi].parent === scope && keep[gi])
   items.push(...childGroups.map(groupKey))
 
-  if (items.length === 0) return { ok: true, canvas: new Canvas(1, 1) }
+  if (items.length === 0) return new Canvas(1, 1)
 
   const indexOf = new Map<ItemKey, number>()
   const nodes: Node[] = []
@@ -782,11 +767,10 @@ function buildScope(
       nodes.push({ label: graph.nodes[i].label, shape: graph.nodes[i].shape })
       extras.push({ kind: 'plain' })
     } else {
-      // Nested scopes lay out unbounded; only the outermost honours maxWidth.
-      const sub = buildScope(graph, i, scopeEdges, directNodes, keep, undefined)
-      if (!sub.ok) return sub
+      const sub = buildScope(graph, i, scopeEdges, directNodes, keep)
+      if (sub === null) return null
       nodes.push({ label: graph.groups[i].label, shape: 'rect' })
-      extras.push({ kind: 'frame', sub: sub.canvas })
+      extras.push({ kind: 'frame', sub })
     }
   }
 
@@ -810,7 +794,7 @@ function buildScope(
   const synth = new Graph(graph.dir)
   synth.nodes = nodes
   synth.edges = edges
-  return layoutCanvas(synth, extras, maxWidth)
+  return layoutCanvas(synth, extras)
 }
 
 // ------------------------------------------------------------------- drawing

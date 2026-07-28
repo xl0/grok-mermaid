@@ -6,11 +6,10 @@
  * - `text`       node / participant / compartment labels
  * - `edge`       connector lines and arrowheads
  * - `edgeLabel`  text sitting on an edge
- * - `title`      the `mermaid: <kind>` header of a fallback box
- * - `hint`       the advisory note under a too-wide fallback box
+ * - `title`      the `mermaid: <kind>` header of a source box
  * - `none`       blank filler
  */
-export type Cls = 'border' | 'text' | 'edge' | 'edgeLabel' | 'title' | 'hint' | 'none'
+export type Cls = 'border' | 'text' | 'edge' | 'edgeLabel' | 'title' | 'none'
 
 /** A run of adjacent cells sharing one semantic class. */
 export interface Span {
@@ -22,16 +21,13 @@ export interface Span {
  * A rendered diagram. `plain[i]` and `styled[i]` describe the same row:
  * `plain` is right-trimmed for display width and copy/paste, `styled` keeps
  * the run structure needed to colour it.
+ *
+ * `width` is the display columns the widest row needs — the number to compare
+ * against the space you have. It cannot be recovered from `plain`, whose rows
+ * are strings of code points, not columns.
  */
 export interface MermaidArt {
   plain: string[]
   styled: Span[][]
-}
-
-export interface RenderOptions {
-  /**
-   * Display columns available. A diagram wider than this is replaced by a
-   * framed copy of its source plus an advisory note. Unbounded when omitted.
-   */
-  maxWidth?: number
+  width: number
 }

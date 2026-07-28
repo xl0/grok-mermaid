@@ -1,63 +1,55 @@
-import { fallback } from './fallback.ts'
+import { stripControls } from './labels.ts'
 import { type CanvasResult, layoutClass, layoutFlowchart, layoutGrouped } from './layout.ts'
 import { layoutSequence } from './layout-seq.ts'
 import { parseClass, parseEr, parseGraph, parseSequence, parseState } from './parse.ts'
-import type { MermaidArt, RenderOptions } from './types.ts'
+import type { MermaidArt } from './types.ts'
 
 export { type AnsiTheme, DEFAULT_THEME, toAnsi } from './ansi.ts'
-export type { Cls, MermaidArt, RenderOptions, Span } from './types.ts'
+export { sourceBox } from './source-box.ts'
+export type { Cls, MermaidArt, Span } from './types.ts'
 
 /**
- * C0 and C1 controls, less the `\t\n\r` the parsers and `srcLines` read.
- *
- * They measure one column and paint none, so a box sized around one is drawn a
- * column short of its own border; NUL also collides with the `CONT` sentinel
- * and is dropped after layout has already paid for its cell. `decodeEntityBody`
- * refuses to decode an entity into one — this closes the same hole for literals.
- */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: the point is to match them
-const CONTROLS = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g
-
-/**
- * Render a Mermaid source block as Unicode box-drawing art, or `null` for
- * blank input.
+ * Render a Mermaid source block as Unicode box-drawing art.
  *
  * Supported: `graph`/`flowchart` (including `subgraph`), `stateDiagram`,
- * `classDiagram`, `erDiagram` and `sequenceDiagram`. Any other diagram type —
- * or one too wide for `maxWidth` — falls back to the source in a framed box.
+ * `classDiagram`, `erDiagram` and `sequenceDiagram`.
+ *
+ * The diagram is laid out at whatever size it needs; `art.width` reports the
+ * columns that turned out to be. Deciding what to do when that exceeds the
+ * space at hand is the caller's — `sourceBox` is the usual answer:
+ *
+ * ```ts
+ * const art = render(src)
+ * show(art && art.width <= cols ? art : sourceBox(src, cols))
+ * ```
+ *
+ * `null` means there is no art to show: blank input, a diagram type this
+ * renderer does not draw, or one large enough that laying it out is refused.
  */
-export function render(src: string, options: RenderOptions = {}): MermaidArt | null {
-  src = src.replace(CONTROLS, '')
+export function render(src: string): MermaidArt | null {
+  src = stripControls(src)
   if (src.trim() === '') return null
-  const { maxWidth } = options
-
-  const outcome = attempt(src, maxWidth)
-  if (outcome?.ok) return outcome.canvas.toLines()
-  // Only a width failure earns the advisory note; an unsupported diagram type
-  // and an over-large one are not the reader's viewport problem.
-  return fallback(src, maxWidth, outcome?.oversize === 'width')
+  return attempt(src)?.toLines() ?? null
 }
 
-/** Try each diagram grammar in turn; `null` means none of them matched. */
-function attempt(src: string, maxWidth: number | undefined): CanvasResult | null {
+/** Try each diagram grammar in turn; `null` means none of them drew anything. */
+function attempt(src: string): CanvasResult {
   const graph = parseGraph(src)
   if (graph !== null) {
-    return graph.groups.length === 0
-      ? layoutFlowchart(graph, maxWidth)
-      : layoutGrouped(graph, maxWidth)
+    return graph.groups.length === 0 ? layoutFlowchart(graph) : layoutGrouped(graph)
   }
 
   const state = parseState(src)
-  if (state !== null) return layoutFlowchart(state, maxWidth)
+  if (state !== null) return layoutFlowchart(state)
 
   const cls = parseClass(src)
-  if (cls !== null) return layoutClass(cls.graph, cls.infos, maxWidth)
+  if (cls !== null) return layoutClass(cls.graph, cls.infos)
 
   const er = parseEr(src)
-  if (er !== null) return layoutClass(er.graph, er.infos, maxWidth)
+  if (er !== null) return layoutClass(er.graph, er.infos)
 
   const seq = parseSequence(src)
-  if (seq !== null) return layoutSequence(seq, maxWidth)
+  if (seq !== null) return layoutSequence(seq)
 
   return null
 }

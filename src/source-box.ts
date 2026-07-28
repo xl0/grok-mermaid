@@ -1,21 +1,27 @@
 /**
- * The fallback rendering: the raw source in a framed box.
+ * The raw source in a framed box.
  *
- * Used for diagram types this renderer does not draw, and for diagrams that do
- * not fit the available width — the latter also get an advisory note pointing
- * the reader at the image.
+ * What to show when `render` returns `null`, or returns art too wide for the
+ * space at hand. Both are the caller's call, so this is theirs to invoke — and
+ * theirs to caption, since only they know whether some other view of the
+ * diagram exists to point the reader at.
  */
 
-import { srcLines } from './labels.ts'
+import { srcLines, stripControls } from './labels.ts'
 import type { MermaidArt, Span } from './types.ts'
 import { measured, stringWidth } from './width.ts'
 
-const TOO_WIDE_HINT =
-  'This diagram is too wide to display here — open the image to view it in full.'
-
 const sat = (a: number, b: number): number => Math.max(0, a - b)
 
-export function fallback(src: string, maxWidth: number | undefined, tooWide: boolean): MermaidArt {
+/**
+ * Frame `src` in a titled box, hard-wrapping its lines to `maxWidth` columns.
+ *
+ * The result can still exceed `maxWidth`: the body wraps to
+ * `max(8, maxWidth - 4)` and the ` mermaid: <kind> ` title is never truncated,
+ * so a long first token sets a floor. Check `width` if it matters.
+ */
+export function sourceBox(src: string, maxWidth?: number): MermaidArt {
+  src = stripControls(src)
   const header = src.split(/\s+/).filter((w) => w !== '')[0] ?? 'diagram'
   const title = ` mermaid: ${header} `
   const limit = maxWidth === undefined ? undefined : Math.max(8, sat(maxWidth, 4))
@@ -60,14 +66,7 @@ export function fallback(src: string, maxWidth: number | undefined, tooWide: boo
   plain.push(bottom)
   styled.push([{ text: bottom, cls: 'border' }])
 
-  if (tooWide) {
-    for (const chunk of wrapWords(TOO_WIDE_HINT, maxWidth)) {
-      plain.push(chunk)
-      styled.push([{ text: chunk, cls: 'hint' }])
-    }
-  }
-
-  return { plain, styled }
+  return { plain, styled, width: inner + 2 }
 }
 
 /** Hard-break a line at `limit` columns, never splitting a wide glyph. */
@@ -87,20 +86,4 @@ function chunkLine(line: string, limit: number | undefined): string[] {
   }
   if (cur !== '') out.push(cur)
   return out
-}
-
-function wrapWords(text: string, limit: number | undefined): string[] {
-  if (limit === undefined) return [text]
-  const lines: string[] = []
-  let cur = ''
-  for (const word of text.split(' ').filter((w) => w !== '')) {
-    if (cur === '') cur = word
-    else if (stringWidth(cur) + 1 + stringWidth(word) <= limit) cur += ` ${word}`
-    else {
-      lines.push(cur)
-      cur = word
-    }
-  }
-  if (cur !== '') lines.push(cur)
-  return lines.flatMap((l) => chunkLine(l, limit))
 }

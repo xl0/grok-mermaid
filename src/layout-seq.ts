@@ -9,7 +9,7 @@
 
 import { Canvas, D, drawTextOverEdges, L, R, U } from './canvas.ts'
 import { fitLabel, WRAP_WIDTH } from './labels.ts'
-import { drawBox, type Placed } from './layout.ts'
+import { type CanvasResult, drawBox, type Placed } from './layout.ts'
 import type { NoteAnchor, SeqItem, Sequence } from './parse.ts'
 import { stringWidth } from './width.ts'
 
@@ -20,8 +20,6 @@ const MAX_CANVAS_CELLS = 1 << 21
 
 const sat = (a: number, b: number): number => Math.max(0, a - b)
 const half = (n: number): number => Math.floor(n / 2)
-
-type Result = { ok: true; canvas: Canvas } | { ok: false; oversize: 'width' | 'cells' }
 
 /** Where a note box sits, given the lifeline positions. */
 function noteGeometry(xs: number[], anchor: NoteAnchor, textW: number): { x: number; w: number } {
@@ -37,7 +35,7 @@ function noteGeometry(xs: number[], anchor: NoteAnchor, textW: number): { x: num
 
 const itemTextW = (text: string | null): number => (text === null ? 0 : stringWidth(text))
 
-export function layoutSequence(seq: Sequence, maxWidth: number | undefined): Result {
+export function layoutSequence(seq: Sequence): CanvasResult {
   const n = seq.labels.length
   const labels = seq.labels.map((l) => fitLabel(l, WRAP_WIDTH))
   const boxW = labels.map((l) => Math.max(1, stringWidth(l)) + 2 * PAD + 2)
@@ -106,8 +104,7 @@ export function layoutSequence(seq: Sequence, maxWidth: number | undefined): Res
   const bottomTop = y
   const canvasH = bottomTop + boxH
 
-  if (maxWidth !== undefined && canvasW > maxWidth) return { ok: false, oversize: 'width' }
-  if (canvasW * canvasH > MAX_CANVAS_CELLS) return { ok: false, oversize: 'cells' }
+  if (canvasW * canvasH > MAX_CANVAS_CELLS) return null
 
   const canvas = new Canvas(canvasW, canvasH)
 
@@ -135,7 +132,7 @@ export function layoutSequence(seq: Sequence, maxWidth: number | undefined): Res
   })
 
   canvas.finalizeMask()
-  return { ok: true, canvas }
+  return canvas
 }
 
 function rowHeight(item: SeqItem): number {

@@ -180,18 +180,21 @@ export class Canvas {
   }
 
   /** Group each row into runs of one class, dropping wide-glyph continuations. */
-  toLines(): { plain: string[]; styled: Span[][] } {
+  toLines(): { plain: string[]; styled: Span[][]; width: number } {
     const plain: string[] = []
     const styled: Span[][] = []
+    let width = 0
     for (let y = 0; y < this.h; y++) {
+      // A trailing CONT counts as painted: it is the second cell of a wide
+      // glyph, so the row really does reach that column.
       let last = 0
       for (let x = this.w - 1; x >= 0; x--) {
-        const c = this.ch[this.idx(x, y)]
-        if (c !== ' ' && c !== CONT) {
+        if (this.ch[this.idx(x, y)] !== ' ') {
           last = x + 1
           break
         }
       }
+      width = Math.max(width, last)
       const spans: Span[] = []
       let plainRow = ''
       let run = ''
@@ -215,7 +218,7 @@ export class Canvas {
       // would eat a trailing NBSP that `styled` keeps, desyncing the two.
       plain.push(plainRow.replace(/ +$/, ''))
     }
-    return { plain, styled }
+    return { plain, styled, width }
   }
 }
 

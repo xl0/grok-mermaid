@@ -25,7 +25,7 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-168 passing. Upstream suite ported, plus new width and span-contract tests.
+169 passing. Upstream suite ported, plus new width and span-contract tests.
 Fuzzed 20k generated sources: no throws, span invariant holds throughout.
 
 ## [x] Differential verification
@@ -47,6 +47,18 @@ Extended_Pictographic table. `width.ts` 147 → 73 lines, `width-data.ts` one
 column instead of two, `drawWidth`/`codePointWidth` gone from the public
 surface. Differential: 0 regressions, 1987 expected divergences.
 
+## [x] Width is the caller's decision (post-cutoff, API break)
+
+`render(src)` no longer takes `maxWidth`. It lays the diagram out at its natural
+size and reports `art.width`; the caller compares that against the space it has
+and decides. `sourceBox(src, maxWidth?)` is public and opt-in — `render` never
+substitutes it, and never emits prose about images the library cannot know
+exist. Removed the `maxWidth` parameter from seven signatures, the `Oversize`
+union, `RenderOptions` and the `hint` class.
+
+Upstream's width gate lives on in `tools/differential/run.ts`, which is the only
+place that needs it — to keep comparing byte for byte against Rust.
+
 ## [ ] Possible further divergence
 
 Byte-compatibility is no longer the bar; good-looking output is. The
@@ -54,13 +66,23 @@ differential harness now gates on regressions only, so each change can be
 reviewed against upstream rather than blocked by it.
 
 Candidates, none obviously worth it yet:
-- Truncate the fallback title so the box always honours `maxWidth`. Judged not
+- **Auto-orient to fit.** Retry a too-wide layout with the flow axis swapped
+  (`down`↔`right`), since `dir` is already a free layout input. Measured on 12
+  realistic diagrams at 80 columns: five overflow, tightening `WRAP_WIDTH` /
+  `GAP_X` / `MAX_LABEL` rescues none of them, flipping rescues all five (133→24,
+  149→45). Layout costs 0.48 ms, so retrying is free. Wants a caller-visible
+  opt-in, since it overrides the author's declared direction — hence parked
+  until someone asks.
+- Sequence diagrams have no orientation lever and are the stuck case. Their
+  message text is never truncated, unlike every other label; capping it at
+  `MAX_LABEL` is the one-line equivalent.
+- Truncate the source-box title so the box always honours `maxWidth`. Judged not
   worth it: only a junk header overflows a realistic viewport.
-- Wrap fallback body lines on word boundaries rather than hard-chunking.
+- Wrap source-box body lines on word boundaries rather than hard-chunking.
 - Revisit the `assignTracks` O(n²) compatibility scan if large diagrams show up.
 
-Done post-cutoff: literal control characters are stripped in `render` (they
-broke box geometry and leaked ANSI into the caller's terminal).
+Done post-cutoff: literal control characters are stripped at both public entry
+points (they broke box geometry and leaked ANSI into the caller's terminal).
 
 ## [ ] Ship
 

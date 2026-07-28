@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { CONT } from '../src/canvas.ts'
-import { render } from '../src/index.ts'
+import { render, sourceBox } from '../src/index.ts'
 import { stringWidth } from '../src/width.ts'
 import { countOf, lines, plain, rowOf } from './helpers.ts'
 
@@ -26,7 +26,7 @@ test('LR is shorter than TD for a chain', () => {
 })
 
 test('blank source returns null', () => {
-  expect(render('   \n  ', { maxWidth: 80 })).toBeNull()
+  expect(render('   \n  ')).toBeNull()
 })
 
 test('a wide-glyph box stays aligned', () => {
@@ -210,88 +210,74 @@ test('a self loop in LR', () => {
   expect(out).toContain('▶')
 })
 
-// ---------------------------------------------------------------- fallback
+// --------------------------------------------------------------- source box
 
-test('an unsupported diagram uses the fallback box', () => {
-  const out = plain('gantt\n title Plan\n section A\n task :a1, 2024-01-01, 30d')
-  expect(out).toContain('mermaid: gantt')
-  expect(out).toContain('Plan')
+test('an unsupported diagram draws nothing', () => {
+  expect(render('gantt\n title Plan\n section A\n task :a1, 2024-01-01, 30d')).toBeNull()
 })
 
-test('an adversarial chain falls back', () => {
+test('an adversarial chain is over the cell cap', () => {
   let src = 'graph TD\n'
   for (let i = 0; i < 10_000; i++) src += ` N${i} --> N${i + 1}\n`
-  expect(plain(src)).toContain('mermaid: graph')
+  expect(render(src)).toBeNull()
 })
 
-test('a single-statement chain over the cap falls back', () => {
+test('a single-statement chain over the cap draws nothing', () => {
   let src = 'graph LR\n '
   for (let i = 0; i < 10_000; i++) src += `N${i}-->`
-  expect(plain(`${src}N10000`)).toContain('mermaid: graph')
+  expect(render(`${src}N10000`)).toBeNull()
 })
 
 test('a deep chain within the caps renders', () => {
   let src = 'graph TD\n'
   for (let i = 0; i < 100; i++) src += ` N${i} --> N${i + 1}\n`
-  const out = plain(src, 200)
+  const out = plain(src)
   expect(out).toContain('N0')
   expect(out).toContain('N100')
   expect(out).toContain('▼')
 })
 
-test('fallback styled and plain widths match', () => {
-  const art = render('gantt\n title Plan\n a\n', { maxWidth: 120 })
-  if (art === null) throw new Error('render returned null')
+test('source box styled and plain widths match', () => {
+  const art = sourceBox('gantt\n title Plan\n a\n', 120)
   expect(art.styled.length).toBe(art.plain.length)
-  const frameW = stringWidth(art.plain[0])
   art.plain.forEach((row, i) => {
     const styledW = art.styled[i].reduce((s, span) => s + stringWidth(span.text), 0)
     expect(styledW).toBe(stringWidth(row))
-    expect(stringWidth(row)).toBe(frameW)
+    expect(stringWidth(row)).toBe(art.width)
   })
 })
 
-test('an over-wide diagram falls back', () => {
+test('the source box frames the source under a titled header', () => {
+  const art = sourceBox('gantt\n title Plan\n section A', 120)
+  expect(art.plain[0]).toContain('mermaid: gantt')
+  expect(art.plain.join('\n')).toContain('Plan')
+  expect(art.plain[art.plain.length - 1]).toStartWith('╰')
+})
+
+test('an over-wide diagram still renders and reports its width', () => {
   const src =
     'flowchart LR\n A[aaaaaaaaaaaaaaaaaaaa] --> B[bbbbbbbbbbbbbbbbbbbb] --> C[cccccccccccccccccccc]'
-  const out = lines(src, 40)
-  expect(out.join('\n')).toContain('mermaid: flowchart')
-  expect(Math.max(...out.map(stringWidth))).toBeLessThanOrEqual(src.length)
-  expect(lines(src, 120).some((l) => l.includes('▶'))).toBe(true)
+  const art = render(src)
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.width).toBeGreaterThan(40)
+  expect(art.plain.join('\n')).toContain('▶')
+  // The caller's escape hatch, bounded by the source it frames.
+  const box = sourceBox(src, 40)
+  expect(box.plain.join('\n')).toContain('mermaid: flowchart')
+  expect(box.width).toBeLessThanOrEqual(src.length)
 })
 
-test('a too-wide fallback appends the hint below the box', () => {
-  const src =
-    'flowchart LR\n A[aaaaaaaaaaaaaaaaaaaa] --> B[bbbbbbbbbbbbbbbbbbbb] --> C[cccccccccccccccccccc]'
-  const out = lines(src, 40)
-  const joined = out.join('\n')
-
-  expect(joined).toContain('mermaid: flowchart')
-  expect(joined).not.toContain('(too wide)')
-  expect(joined).toContain('flowchart LR')
-  expect(rowOf(joined, 'too wide')).toBeGreaterThan(rowOf(joined, '╰'))
-  expect(joined).toContain('open the image')
-  expect(out.every((l) => stringWidth(l) <= 40)).toBe(true)
+test('reported width is the widest painted row', () => {
+  const art = render('flowchart LR\n A[Start] --> B[End]')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.width).toBe(Math.max(...art.plain.map(stringWidth)))
 })
 
-test('an unsupported type is not flagged too wide', () => {
-  const out = plain('gantt\n title Plan\n section A\n task :a1, 2024-01-01, 30d')
-  expect(out).toContain('mermaid: gantt')
-  expect(out).not.toContain('too wide')
-})
-
-test('a fitting diagram has no width warning', () => {
-  const out = plain('flowchart LR\n A[Start] --> B[End]')
-  expect(out).not.toContain('too wide')
-  expect(out).not.toContain('mermaid: flowchart')
-  expect(out).toContain('▶')
-})
-
-test('the fallback wraps long lines to maxWidth', () => {
-  const out = lines(
-    'gantt\n title a very long line that should wrap inside the fallback box nicely',
+test('the source box wraps long lines to maxWidth', () => {
+  const out = sourceBox(
+    'gantt\n title a very long line that should wrap inside the source box nicely',
     40,
-  )
+  ).plain
   expect(out.every((l) => stringWidth(l) <= 40)).toBe(true)
   for (const line of out.slice(1, -1)) {
     expect(line.startsWith('│') && line.endsWith('│')).toBe(true)
@@ -386,8 +372,8 @@ test('an empty class is a plain titled box', () => {
   expect(plain('classDiagram\n class Loner\n A --> Loner')).toContain('Loner')
 })
 
-test('an unknown class statement falls back', () => {
-  expect(plain('classDiagram\n A --> B\n total garbage here')).toContain('mermaid: classDiagram')
+test('an unknown class statement draws nothing', () => {
+  expect(render('classDiagram\n A --> B\n total garbage here')).toBeNull()
 })
 
 test('class members elide past the cap', () => {
@@ -429,10 +415,10 @@ test('ER relationships have no arrowheads', () => {
   for (const head of ['▼', '▲', '◄', '▶', '△', '◆', '◇']) expect(out).not.toContain(head)
 })
 
-test('an ER entity alias label renders', () => {
-  const out = plain('erDiagram\n p[Person] ||--o{ a["Bank Account"] : owns')
-  expect(out).toContain('Person')
-  expect(out).toContain('Bank Account')
+// Upstream's equivalent asserts the labels appear, but it reads the fallback
+// box, which merely echoes the source. Neither grammar accepts the alias form.
+test('an ER entity alias is not parsed', () => {
+  expect(render('erDiagram\n p[Person] ||--o{ a["Bank Account"] : owns')).toBeNull()
 })
 
 test('a bare ER entity declaration renders', () => {
@@ -450,10 +436,8 @@ test('ER attributes elide past the cap', () => {
   expect(out).toContain('…')
 })
 
-test('an unknown ER statement falls back', () => {
-  expect(plain('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toContain(
-    'mermaid: erDiagram',
-  )
+test('an unknown ER statement draws nothing', () => {
+  expect(render('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toBeNull()
 })
 
 // --------------------------------------------------------------- subgraphs
@@ -528,12 +512,12 @@ test('BT flips a frame and its contents', () => {
   expect(out).toContain('▲')
 })
 
-test('subgraph depth over the cap falls back', () => {
+test('subgraph depth over the cap draws nothing', () => {
   let src = 'graph TD\n'
   for (let i = 0; i < 8; i++) src += ` subgraph g${i}\n`
   src += ' A --> B\n'
   for (let i = 0; i < 8; i++) src += ' end\n'
-  expect(plain(src)).toContain('mermaid: graph')
+  expect(render(src)).toBeNull()
 })
 
 // ------------------------------------------------------------------- state
@@ -603,16 +587,14 @@ test('a state back transition uses a lane', () => {
   expect(out).toContain('retry')
 })
 
-test('an unknown state statement falls back', () => {
-  expect(plain('stateDiagram-v2\n A --> B\n some garbage line')).toContain(
-    'mermaid: stateDiagram-v2',
-  )
+test('an unknown state statement draws nothing', () => {
+  expect(render('stateDiagram-v2\n A --> B\n some garbage line')).toBeNull()
 })
 
-test('a state diagram over the cap falls back', () => {
+test('a state diagram over the cap draws nothing', () => {
   let src = 'stateDiagram-v2\n'
   for (let i = 0; i < 600; i++) src += ` S${i} --> S${i + 1}\n`
-  expect(plain(src)).toContain('mermaid: stateDiagram-v2')
+  expect(render(src)).toBeNull()
 })
 
 test('a state chain with markers and a label renders', () => {
@@ -621,8 +603,8 @@ test('a state chain with markers and a label renders', () => {
   expect(out).toContain('done')
 })
 
-test('a dangling state chain falls back', () => {
-  expect(plain('stateDiagram-v2\n A --> B -->')).toContain('mermaid: stateDiagram-v2')
+test('a dangling state chain draws nothing', () => {
+  expect(render('stateDiagram-v2\n A --> B -->')).toBeNull()
 })
 
 // ---------------------------------------------------------------- sequence
@@ -710,26 +692,24 @@ test('a long message label widens the gap', () => {
   ).toContain('a very long message label that needs room')
 })
 
-test('an unparseable arrow falls back', () => {
-  expect(plain('sequenceDiagram\n ->>B: orphan')).toContain('mermaid: sequenceDiagram')
+test('an unparseable arrow draws nothing', () => {
+  expect(render('sequenceDiagram\n ->>B: orphan')).toBeNull()
 })
 
-test('an unknown sequence statement falls back', () => {
-  expect(plain('sequenceDiagram\n A->>B: hi\n garbage statement here')).toContain(
-    'mermaid: sequenceDiagram',
-  )
+test('an unknown sequence statement draws nothing', () => {
+  expect(render('sequenceDiagram\n A->>B: hi\n garbage statement here')).toBeNull()
 })
 
-test('an over-wide sequence diagram falls back', () => {
-  expect(
-    plain('sequenceDiagram\n A->>B: this label is far wider than the available pane width', 30),
-  ).toContain('mermaid: sequenceDiagram')
+test('a wide sequence diagram renders and reports its width', () => {
+  const art = render('sequenceDiagram\n A->>B: this label is far wider than the available pane')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.width).toBeGreaterThan(30)
 })
 
-test('a sequence diagram over the cap falls back', () => {
+test('a sequence diagram over the cap draws nothing', () => {
   let src = 'sequenceDiagram\n'
   for (let i = 0; i < 600; i++) src += ` A->>B: msg ${i}\n`
-  expect(plain(src)).toContain('mermaid: sequenceDiagram')
+  expect(render(src)).toBeNull()
 })
 
 test('activation markers are stripped', () => {
@@ -748,15 +728,21 @@ test('sequence rows are sentinel free', () => {
 const ESC = String.fromCharCode(27)
 
 test('control characters never reach the output', () => {
-  for (const src of [
-    `graph TD\n A[x${CONT}y] --> B`,
-    `graph TD\n A[${ESC}[31mRED] --> B`,
-    `gantt\n title ${ESC}]8;;http://example${String.fromCharCode(7)}link`,
-  ]) {
+  for (const src of [`graph TD\n A[x${CONT}y] --> B`, `graph TD\n A[${ESC}[31mRED] --> B`]) {
     const out = plain(src)
     expect(out).not.toContain(CONT)
     expect(out).not.toContain(ESC)
   }
+})
+
+// `sourceBox` echoes whatever it is handed, so it is the second door untrusted
+// source arrives by and has to strip the same characters `render` does.
+test('the source box strips control characters', () => {
+  const src = `gantt\n title ${ESC}]8;;http://example${String.fromCharCode(7)}link`
+  const out = sourceBox(src, 80).plain.join('\n')
+  expect(out).not.toContain(ESC)
+  expect(out).not.toContain(String.fromCharCode(7))
+  expect(out).toContain('link')
 })
 
 // A control character measures one column and paints none, so a box sized around
@@ -769,5 +755,5 @@ test('a control character in a label does not shrink its box', () => {
 })
 
 test('a source of only control characters is blank', () => {
-  expect(render(`${CONT}${ESC}`, { maxWidth: 80 })).toBeNull()
+  expect(render(`${CONT}${ESC}`)).toBeNull()
 })

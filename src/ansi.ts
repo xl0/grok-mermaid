@@ -14,7 +14,6 @@ export const DEFAULT_THEME: AnsiTheme = {
   edge: '36',
   edgeLabel: '2;36',
   title: '1',
-  hint: '2;3',
 }
 
 /**

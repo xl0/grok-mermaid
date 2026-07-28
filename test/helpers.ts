@@ -1,13 +1,13 @@
 import { render } from '../src/index.ts'
 
 /** Rendered plain art as one string, the shape most assertions want. */
-export function plain(src: string, maxWidth = 120): string {
-  const art = render(src, { maxWidth })
-  if (art === null) throw new Error('render returned null for non-blank source')
+export function plain(src: string): string {
+  const art = render(src)
+  if (art === null) throw new Error('render drew nothing for this source')
   return art.plain.join('\n')
 }
 
-export const lines = (src: string, maxWidth = 120): string[] => plain(src, maxWidth).split('\n')
+export const lines = (src: string): string[] => plain(src).split('\n')
 
 /** Index of the first line containing `needle`; throws if absent. */
 export function rowOf(art: string, needle: string): number {

@@ -31,7 +31,6 @@ const FILL: Record<Cls, string | null> = {
   edge: '#39c5cf',
   edgeLabel: '#9198a1',
   title: '#e6edf3',
-  hint: '#9198a1',
   none: null,
 }
 
@@ -57,8 +56,7 @@ const esc = (s: string): string =>
 const art = render(SRC)
 if (art === null) throw new Error('demo source rendered blank')
 
-const cols = Math.max(...art.plain.map((l) => [...measured(l)].reduce((w, [, cw]) => w + cw, 0)))
-const width = cols * CHAR_W + 2 * PAD
+const width = art.width * CHAR_W + 2 * PAD
 const height = art.plain.length * LINE_H + 2 * PAD
 
 const rows: string[] = []
@@ -93,4 +91,4 @@ ${rows.join('\n')}
 `
 
 await Bun.write(new URL('../docs/demo.svg', import.meta.url), svg)
-console.log(`wrote docs/demo.svg (${cols}x${art.plain.length} cells, ${rows.length} runs)`)
+console.log(`wrote docs/demo.svg (${art.width}x${art.plain.length} cells, ${rows.length} runs)`)

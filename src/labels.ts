@@ -27,10 +27,25 @@ export const asciiLower = (s: string): string => s.replace(/[A-Z]/g, (c) => c.to
 export const asciiUpper = (s: string): string => s.replace(/[a-z]/g, (c) => c.toUpperCase())
 
 /**
+ * C0 and C1 controls, less the `\t\n\r` the parsers and `srcLines` read.
+ *
+ * They measure one column and paint none, so a box sized around one is drawn a
+ * column short of its own border; NUL also collides with the `CONT` sentinel
+ * and is dropped after layout has already paid for its cell; ESC would inject
+ * ANSI into the caller's scrollback. `decodeEntityBody` refuses to decode an
+ * entity into one — this closes the same hole for literals.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the point is to match them
+const CONTROLS = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g
+
+/** Applied by every public entry point that takes untrusted source. */
+export const stripControls = (src: string): string => src.replace(CONTROLS, '')
+
+/**
  * Split source into lines the way Rust's `str::lines()` does: on `\n`, with a
  * trailing `\r` stripped, and *without* a final empty line when the input ends
  * in a newline. `String.split` yields that extra element, which would show up
- * as a spurious blank row inside a fallback box.
+ * as a spurious blank row inside a source box.
  */
 export function srcLines(src: string): string[] {
   const out = src.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l))
