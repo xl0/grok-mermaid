@@ -264,16 +264,22 @@ test('the known entity limit explains itself in warnings', () => {
   expect(w[0]).toContain('link has no target')
 })
 
-test('only flowcharts warn; the strict grammars refuse outright', () => {
-  expect(render('stateDiagram-v2\n A --> B\n some garbage line')).toBeNull()
-  expect(render('classDiagram\n A --> B\n total garbage here')).toBeNull()
-  expect(render('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toBeNull()
-  expect(render('sequenceDiagram\n A->>B: hi\n garbage statement here')).toBeNull()
+test('the strict grammars give up only one line before failing', () => {
+  // One unreadable trailing line is dropped and reported; two means the
+  // salvage retry lands on a source that still does not parse.
+  expect(warned('stateDiagram-v2\n A --> B\n bad line here').length).toBe(1)
+  expect(render('stateDiagram-v2\n bad one here\n bad two here')).toBeNull()
+})
+
+test('the salvage retry ignores trailing whitespace', () => {
+  expect(warned('stateDiagram-v2\n A --> B\n some garbage line\n')).toEqual([
+    'dropped, unreadable final line: "some garbage line"',
+  ])
 })
 
 test('diagramKind separates an unsupported type from a malformed one', () => {
   // Both render to null; only one is worth telling the author to fix.
-  const malformed = 'stateDiagram-v2\n A --> B\n some garbage line'
+  const malformed = 'stateDiagram-v2\n bad one here\n bad two here'
   expect(render(malformed)).toBeNull()
   expect(diagramKind(malformed)).toBe('state')
 
@@ -312,18 +318,15 @@ test('gating on warnings is what makes a streaming diagram flicker', () => {
   expect(gated).toBeGreaterThan(5)
 })
 
-test('parsing the settled prefix steadies a streaming strict grammar', () => {
+test('a streaming strict grammar never stops being drawable', () => {
+  // The salvage retry is what buys this: without it the half-written last
+  // statement fails the whole parse on most frames.
   const src = `sequenceDiagram
   participant U as User
   participant W as Web App
   U->>W: Submit login
   W-->>U: Set session cookie`
-  const raw = (s: string) => render(s) !== null
-  const settled = (s: string) => {
-    const nl = s.lastIndexOf('\n')
-    return (nl === -1 ? null : render(s.slice(0, nl))) !== null || render(s) !== null
-  }
-  expect(flips(src, settled)).toBeLessThan(flips(src, raw))
+  expect(flips(src, (s) => render(s) !== null)).toBe(1)
 })
 
 test('diagramKind reads the header without parsing the body', () => {
@@ -502,8 +505,10 @@ test('an empty class is a plain titled box', () => {
   expect(plain('classDiagram\n class Loner\n A --> Loner')).toContain('Loner')
 })
 
-test('an unknown class statement draws nothing', () => {
-  expect(render('classDiagram\n A --> B\n total garbage here')).toBeNull()
+test('an unknown class statement is dropped, not fatal', () => {
+  expect(warned('classDiagram\n A --> B\n total garbage here')).toEqual([
+    'dropped, unreadable final line: "total garbage here"',
+  ])
 })
 
 test('class members elide past the cap', () => {
@@ -566,8 +571,10 @@ test('ER attributes elide past the cap', () => {
   expect(out).toContain('…')
 })
 
-test('an unknown ER statement draws nothing', () => {
-  expect(render('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toBeNull()
+test('an unknown ER statement is dropped, not fatal', () => {
+  expect(warned('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toEqual([
+    'dropped, unreadable final line: "utter nonsense statement"',
+  ])
 })
 
 // --------------------------------------------------------------- subgraphs
@@ -717,8 +724,10 @@ test('a state back transition uses a lane', () => {
   expect(out).toContain('retry')
 })
 
-test('an unknown state statement draws nothing', () => {
-  expect(render('stateDiagram-v2\n A --> B\n some garbage line')).toBeNull()
+test('an unknown state statement is dropped, not fatal', () => {
+  expect(warned('stateDiagram-v2\n A --> B\n some garbage line')).toEqual([
+    'dropped, unreadable final line: "some garbage line"',
+  ])
 })
 
 test('a state diagram over the cap draws nothing', () => {
@@ -826,8 +835,10 @@ test('an unparseable arrow draws nothing', () => {
   expect(render('sequenceDiagram\n ->>B: orphan')).toBeNull()
 })
 
-test('an unknown sequence statement draws nothing', () => {
-  expect(render('sequenceDiagram\n A->>B: hi\n garbage statement here')).toBeNull()
+test('an unknown sequence statement is dropped, not fatal', () => {
+  expect(warned('sequenceDiagram\n A->>B: hi\n garbage statement here')).toEqual([
+    'dropped, unreadable final line: "garbage statement here"',
+  ])
 })
 
 test('a wide sequence diagram renders and reports its width', () => {

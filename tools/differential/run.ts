@@ -147,6 +147,18 @@ function expectedToDiffer(src: string): boolean {
  * `max_width` upstream and within it here, so the port draws the diagram where
  * upstream printed the source. Strictly more art, never less.
  */
+/**
+ * Upstream fails a state / class / ER / sequence diagram outright on one
+ * unreadable statement. The port retries once without the final line, so a
+ * source whose last statement is junk — or, while streaming, half-typed —
+ * draws the rest instead of printing itself. The drop is always warned about.
+ */
+function salvagedHere(src: string, want: string): boolean {
+  if (!want.includes('mermaid: ')) return false
+  const warnings = render(src)?.warnings ?? []
+  return warnings.some((w) => w.startsWith('dropped, unreadable final line'))
+}
+
 function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): boolean {
   // Upstream printed a source box; we drew art that fits. Matching on the box
   // title rather than the note, which wraps and so is not contiguous at small
@@ -158,6 +170,7 @@ function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): 
 
 let same = 0
 const expected: number[] = []
+const salvaged: number[] = []
 const slack: number[] = []
 const regressions: { i: number; width: string; src: string; want: string; got: string }[] = []
 corpus.forEach((line, i) => {
@@ -169,6 +182,7 @@ corpus.forEach((line, i) => {
   const got = art === null ? '#NONE' : esc(art.plain.join('\n'))
   if (got === golden[i]) same++
   else if (expectedToDiffer(src)) expected.push(i)
+  else if (salvagedHere(src, golden[i])) salvaged.push(i)
   else if (fitsOnlyHere(src, maxWidth, golden[i])) slack.push(i)
   else regressions.push({ i, width, src, want: golden[i], got })
 })
@@ -176,6 +190,7 @@ corpus.forEach((line, i) => {
 console.log(`\ncases:       ${corpus.length}`)
 console.log(`identical:   ${same}`)
 console.log(`expected:    ${expected.length}  (grapheme clustering — see CODE.md)`)
+console.log(`salvaged:    ${salvaged.length}  (unreadable final line dropped — see CODE.md)`)
 console.log(`slack:       ${slack.length}  (painted vs allocated width — see CODE.md)`)
 console.log(`regressions: ${regressions.length}`)
 

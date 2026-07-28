@@ -25,7 +25,7 @@ fallback box; `toAnsi` helper.
 
 ## [x] Tests
 
-183 passing. Upstream suite ported, plus new width, span-contract,
+184 passing. Upstream suite ported, plus new width, span-contract,
 syntax-warning and streaming-stability tests.
 Fuzzed 20k generated sources: no throws, span invariant holds throughout.
 
@@ -70,6 +70,23 @@ are not nodes. Zero warnings across the 134 hand-written corpus diagrams.
 
 `diagramKind(src)` reads the header alone, separating the two `null`s a caller
 would word differently: malformed vs a type this renderer does not draw.
+
+Warnings are advisory. Gating rendering on them makes a streaming diagram flip
+between art and source box 11 times where ignoring them flips once — the docs
+now say so outright, and a test pins it.
+
+## [x] Best-effort rendering for the strict grammars (post-cutoff)
+
+State, class, ER and sequence failed a whole diagram on one unreadable
+statement, so a streamed one alternated with the source box the entire way in.
+They now get a single retry without the final line — the only one a partial
+source can end mid-way through — and draw the rest, warning about the drop.
+Streaming flips: sequence 7 → 1, class 3 → 1, state 7 → 3, flowchart already 1.
+
+Exactly one line, once. Two bad lines still yield `null`; this salvages a
+trailing fragment rather than hunting for a parseable subset. `attempt` now
+dispatches via `diagramKind` instead of trying all five parsers, which makes the
+retry one branch. Differential: 58 `salvaged` cases, 0 regressions.
 
 ## [ ] Possible further divergence
 

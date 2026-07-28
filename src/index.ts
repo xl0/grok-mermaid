@@ -1,7 +1,7 @@
 import { stripControls } from './labels.ts'
 import { type CanvasResult, layoutClass, layoutFlowchart, layoutGrouped } from './layout.ts'
 import { layoutSequence } from './layout-seq.ts'
-import { parseClass, parseEr, parseGraph, parseSequence, parseState } from './parse.ts'
+import { diagramKind, parseClass, parseEr, parseGraph, parseSequence, parseState } from './parse.ts'
 import type { MermaidArt } from './types.ts'
 
 export { type AnsiTheme, DEFAULT_THEME, toAnsi } from './ansi.ts'
@@ -28,8 +28,11 @@ export type { Cls, MermaidArt, Span } from './types.ts'
  * type this renderer does not draw, or one large enough that laying it out is
  * refused. `diagramKind` separates the middle two.
  *
- * A flowchart never fails on a syntax error — it keeps what parsed and lists
- * what it dropped in `art.warnings`, so check that before trusting the art.
+ * Rendering is best-effort. A flowchart keeps whatever parsed; the stricter
+ * grammars additionally get one retry without their final line, which is what
+ * keeps a streaming diagram on screen while its last statement is half-typed.
+ * Everything given up on is listed in `art.warnings` — advisory only, never a
+ * reason to withhold the art.
  */
 export function render(src: string): MermaidArt | null {
   src = stripControls(src)
@@ -39,27 +42,63 @@ export function render(src: string): MermaidArt | null {
   return { ...drawn.canvas.toLines(), warnings: drawn.warnings }
 }
 
-/** Try each diagram grammar in turn; `null` means none of them drew anything. */
-function attempt(src: string): { canvas: NonNullable<CanvasResult>; warnings: string[] } | null {
+type Drawn = { canvas: NonNullable<CanvasResult>; warnings: string[] }
+
+/**
+ * Draw `src`, retrying once without its last line if the grammar rejects it.
+ *
+ * State, class, ER and sequence fail a whole diagram on one unreadable
+ * statement, and while a source is streaming its last line is usually still
+ * being typed — so without this a diagram alternates with the source box all
+ * the way in. Only the final line is dropped, and doing so is always reported,
+ * so a finished document with a bad last line still says what it lost rather
+ * than quietly rendering short.
+ */
+function attempt(src: string): Drawn | null {
+  const drawn = draw(src)
+  if (drawn !== null) return drawn
+
+  const body = src.replace(/\s+$/, '')
+  const cut = body.lastIndexOf('\n')
+  if (cut === -1) return null
+  const salvaged = draw(body.slice(0, cut))
+  if (salvaged === null) return null
+
+  const dropped = body.slice(cut + 1).trim()
+  return {
+    canvas: salvaged.canvas,
+    warnings: [...salvaged.warnings, `dropped, unreadable final line: "${dropped}"`],
+  }
+}
+
+/** Dispatch on the declared diagram type; `null` means nothing was drawn. */
+function draw(src: string): Drawn | null {
   const plain = (canvas: CanvasResult) => (canvas === null ? null : { canvas, warnings: [] })
 
-  const graph = parseGraph(src)
-  if (graph !== null) {
-    const canvas = graph.groups.length === 0 ? layoutFlowchart(graph) : layoutGrouped(graph)
-    return canvas === null ? null : { canvas, warnings: graph.warnings }
+  switch (diagramKind(src)) {
+    case 'flowchart': {
+      const graph = parseGraph(src)
+      if (graph === null) return null
+      const canvas = graph.groups.length === 0 ? layoutFlowchart(graph) : layoutGrouped(graph)
+      return canvas === null ? null : { canvas, warnings: graph.warnings }
+    }
+    case 'state': {
+      const state = parseState(src)
+      return state === null ? null : plain(layoutFlowchart(state))
+    }
+    case 'class': {
+      const cls = parseClass(src)
+      return cls === null ? null : plain(layoutClass(cls.graph, cls.infos))
+    }
+    case 'er': {
+      const er = parseEr(src)
+      return er === null ? null : plain(layoutClass(er.graph, er.infos))
+    }
+    case 'sequence': {
+      const seq = parseSequence(src)
+      return seq === null ? null : plain(layoutSequence(seq))
+    }
+    default:
+      return null
   }
-
-  const state = parseState(src)
-  if (state !== null) return plain(layoutFlowchart(state))
-
-  const cls = parseClass(src)
-  if (cls !== null) return plain(layoutClass(cls.graph, cls.infos))
-
-  const er = parseEr(src)
-  if (er !== null) return plain(layoutClass(er.graph, er.infos))
-
-  const seq = parseSequence(src)
-  if (seq !== null) return plain(layoutSequence(seq))
-
-  return null
 }

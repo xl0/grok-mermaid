@@ -50,19 +50,31 @@ it out is refused.
 
 ### Syntax errors
 
-The four strict grammars — state, class, ER, sequence — reject the whole
-diagram on any statement they cannot read, so a syntax error means `null`.
+Rendering is best-effort: a source that does not fully parse still draws
+whatever it can, and says what it gave up on in `art.warnings`.
 
-Flowcharts do not, and never have: mermaid.js is lenient here and so is this,
-so a malformed statement keeps whatever prefix parsed. That would quietly hand
-you a clean diagram missing an edge you wrote, so whatever was dropped is
-listed in `art.warnings`:
+Flowcharts have always been lenient — mermaid.js is too — so a malformed
+statement keeps whatever prefix parsed. That would quietly hand you a clean
+diagram missing an edge you wrote, hence the warning:
 
 ```ts
 const art = render('graph TD\n A[Start --> B')
 // art.plain     one box labelled `Start --> B` — the edge is gone
 // art.warnings  ['node "A": label is missing its closing `]`']
 ```
+
+State, class, ER and sequence diagrams are stricter: one unreadable statement
+fails the whole parse. They get a single retry without their last line, which is
+the one a half-finished source ends on:
+
+```ts
+const art = render('stateDiagram-v2\n A --> B\n some garbage line')
+// art.plain     the A --> B transition, drawn
+// art.warnings  ['dropped, unreadable final line: "some garbage line"']
+```
+
+Two bad lines, or a bad line that is not the last, still gives `null` — this
+salvages a trailing fragment, it does not hunt for a parseable subset.
 
 An empty `warnings` means everything in the source made it into the art. Across
 the 134 hand-written diagrams in the test corpus, none warn.
@@ -85,28 +97,26 @@ if (render(src) === null) {
 
 ### Streaming
 
-When the source arrives incrementally, the last line is usually half-written, so
-parse the part that has settled and keep the raw source only as a fallback:
+Just call `render` on each prefix — no special handling needed. Best-effort
+parsing is what makes that work: a partially arrived diagram keeps drawing
+instead of alternating with the source box.
 
-```ts
-const nl = src.lastIndexOf('\n')
-const art = (nl === -1 ? null : render(src.slice(0, nl))) ?? render(src)
-```
-
-That keeps the diagram on screen instead of alternating with the source box.
-Streaming a five-line diagram in 4-character chunks, counting how many times the
-display would change between art and source box:
+Streaming a five-line diagram in 4-character chunks and counting how many times
+the display would change between art and source box:
 
 | | flowchart | sequence | state | class |
 | --- | --- | --- | --- | --- |
-| raw source | 1 | 7 | 7 | 3 |
-| settled, else raw | 1 | **1** | **3** | **1** |
-| raw, gated on warnings | **11** | 7 | 7 | 3 |
+| `render(src)` | 1 | 1 | 3 | 1 |
+| before best-effort | 1 | 7 | 7 | 3 |
+| gated on `warnings` | 11 | 7 | 7 | 3 |
 
-Flowcharts are already stable on their own — they parse leniently, so a partial
-one still draws. The strict grammars reject a half-written trailing statement
-outright, which is what the settled-prefix trick fixes. The last row is why
-warnings must not gate rendering.
+One change is the ideal: source box until enough has arrived to draw, then art
+for good. The state diagram's extra pair is a single early frame where only the
+header has arrived intact and there is genuinely nothing to draw.
+
+The last row is why warnings must not gate rendering — during streaming they
+fire almost continuously, since a label bracket is unterminated right up until
+the moment it is typed.
 
 ### Fitting a viewport
 

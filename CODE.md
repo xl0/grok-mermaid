@@ -67,11 +67,24 @@ worker-transferable.
 
 ## Syntax errors
 
-Two behaviours, split by grammar, and only one of them is a choice.
+Rendering is best-effort at two levels, because the grammars differ.
 
 State, class, ER and sequence are **strict**: any statement they cannot read
-fails the whole parse, so `render` returns `null` and the caller shows the
-source box — reading your own source back is a fair answer to a syntax error.
+fails the whole parse. `attempt` gives them one retry with the final line
+removed — the only line a source can end mid-way through, whether it is being
+streamed or was simply left unfinished. A source that then parses is drawn, with
+`dropped, unreadable final line: "…"` recorded. Exactly one line, once: this
+salvages a trailing fragment, it does not search for a parseable subset, so two
+bad lines still yield `null`.
+
+That retry is what makes streaming work without caller ceremony — sequence goes
+7 display flips → 1 and class 3 → 1 (see below). It replaced an earlier
+recommendation that the caller parse `src` up to its last newline itself; the
+numbers are identical and one of the two had to go.
+
+`attempt` dispatches through `diagramKind` rather than trying all five parsers
+in turn. Equivalent, since every `parseX` gates on its own header keyword, but
+it makes the salvage retry a single branch instead of five.
 
 Flowchart is **lenient**, inherited from upstream (`parse_statement` returns
 `()` there too) and from mermaid.js itself. `parseStatement` parses as far as it
@@ -90,17 +103,20 @@ diagrams; the fuzz corpus warns constantly, which is correct.
 
 **They are advisory and must not gate rendering.** A source being streamed warns
 at nearly every intermediate state — a label bracket is unterminated right up
-until it is typed. Streaming a five-line flowchart in 4-character chunks, the
-display flips between art and source box once if warnings are ignored and
-**eleven times** if they are gated on.
+until it is typed.
 
-The strict grammars flicker for a different, older reason: a half-written
-trailing statement fails the whole parse. Parsing up to the last newline and
-keeping the raw source only as a fallback takes sequence 7 flips → 1, class
-3 → 1, state 7 → 3. That belongs in the caller, which is the only side that
-knows whether the source is still arriving; the grammars stay strict, because
-for a finished document silently dropping a bad last line is worse than saying
-so. The recipe is in the README.
+Streaming a five-line diagram in 4-character chunks, counting art↔source-box
+transitions — one is ideal (box, then art for good):
+
+| | flowchart | sequence | state | class |
+| --- | --- | --- | --- | --- |
+| `render` | 1 | 1 | 3 | 1 |
+| without the salvage retry | 1 | 7 | 7 | 3 |
+| gated on `warnings` | 11 | 7 | 7 | 3 |
+
+State's extra pair is one early frame (`stateDiagram-v2` plus a partial `[*] -->`)
+where dropping the last line leaves a header with no statements — nothing to
+draw, so the box is right.
 
 Making flowchart strict was rejected: it would reject diagrams that render fine
 today and diverge from both upstream and mermaid proper.
@@ -138,6 +154,10 @@ both endpoints; one crossing a boundary attaches to the frame.
   response and to word it — its note tells the reader to "open the image", which
   only its own host has. See *Public API*. Upstream's gate is reproduced in
   `tools/differential/run.ts`, the only place that still needs it.
+- **A strict grammar drops an unreadable final line instead of failing.**
+  Upstream refuses the whole diagram; the port retries once without that line
+  and draws the rest, warning about it. See *Syntax errors*. The differential
+  reports these as `salvaged` — 58 cases.
 - **Width is measured in painted cells, not allocated ones.** Upstream compares
   `max_width` against the canvas it allocated; some layouts leave the rightmost
   column blank, so a diagram that fits was declared too wide. The differential
@@ -176,8 +196,8 @@ since `render` no longer has one; that shim, and the note wrapping it needs,
 live there rather than in `src` precisely because they are upstream's behaviour
 and not the port's.
 
-Current state: 5184 identical, 1988 expected (clustering), 8 slack (painted vs
-allocated width), 0 regressions.
+Current state: 5098 identical, 2016 expected (clustering), 58 salvaged (final
+line dropped), 8 slack (painted vs allocated width), 0 regressions.
 
 Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
 byte for byte on all 7180 cases. Divergence after it is deliberate and listed
@@ -245,7 +265,7 @@ notions is what the port dropped.
 
 ## Tests
 
-183 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+184 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which
