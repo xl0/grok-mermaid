@@ -218,7 +218,11 @@ export class Canvas {
       // would eat a trailing NBSP that `styled` keeps, desyncing the two.
       plain.push(plainRow.replace(/ +$/, ''))
     }
-    return { plain, styled, width }
+    let first = 0
+    while (first < plain.length && plain[first] === '') first++
+    let end = plain.length
+    while (end > first && plain[end - 1] === '') end--
+    return { plain: plain.slice(first, end), styled: styled.slice(first, end), width }
   }
 }
 

@@ -111,7 +111,8 @@ Candidates, none obviously worth it yet:
 - Revisit the `assignTracks` O(n²) compatibility scan if large diagrams show up.
 
 Done post-cutoff: literal control characters are stripped at both public entry
-points (they broke box geometry and leaked ANSI into the caller's terminal).
+points (they broke box geometry and leaked ANSI into the caller's terminal);
+empty canvas rows outside the painted diagram are omitted.
 
 ## [ ] Ship
 

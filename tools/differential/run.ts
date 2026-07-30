@@ -168,10 +168,21 @@ function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): 
   return art !== null && art.width <= maxWidth
 }
 
+/** Upstream preserves blank canvas rows outside the painted diagram. */
+function trimmedOnlyHere(want: string, got: string): boolean {
+  const rows = unesc(want).split('\n')
+  let first = 0
+  while (first < rows.length && rows[first] === '') first++
+  let end = rows.length
+  while (end > first && rows[end - 1] === '') end--
+  return esc(rows.slice(first, end).join('\n')) === got
+}
+
 let same = 0
 const expected: number[] = []
 const salvaged: number[] = []
 const slack: number[] = []
+const trimmed: number[] = []
 const regressions: { i: number; width: string; src: string; want: string; got: string }[] = []
 corpus.forEach((line, i) => {
   const tab = line.indexOf('\t')
@@ -181,6 +192,7 @@ corpus.forEach((line, i) => {
   const art = renderBounded(src, maxWidth)
   const got = art === null ? '#NONE' : esc(art.plain.join('\n'))
   if (got === golden[i]) same++
+  else if (trimmedOnlyHere(golden[i], got)) trimmed.push(i)
   else if (expectedToDiffer(src)) expected.push(i)
   else if (salvagedHere(src, golden[i])) salvaged.push(i)
   else if (fitsOnlyHere(src, maxWidth, golden[i])) slack.push(i)
@@ -192,6 +204,7 @@ console.log(`identical:   ${same}`)
 console.log(`expected:    ${expected.length}  (grapheme clustering — see CODE.md)`)
 console.log(`salvaged:    ${salvaged.length}  (unreadable final line dropped — see CODE.md)`)
 console.log(`slack:       ${slack.length}  (painted vs allocated width — see CODE.md)`)
+console.log(`trimmed:     ${trimmed.length}  (empty outer rows removed — see CODE.md)`)
 console.log(`regressions: ${regressions.length}`)
 
 for (const d of regressions.slice(0, 5)) {

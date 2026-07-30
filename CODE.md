@@ -74,7 +74,8 @@ Both entry points take untrusted source, so both apply `stripControls`.
 
 `plain[i]` and `styled[i]` are the same row, and `styled[i]` joined is exactly
 `plain[i]` — enforced by `test/spans.test.ts` across a corpus of every diagram
-type plus a source box.
+type plus a source box. Rendered diagrams omit empty rows before the first and
+after the last painted row.
 
 `Cls` is semantic (`border`/`text`/`edge`/`edgeLabel`/`title`/`none`), never a
 colour. This replaces the Rust `MermaidStyles` struct: layout no longer depends
@@ -189,9 +190,10 @@ both endpoints; one crossing a boundary attaches to the frame.
   border and the sides as edge, which renders every box two-tone under any
   theme where the two differ. Characters are unaffected; only classification
   changed. All ported tests assert on `plain`, and they pass unchanged.
-- **Blank canvas rows emit no spans.** Upstream trims trailing blanks from its
-  plain lines but not its styled ones, so an empty row yielded a full-width run
-  of spaces. Emitting `[]` is what makes the `styled == plain` invariant hold.
+- **Empty outer canvas rows are omitted.** Upstream exposes padding rows from
+  canvas allocation, most visibly a blank first row on `LR` flowcharts.
+  Interior empty rows remain and emit no spans, preserving diagram spacing and
+  the `styled == plain` invariant.
 - **Literal control characters are stripped at both entry points.** They measure
   one column and paint none, so a box sized around one is drawn a column short
   of its own border; NUL additionally collides with the `CONT` sentinel and is
@@ -212,8 +214,9 @@ since `render` no longer has one; that shim, and the note wrapping it needs,
 live there rather than in `src` precisely because they are upstream's behaviour
 and not the port's.
 
-Current state: 5098 identical, 2016 expected (clustering), 58 salvaged (final
-line dropped), 8 slack (painted vs allocated width), 0 regressions.
+Current state: 4688 identical, 2016 expected (clustering), 58 salvaged (final
+line dropped), 8 slack (painted vs allocated width), 410 trimmed (empty outer
+rows), 0 regressions.
 
 Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
 byte for byte on all 7180 cases. Divergence after it is deliberate and listed
@@ -281,7 +284,7 @@ notions is what the port dropped.
 
 ## Tests
 
-184 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+185 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` are ports of the upstream `mod tests` (assertions and
 intent preserved; names reworded). `test/width.test.ts` and
 `test/spans.test.ts` are new — the latter covers the span contract, which

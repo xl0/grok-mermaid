@@ -48,6 +48,13 @@ test('reported width matches the widest painted row', () => {
   }
 })
 
+test('art has no leading or trailing empty rows', () => {
+  for (const [name, art] of CORPUS) {
+    expect(`${name}: ${art.plain[0]}`).not.toBe(`${name}: `)
+    expect(`${name}: ${art.plain.at(-1)}`).not.toBe(`${name}: `)
+  }
+})
+
 // Only ASCII spaces are blank filler. Trimming `\s` would drop a trailing NBSP
 // from `plain` while `styled` kept it — no label reaches that today, but the
 // invariant is what the whole span contract rests on.
