@@ -1,4 +1,4 @@
-name: Publish npm package
+name: Stage npm package
 
 on:
   release:
@@ -11,7 +11,7 @@ permissions:
 concurrency: npm-publish
 
 jobs:
-  publish:
+  stage:
     if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     environment: npm
@@ -35,5 +35,5 @@ jobs:
       - name: Verify release tag matches package version
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
 
-      # npm publish runs prepublishOnly: check, typecheck, test, build.
-      - run: npm publish --access public
+      # npm stage publish runs prepublishOnly: check, typecheck, test, build.
+      - run: npm stage publish --access public

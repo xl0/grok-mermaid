@@ -8,7 +8,7 @@ checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`.
 
 ```
 .github/workflows/
-  publish.yml   release-triggered npm publish via trusted publishing
+  publish.yml   release-triggered npm staging via trusted publishing
 tools/
   width-oracle/  emits per-code-point widths from the unicode-width crate
   differential/  renders a corpus through Rust and TS, diffs the output
@@ -301,6 +301,7 @@ bun (runtime + test runner), tsgo (typecheck + emit), biome (lint + format).
 No runtime dependencies.
 
 GitHub Releases trigger `publish.yml`. It checks that the `v*` release tag
-matches `package.json`, runs the package's `prepublishOnly` gate, then publishes
-through npm trusted publishing with OIDC and automatic provenance. Release
-actions and tool versions are pinned.
+matches `package.json`, runs the package's `prepublishOnly` gate, then stages
+the package through npm trusted publishing with OIDC and automatic provenance.
+A maintainer reviews and approves the staged tarball with 2FA before it becomes
+public. Release actions and tool versions are pinned.
