@@ -119,12 +119,15 @@ empty canvas rows outside the painted diagram are omitted.
 README examples are generated from real output; `bun run prepublishOnly` gates
 on check + typecheck + tests + build.
 
-- [x] Add release-triggered GitHub Actions workflow for npm staged publishing.
+- [x] Add tag-triggered GitHub Actions workflow for npm trusted publishing.
 - [x] Create the `npm` GitHub environment.
-- [ ] Configure npm trusted publisher for `npm stage publish` via `publish.yml`
-      and environment `npm`.
-- [ ] Stage future versions from matching `v*` GitHub Releases, then approve
-      them with 2FA.
+- [x] Start a pi-style changelog and include it in the npm package.
+- [x] Split releasing: `/cl` audits changelog entries, `bun run release` does
+      the mechanical rest and pushes the tag that triggers CI.
+- [ ] Configure npm trusted publisher for `publish.yml` and environment `npm`.
+      Nothing publishes until this exists.
+- [ ] Push the first release cut this way and confirm CI publishes it and
+      creates the GitHub Release.
 
 ## Open questions
 

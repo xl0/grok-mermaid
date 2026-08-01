@@ -7,8 +7,11 @@ checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`.
 ## Layout
 
 ```
+CHANGELOG.md   release notes; current changes accumulate under Unreleased
+.pi/prompts/
+  cl.md         audits Unreleased changelog entries against the commits
 .github/workflows/
-  publish.yml   release-triggered npm staging via trusted publishing
+  publish.yml   tag-triggered npm publish via trusted publishing
 tools/
   width-oracle/  emits per-code-point widths from the unicode-width crate
   differential/  renders a corpus through Rust and TS, diffs the output
@@ -27,6 +30,7 @@ src/
 scripts/
   gen-width-data.ts   regenerates src/width-data.ts from the UCD
   gen-demo-svg.ts     regenerates docs/demo.svg, the README's colour example
+  release.ts          rolls the changelog, bumps, verifies, commits, tags, pushes
 ```
 
 `docs/demo.svg` paints real `render()` output through a theme, which a markdown
@@ -300,8 +304,27 @@ live. `bun run differential` is what actually pins fidelity.
 bun (runtime + test runner), tsgo (typecheck + emit), biome (lint + format).
 No runtime dependencies.
 
-GitHub Releases trigger `publish.yml`. It checks that the `v*` release tag
-matches `package.json`, runs the package's `prepublishOnly` gate, then stages
-the package through npm trusted publishing with OIDC and automatic provenance.
-A maintainer reviews and approves the staged tarball with 2FA before it becomes
-public. Release actions and tool versions are pinned.
+## Releasing
+
+Writing changelog entries and cutting the release are deliberately separate.
+`/cl` only audits `## [Unreleased]` against the commits since the last tag;
+everything mechanical lives in `bun run release [patch|minor|major|x.y.z]`
+(`--no-push` to stop at the tag),
+which refuses a dirty tree or an empty `[Unreleased]`, rolls the changelog over,
+bumps `package.json`, runs `prepublishOnly` and `pm pack`, commits, tags and
+pushes. Being a script rather than an agent is what makes its unattended push
+acceptable.
+
+That tag push is the only trigger for `publish.yml` (tags with a prerelease
+suffix are skipped). It checks the tag against `package.json`, runs check,
+typecheck, test and build as explicit steps, then publishes through npm trusted
+publishing with OIDC and `--provenance`; `--ignore-scripts` keeps
+`prepublishOnly` from repeating that work. A second job creates the GitHub
+Release with the notes sliced out of `CHANGELOG.md`, gated on the publish
+succeeding, so a visible release always implies a published package. A version
+already on npm is skipped rather than failing, which is what lets a release that
+died partway be re-run.
+
+The push is therefore the point of no return, which is what `--no-push` is for:
+it stops at the tag so the commit can be read before anything leaves the
+machine. Release actions and tool versions are pinned.
