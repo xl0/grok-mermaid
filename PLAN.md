@@ -114,20 +114,11 @@ Done post-cutoff: literal control characters are stripped at both public entry
 points (they broke box geometry and leaked ANSI into the caller's terminal);
 empty canvas rows outside the painted diagram are omitted.
 
-## [ ] Ship
+## [x] Ship
 
-README examples are generated from real output; `bun run prepublishOnly` gates
-on check + typecheck + tests + build.
-
-- [x] Add tag-triggered GitHub Actions workflow for npm trusted publishing.
-- [x] Create the `npm` GitHub environment.
-- [x] Start a pi-style changelog and include it in the npm package.
-- [x] Split releasing: `/cl` audits changelog entries, `bun run release` does
-      the mechanical rest and pushes the tag that triggers CI.
-- [ ] Configure npm trusted publisher for `publish.yml` and environment `npm`.
-      Nothing publishes until this exists.
-- [ ] Push the first release cut this way and confirm CI publishes it and
-      creates the GitHub Release.
+Releasing is split: `/cl` audits changelog entries, `bun run release` does the
+mechanical rest and pushes the tag, and CI publishes to npm with provenance and
+creates the GitHub Release. Proven end to end on 0.2.1.
 
 ## Open questions
 

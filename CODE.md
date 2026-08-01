@@ -328,3 +328,9 @@ died partway be re-run.
 The push is therefore the point of no return, which is what `--no-push` is for:
 it stops at the tag so the commit can be read before anything leaves the
 machine. Release actions and tool versions are pinned.
+
+npm's trusted publisher matches on the workflow **filename**, so renaming
+`publish.yml` silently breaks publishing: the OIDC exchange finds nothing, npm
+falls back to the empty `_authToken` that `setup-node` writes, and the registry
+answers `PUT` with a 404 rather than a 403. A 404 on publish means unauthorized,
+not missing.
