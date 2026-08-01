@@ -1,20 +1,25 @@
-name: Stage npm package
+name: Release
 
+# `scripts/release.ts` pushes the tag; that push is the only trigger. Tags with
+# a prerelease suffix (v1.2.3-rc.1) are ignored.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency: npm-publish
 
 jobs:
-  stage:
-    if: ${{ !github.event.release.prerelease }}
+  publish-npm:
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,5 +40,58 @@ jobs:
       - name: Verify release tag matches package version
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
 
-      # npm stage publish runs prepublishOnly: check, typecheck, test, build.
-      - run: npm stage publish --access public
+      # prepublishOnly's steps, run explicitly so a failure names itself and so
+      # the publish below can skip lifecycle scripts entirely.
+      - run: bun run check
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+
+      # Skipping an already-published version is what lets a half-failed release
+      # be re-run. A registry error still fails: only a 404 means "not there".
+      - name: Publish to npm
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./package.json').version")"
+          if seen="$(npm view "grok-mermaid@${version}" version 2>&1)"; then
+            echo "grok-mermaid@${version} is already published (${seen}); skipping."
+            exit 0
+          fi
+          case "$seen" in
+            *E404*|*"404 Not Found"*) ;;
+            *) echo "::error::could not query npm for ${version}: ${seen}"; exit 1 ;;
+          esac
+
+          npm publish --access public --provenance --ignore-scripts
+
+  github-release:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Gated on publish-npm, so a release is only ever visible for a version
+      # that actually made it to npm.
+      - name: Create the GitHub Release
+        run: |
+          set -euo pipefail
+
+          awk -v want="## [${GITHUB_REF_NAME#v}]" '
+            index($0, want) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > NOTES.md
+
+          test -s NOTES.md || { echo "::error::no CHANGELOG.md section for $GITHUB_REF_NAME"; exit 1; }
+
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file NOTES.md

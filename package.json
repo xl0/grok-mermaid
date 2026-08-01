@@ -39,6 +39,7 @@
     "gen:width": "bun run scripts/gen-width-data.ts",
     "gen:demo": "bun run scripts/gen-demo-svg.ts",
     "prepublishOnly": "bun run check && bun run typecheck && bun test && bun run build",
+    "release": "bun run scripts/release.ts",
     "differential": "bun run tools/differential/run.ts"
   },
   "devDependencies": {
