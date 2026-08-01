@@ -116,9 +116,13 @@ empty canvas rows outside the painted diagram are omitted.
 
 ## [ ] Ship
 
-Publish to npm once the name is confirmed free. README examples are generated
-from real output; `bun run prepublishOnly` gates on check + typecheck + tests +
-build.
+README examples are generated from real output; `bun run prepublishOnly` gates
+on check + typecheck + tests + build.
+
+- [x] Add release-triggered GitHub Actions workflow for npm trusted publishing.
+- [x] Create the `npm` GitHub environment.
+- [ ] Configure npm trusted publisher for `publish.yml` and environment `npm`.
+- [ ] Publish future versions from matching `v*` GitHub Releases.
 
 ## Open questions
 

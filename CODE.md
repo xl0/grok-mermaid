@@ -7,6 +7,8 @@ checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`.
 ## Layout
 
 ```
+.github/workflows/
+  publish.yml   release-triggered npm publish via trusted publishing
 tools/
   width-oracle/  emits per-code-point widths from the unicode-width crate
   differential/  renders a corpus through Rust and TS, diffs the output
@@ -297,3 +299,8 @@ live. `bun run differential` is what actually pins fidelity.
 
 bun (runtime + test runner), tsgo (typecheck + emit), biome (lint + format).
 No runtime dependencies.
+
+GitHub Releases trigger `publish.yml`. It checks that the `v*` release tag
+matches `package.json`, runs the package's `prepublishOnly` gate, then publishes
+through npm trusted publishing with OIDC and automatic provenance. Release
+actions and tool versions are pinned.
