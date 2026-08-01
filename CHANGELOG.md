@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-01
+
 ### Added
 
 - Added npm trusted publishing with build provenance. Releases are now built, signed and published by CI from a matching `v*` tag.
