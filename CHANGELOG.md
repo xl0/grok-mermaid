@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the `NOTICE` file. Upstream ships none, so Apache-2.0 §4(d) never applied; keeping one only pushed a propagation obligation onto redistributors. Attribution now lives in `README.md` and `LICENSE`.
+
 ## [0.2.1] - 2026-08-01
 
 ### Added

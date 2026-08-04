@@ -15,7 +15,7 @@ the Rust build. The upstream `mod tests` suite was ported instead.
 
 ## [x] Skeleton
 
-Package, tsgo, biome, Apache-2.0 + NOTICE attribution, public types.
+Package, tsgo, biome, Apache-2.0 attribution, public types.
 
 ## [x] Renderer
 

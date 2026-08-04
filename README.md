@@ -183,4 +183,9 @@ WASM and runs anywhere JS does.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache-2.0. See [LICENSE](LICENSE).
+
+The Rust original in [xai-org/grok-build](https://github.com/xai-org/grok-build)
+(`crates/codegen/xai-grok-markdown/src/mermaid.rs`) is Apache-2.0, Copyright
+2023-2026 SpaceXAI. Its layout algorithms, glyph tables, parser behaviour and
+test corpus are what this port is derived from.
