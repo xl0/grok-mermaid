@@ -273,7 +273,19 @@ function parseNode(
     graph.warnings.push(`node "${id}": label is missing its closing \`${shaped.unclosed}\``)
   }
   const index = graph.nodeIndex(id, shaped.label, shaped.shape)
-  return index === null ? null : { index, next: shaped.after }
+  if (index === null) return null
+
+  // `id:::name` (after any shape) attaches a style class; swallow it so the
+  // statement keeps parsing — upstream drops the rest of the line here.
+  let next = shaped.after
+  if (chars[next] === ':' && chars[next + 1] === ':' && chars[next + 2] === ':') {
+    let k = next + 3
+    while (k < chars.length && (isIdChar(chars[k]) || chars[k] === '-')) k++
+    // A name never ends in `-`: back off so `A:::x-->B` keeps its link.
+    while (k > next + 3 && chars[k - 1] === '-') k--
+    if (k > next + 3) next = k
+  }
+  return { index, next }
 }
 
 /** What a shape bracket yielded. `closer` is set when the bracket never closed. */
@@ -452,11 +464,12 @@ export function parseState(src: string): Graph | null {
   const graph = new Graph()
   let inNote = false
 
-  for (const st of statements.slice(1)) {
+  for (let st of statements.slice(1)) {
     if (inNote) {
       if (asciiLower(st) === 'end note') inNote = false
       continue
     }
+    st = dropStyleTags(st)
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {
       graph.dir = parseDir(words(st)[1] ?? '')
@@ -554,6 +567,31 @@ function parseTransition(st: string, graph: Graph): true | null {
   return true
 }
 
+/**
+ * Remove every `:::name` style tag from a statement, parsed with the same
+ * name scan as the flowchart shorthand. State and class statements are read
+ * by string splits, and the `:` label split would cut inside a `:::`, so tags
+ * are dropped before dispatch rather than at each id.
+ */
+function dropStyleTags(st: string): string {
+  const chars = [...st]
+  const out: string[] = []
+  for (let i = 0; i < chars.length; ) {
+    if (chars[i] === ':' && chars[i + 1] === ':' && chars[i + 2] === ':') {
+      let k = i + 3
+      while (k < chars.length && (isIdChar(chars[k]) || chars[k] === '-')) k++
+      while (k > i + 3 && chars[k - 1] === '-') k--
+      if (k > i + 3) {
+        i = k
+        continue
+      }
+    }
+    out.push(chars[i])
+    i++
+  }
+  return out.join('')
+}
+
 /** `[*]` is start or end depending on which side of the arrow it sits. */
 function stateEndpoint(graph: Graph, id: string, isSource: boolean): number | null {
   if (id === '[*]') return graph.nodeIndex(isSource ? '[*]start' : '[*]end', '●', 'round')
@@ -613,12 +651,13 @@ export function parseClass(src: string): { graph: Graph; infos: ClassInfo[] } | 
   }
   let curClass: number | null = null
 
-  for (const st of statements.slice(1)) {
+  for (let st of statements.slice(1)) {
     if (curClass !== null) {
       if (st === '}') curClass = null
       else pushMember(infos[curClass], st)
       continue
     }
+    st = dropStyleTags(st)
 
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {

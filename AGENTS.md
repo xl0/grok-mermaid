@@ -54,6 +54,7 @@ IMPORTANT:
 
 ### Git
 
+- Don't commit, unless the user explicitly instructed you. Our default workflow is work work work (often user in the loop), then test, often manually, then commit. The user may override this.
 - When you commit, it's possible that the worktree contains unrelated changes and untracked files. Don't blindly add files - only commit what's necessary.
 - **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.
 

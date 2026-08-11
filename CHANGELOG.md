@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Parse and discard `:::class` for flowcharts, state and class diagrams.
+
 ## [0.2.2] - 2026-08-04
 
 ### Removed

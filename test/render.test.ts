@@ -18,6 +18,25 @@ test('an edge label is rendered', () => {
   expect(plain('graph TD\n A-->|yes| B')).toContain('yes')
 })
 
+test('a `:::` class is swallowed and the edge survives', () => {
+  const out = render('flowchart TD\n A:::hot --> B\n classDef hot fill:#f00')
+  expect(out?.warnings).toEqual([])
+  expect(out?.plain.join('\n')).toContain('▼')
+  expect(plain('flowchart LR\n A:::my-class --> B')).toContain('▶')
+  expect(plain('flowchart LR\n A:::x-->B')).toContain('▶')
+})
+
+test('a `:::` class is swallowed in state and class diagrams', () => {
+  const state = plain('stateDiagram-v2\n [*] --> Still:::bad\n Still:::bad --> s2:::hot: go')
+  expect(state).toContain('Still')
+  expect(state).toContain('go')
+  expect(state).not.toContain(':::')
+  expect(state).not.toContain('::hot')
+  const cls = plain('classDiagram\n class Animal:::hot\n Animal <|-- Dog')
+  expect(cls).not.toContain(':::')
+  expect(countOf(cls, 'Animal')).toBe(1)
+})
+
 test('LR is shorter than TD for a chain', () => {
   const chain = 'A --> B --> C --> D'
   const td = lines(`graph TD\n ${chain}`).length

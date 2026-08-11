@@ -208,6 +208,17 @@ both endpoints; one crossing a boundary attaches to the frame.
   literal one through; `render` and `sourceBox` close the same hole at both
   doors untrusted source comes in by.
 - **Semantic span classes** instead of ratatui `Line`/`Span` + `MermaidStyles`.
+- **A `:::name` style tag is swallowed, keeping the statement.** Upstream
+  mishandles it everywhere it can appear: flowchart `A:::x --> B` drops the
+  edge (`is_id_char` excludes `:`), a state tag leaks into the state name or
+  transition label (the `:` label split cuts inside `:::`), and classDiagram
+  `class Animal:::hot` declares a class literally named `Animal:::hot`. The
+  port consumes the tag (hyphens allowed; in flowcharts never trailing, so
+  `A:::x-->B` keeps its link) and ignores it; surfacing names for styling
+  lives on the `classnames` branch. Flowcharts parse it at the node cursor;
+  state/class statements are read by string splits, so tags are dropped per
+  statement before dispatch — which also eats a literal `:::name` inside a
+  state description. No differential case exercises `:::`.
 
 ## Verification
 
