@@ -1,6 +1,6 @@
 {
   "name": "grok-mermaid",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Render Mermaid diagrams as Unicode box-drawing art for terminals",
   "keywords": [
     "mermaid",
