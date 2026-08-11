@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- CI now stages releases on npm instead of publishing directly. Builds keep OIDC provenance; the release script waits for the staged version, then asks for a 2FA code and approves it — publishing stays a manual act.
+
 ## [0.2.3] - 2026-08-11
 
 ### Fixed

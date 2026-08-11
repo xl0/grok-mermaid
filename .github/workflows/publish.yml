@@ -49,7 +49,9 @@ jobs:
 
       # Skipping an already-published version is what lets a half-failed release
       # be re-run. A registry error still fails: only a 404 means "not there".
-      - name: Publish to npm
+      # Staged-but-unapproved versions are invisible to `npm view`; re-running
+      # then fails on the stage publish itself (versions share one index).
+      - name: Stage on npm
         run: |
           set -euo pipefail
 
@@ -63,7 +65,10 @@ jobs:
             *) echo "::error::could not query npm for ${version}: ${seen}"; exit 1 ;;
           esac
 
-          npm publish --access public --provenance --ignore-scripts
+          # Staged, not published: CI builds with OIDC provenance, but the
+          # version only reaches the registry after a maintainer approves it
+          # with 2FA (`npm stage approve` or npmjs.com).
+          npm stage publish --access public --provenance --ignore-scripts
 
   github-release:
     needs: publish-npm
@@ -78,7 +83,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Gated on publish-npm, so a release is only ever visible for a version
-      # that actually made it to npm.
+      # whose verified build was at least staged on npm. Installability still
+      # waits on the manual 2FA approval.
       - name: Create the GitHub Release
         run: |
           set -euo pipefail

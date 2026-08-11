@@ -5,8 +5,11 @@
  *   bun run release [patch|minor|major|x.y.z] [--no-push]
  *
  * The tag push is the trigger for `.github/workflows/publish.yml`, which
- * publishes to npm and creates the GitHub Release. `--no-push` stops at the tag
- * so the commit can be inspected first; nothing reaches npm until it is pushed.
+ * stages the build on npm and creates the GitHub Release. The script then
+ * waits for the staged version to appear, asks for a 2FA code and approves
+ * it — that approval is what actually publishes. `--no-push` stops at the
+ * tag so the commit can be inspected first; nothing reaches npm until it is
+ * pushed.
  *
  * Writing changelog entries is `/cl`'s job, not this script's — everything here
  * is mechanical, which is what makes the unattended push at the end acceptable.
@@ -34,6 +37,10 @@ const target = args.find((arg) => !arg.startsWith('-')) ?? 'patch'
 const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim()
 if (branch !== 'master') die(`on ${branch}; releases are cut from master`)
 if ((await $`git status --porcelain`.text()).trim()) die('worktree is dirty; commit or stash first')
+
+// The approval at the end needs an npm login; check before touching anything.
+if (push && (await $`npm whoami`.nothrow().quiet()).exitCode !== 0)
+  die('not logged in to npm (needed to approve the staged release); run npm login first')
 
 const pkgText = await Bun.file('package.json').text()
 const current = (JSON.parse(pkgText).version ?? '') as string
@@ -100,6 +107,31 @@ console.log(`\n=== pushing ${version} ===\n`)
 await $`git push --no-follow-tags origin master`
 await $`git push origin ${`v${version}`}`
 
+console.log(`\n=== waiting for CI to stage ${version} on npm ===\n`)
+// CI runs in under a minute; ten is a hung workflow, not a slow one.
+const deadline = Date.now() + 10 * 60 * 1000
+let stageId: string | undefined
+while (!stageId) {
+  const list = await $`npm stage list grok-mermaid --json`.nothrow().quiet()
+  if (list.exitCode !== 0) die(`npm stage list failed:\n${list.stderr.toString()}`)
+  const items = JSON.parse(list.stdout.toString()) as { id: string; version: string }[]
+  stageId = items.find((item) => item.version === version)?.id
+  if (!stageId) {
+    if (Date.now() > deadline)
+      die(`timed out; check the workflow run, then npm stage list + npm stage approve <id>`)
+    await Bun.sleep(10_000)
+    process.stdout.write('.')
+  }
+}
+console.log(`staged as ${stageId}`)
+
+for (let attempt = 1; ; attempt++) {
+  const otp = prompt('2FA code to approve and publish:')?.trim()
+  if (!otp) die(`no code entered; approve manually with: npm stage approve ${stageId}`)
+  if ((await $`npm stage approve ${stageId} --otp ${otp}`.nothrow()).exitCode === 0) break
+  if (attempt === 3) die(`approve manually with: npm stage approve ${stageId}`)
+}
+
 console.log(`
-Pushed v${version}. CI is publishing it to npm and creating the GitHub Release.
+Approved and published v${version}.
 `)

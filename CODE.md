@@ -323,18 +323,28 @@ everything mechanical lives in `bun run release [patch|minor|major|x.y.z]`
 (`--no-push` to stop at the tag),
 which refuses a dirty tree or an empty `[Unreleased]`, rolls the changelog over,
 bumps `package.json`, runs `prepublishOnly` and `pm pack`, commits, tags and
-pushes. Being a script rather than an agent is what makes its unattended push
-acceptable.
+pushes, then waits for CI to stage the version on npm and approves it with a
+prompted 2FA code (`npm stage approve --otp`; stage ids are UUIDs from
+`npm stage list --json`). Being a script rather than an agent is what makes its
+unattended push acceptable — and the OTP prompt keeps the actual publish
+manual.
 
 That tag push is the only trigger for `publish.yml` (tags with a prerelease
 suffix are skipped). It checks the tag against `package.json`, runs check,
-typecheck, test and build as explicit steps, then publishes through npm trusted
-publishing with OIDC and `--provenance`; `--ignore-scripts` keeps
-`prepublishOnly` from repeating that work. A second job creates the GitHub
-Release with the notes sliced out of `CHANGELOG.md`, gated on the publish
-succeeding, so a visible release always implies a published package. A version
-already on npm is skipped rather than failing, which is what lets a release that
-died partway be re-run.
+typecheck, test and build as explicit steps, then **stages** the package
+(`npm stage publish`) through npm trusted publishing with OIDC and
+`--provenance`; `--ignore-scripts` keeps `prepublishOnly` from repeating that
+work. Staging is what reconciles provenance with a human gate: CI's OIDC build
+carries the attestation, but the version only becomes installable after a
+maintainer approves it with 2FA (`npm stage list` / `npm stage approve`, or
+npmjs.com). The trusted publisher on npm must be restricted to stage-only so a
+compromised workflow cannot publish directly. A second job creates the GitHub
+Release with the notes sliced out of `CHANGELOG.md`, gated on the staging
+succeeding, so a visible release implies a verified staged build — install
+still waits on approval. A version already on npm is skipped rather than
+failing, which is what lets a release that died partway be re-run; a staged
+but unapproved version is invisible to that check and fails the re-stage
+instead.
 
 The push is therefore the point of no return, which is what `--no-push` is for:
 it stops at the tag so the commit can be read before anything leaves the
