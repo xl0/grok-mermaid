@@ -92,20 +92,28 @@ export function parseClassDef(
 }
 
 /**
- * Remove every `:::name` style tag from a statement, parsed with the same
- * name scan as the flowchart shorthand. State and class statements are read
- * by string splits, and the `:` label split would cut inside a `:::`, so tags
- * are dropped before dispatch rather than at each id.
+ * Strip every `:::name` style tag from a statement, capturing which
+ * identifier each tag decorated (the id token directly before it).
+ *
+ * State and class statements are read by string splits, and the `:` label
+ * split would cut inside a `:::`, so tags come out before dispatch rather
+ * than at each id; the captured pairs are applied after the statement walk,
+ * the way `class A,B name` assignments are.
  */
-export function dropStyleTags(st: string): string {
+export function captureStyleTags(st: string): { st: string; classes: [string, string][] } {
   const chars = [...st]
   const out: string[] = []
+  const classes: [string, string][] = []
   for (let i = 0; i < chars.length; ) {
     if (chars[i] === ':' && chars[i + 1] === ':' && chars[i + 2] === ':') {
       let k = i + 3
       while (k < chars.length && (isIdChar(chars[k]) || chars[k] === '-')) k++
       while (k > i + 3 && chars[k - 1] === '-') k--
       if (k > i + 3) {
+        let idStart = i
+        while (idStart > 0 && isIdChar(chars[idStart - 1])) idStart--
+        const id = chars.slice(idStart, i).join('')
+        if (id !== '') classes.push([id, chars.slice(i + 3, k).join('')])
         i = k
         continue
       }
@@ -113,5 +121,5 @@ export function dropStyleTags(st: string): string {
     out.push(chars[i])
     i++
   }
-  return out.join('')
+  return { st: out.join(''), classes }
 }

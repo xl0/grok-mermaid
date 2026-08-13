@@ -55,6 +55,7 @@ IMPORTANT:
 ### Git
 
 - Don't commit, unless the user explicitly instructed you. Our default workflow is work work work (often user in the loop), then test, often manually, then commit. The user may override this.
+- In a large multi-step workflow, committing at a step boundary is fine when the next step follows without user interaction. If a step ends where the user may want to look (review, manual testing, a decision), leave it uncommitted — an uncommitted step is easier to review.
 - When you commit, it's possible that the worktree contains unrelated changes and untracked files. Don't blindly add files - only commit what's necessary.
 - **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.
 

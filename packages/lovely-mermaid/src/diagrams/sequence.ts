@@ -57,10 +57,18 @@ export type SeqItem =
   | { kind: 'note'; anchor: NoteAnchor; text: string }
   | { kind: 'divider'; text: string }
 
+/** A hot span of one lifeline: item indices, `to === null` while still open. */
+export interface Activation {
+  at: number
+  from: number
+  to: number | null
+}
+
 export class Sequence {
   labels: string[] = []
   index = new Map<string, number>()
   items: SeqItem[] = []
+  activations: Activation[] = []
   /** Set when a size cap was hit; the parser stops and renders the prefix. */
   truncated: string | null = null
   /** Statements the grammar could not read and dropped. */
@@ -91,6 +99,22 @@ export class Sequence {
   drop(st: string): void {
     if (this.truncated === null) this.warnings.push(`dropped, unreadable statement: "${st}"`)
   }
+
+  /** Open an activation at item `from`. */
+  activate(at: number, from: number): void {
+    this.activations.push({ at, from, to: null })
+  }
+
+  /** Close the innermost open activation of `at` at item `to`. */
+  deactivate(at: number, to: number): void {
+    for (let i = this.activations.length - 1; i >= 0; i--) {
+      const a = this.activations[i]
+      if (a.at === at && a.to === null) {
+        a.to = to
+        return
+      }
+    }
+  }
 }
 
 export function parseSequence(src: string): Sequence | null {
@@ -118,10 +142,15 @@ export function parseSequence(src: string): Sequence | null {
       }
     } else if (lower === 'autonumber') {
       autonumber = true
+    } else if (lower === 'activate' || lower === 'deactivate') {
+      // Applies to the preceding message's row.
+      const who = seq.index.get(st.slice(first.length).trim())
+      if (who !== undefined && seq.items.length > 0) {
+        if (lower === 'activate') seq.activate(who, seq.items.length - 1)
+        else seq.deactivate(who, seq.items.length - 1)
+      }
     } else if (
       [
-        'activate',
-        'deactivate',
         'create',
         'destroy',
         'title',
@@ -159,6 +188,12 @@ export function parseSequence(src: string): Sequence | null {
         if (autonumber) {
           msgCount++
           text = text === null ? `${msgCount}.` : `${msgCount}. ${text}`
+        }
+        const item = seq.items.length
+        // `+` activates the receiver on this row; `-` deactivates the sender.
+        if (seq.truncated === null) {
+          if (msg.marks.includes('+')) seq.activate(msg.to, item)
+          if (msg.marks.includes('-')) seq.deactivate(msg.from, item)
         }
         seq.pushItem({
           kind: 'message',
@@ -220,7 +255,14 @@ function parseNoteAnchor(rest: string, seq: Sequence): { text: string; anchor: N
 function parseSeqMessage(
   st: string,
   seq: Sequence,
-): { from: number; to: number; text: string | null; dashed: boolean; head: SeqHead } | null {
+): {
+  from: number
+  to: number
+  text: string | null
+  dashed: boolean
+  head: SeqHead
+  marks: string
+} | null {
   const chars = [...st]
   let found: { pos: number; op: string; dashed: boolean; head: SeqHead } | null = null
   outer: for (let pos = 0; pos < chars.length; pos++) {
@@ -236,12 +278,13 @@ function parseSeqMessage(
 
   const fromId = chars.slice(0, found.pos).join('').trim()
   if (fromId === '') return null
-  // `+`/`-` activate and deactivate the target; they carry no layout meaning.
-  const rest = chars
+  // `+` activates the receiver, `-` deactivates the sender.
+  const afterOp = chars
     .slice(found.pos + [...found.op].length)
     .join('')
     .trimStart()
-    .replace(/^[+-]+/, '')
+  const marks = afterOp.match(/^[+-]+/)?.[0] ?? ''
+  const rest = afterOp.slice(marks.length)
 
   const split = splitOnce(rest, ':')
   const toId = (split ? split[0] : rest).trim()
@@ -252,5 +295,5 @@ function parseSeqMessage(
   if (from === null) return null
   const to = seq.participant(toId, null)
   if (to === null) return null
-  return { from, to, text, dashed: found.dashed, head: found.head }
+  return { from, to, text, dashed: found.dashed, head: found.head, marks }
 }

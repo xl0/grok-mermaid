@@ -42,7 +42,7 @@ export function parseEr(src: string): Graph | null {
 
     const rel = splitErRelationship(st)
     if (rel) {
-      const tokens = words(rel.rel)
+      const tokens = erTokens(rel.rel)
       const op = tokens.length === 3 ? parseErOp(tokens[1]) : null
       const f = op === null ? null : erEntity(graph, tokens[0])
       const t = f === null ? null : erEntity(graph, tokens[2])
@@ -53,7 +53,9 @@ export function parseEr(src: string): Graph | null {
         graph.pushEdge({
           from: f,
           to: t,
-          label: nonEmpty([op.cardL, relLabel, op.cardR].filter((s) => s !== '').join(' ')),
+          label: nonEmpty(relLabel),
+          cardFrom: op.cardL,
+          cardTo: op.cardR,
           headTo: 'none',
           headFrom: 'none',
           line: op.line,
@@ -62,7 +64,7 @@ export function parseEr(src: string): Graph | null {
     } else {
       const open = st.endsWith('{')
       const decl = open ? st.slice(0, -1).trim() : st
-      if (decl === '' || words(decl).length !== 1) {
+      if (decl === '' || erTokens(decl).length !== 1) {
         // A bad declaration that opened a body swallows it whole; reading the
         // attributes as top-level statements would misparse everything inside.
         graph.drop(st)
@@ -100,11 +102,33 @@ function erEntity(graph: Graph, token: string): number | null {
   return idx
 }
 
+/** Whitespace tokens, quoted spans kept whole so aliases may contain spaces. */
+function erTokens(s: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (const c of s) {
+    if (c === '"') {
+      inQuotes = !inQuotes
+      cur += c
+    } else if (!inQuotes && /\s/.test(c)) {
+      if (cur !== '') {
+        out.push(cur)
+        cur = ''
+      }
+    } else {
+      cur += c
+    }
+  }
+  if (cur !== '') out.push(cur)
+  return out
+}
+
 function splitErRelationship(st: string): { rel: string; label: string | null } | null {
   const split = splitOnce(st, ':')
   const rel = split ? split[0] : st
   const label = split ? split[1].trim() : null
-  return words(rel).some((t) => parseErOp(t) !== null) ? { rel, label } : null
+  return erTokens(rel).some((t) => parseErOp(t) !== null) ? { rel, label } : null
 }
 
 const isAscii = (s: string): boolean => {
@@ -132,7 +156,7 @@ function erCard(tok: string): string | null {
       return '1'
     case '}o':
     case 'o{':
-      return '0..*'
+      return '*'
     case '}|':
     case '|{':
       return '1..*'

@@ -1,14 +1,20 @@
 /**
- * `stateDiagram` / `stateDiagram-v2`: states, transitions and descriptions.
- * Lenient: an unreadable statement is dropped and recorded in `warnings`.
+ * `stateDiagram` / `stateDiagram-v2`: states, transitions, descriptions and
+ * composite states. Lenient: an unreadable statement is dropped and recorded
+ * in `warnings`.
+ *
+ * A composite (`state X { ... }`) becomes a `Group`, drawn as a titled frame
+ * by the same machinery flowchart subgraphs use; `--` splits a composite into
+ * unlabelled sibling region groups. `[*]` is scoped per group, so an inner
+ * start dot is a different node from the outer one.
  */
 
-import { Graph, parseDir, type Shape } from '../graph.ts'
+import { Graph, MAX_GROUP_DEPTH, MAX_GROUPS, parseDir, type Shape } from '../graph.ts'
 import { asciiLower, decodeHtmlEntities } from '../labels.ts'
-import { layoutFlowchart } from '../layout.ts'
+import { layoutFlowchart, layoutGrouped } from '../layout.ts'
 import type { Diagram } from '../registry.ts'
 import {
-  dropStyleTags,
+  captureStyleTags,
   firstWord,
   headerKind,
   nonEmpty,
@@ -24,7 +30,7 @@ export const state: Diagram = {
   render(src) {
     const graph = parseState(src)
     if (graph === null) return null
-    const canvas = layoutFlowchart(graph)
+    const canvas = graph.groups.length === 0 ? layoutFlowchart(graph) : layoutGrouped(graph)
     if (canvas === null) return null
     return { canvas, warnings: graph.warnings, classDefs: graph.classDefs }
   },
@@ -39,13 +45,31 @@ export function parseState(src: string): Graph | null {
   let inNote = false
   /** `class A,B name` assignments, applied after the walk. */
   const classAssignments: [string[], string[]][] = []
+  /** Open composites: the group itself and its current `--` region, if any. */
+  const stack: { base: number; region: number | null }[] = []
+
+  /** New group under the current scope, or `null` once a cap is hit. */
+  const newGroup = (id: string, label: string): number | null => {
+    if (graph.groups.length >= MAX_GROUPS || stack.length >= MAX_GROUP_DEPTH) {
+      graph.truncated ??= `subgraph cap (${MAX_GROUPS} groups, depth ${MAX_GROUP_DEPTH}) reached`
+      return null
+    }
+    graph.groups.push({ id, label, parent: graph.curGroup })
+    return graph.groups.length - 1
+  }
+  const scopeOf = (): number | null => {
+    const top = stack.at(-1)
+    return top === undefined ? null : (top.region ?? top.base)
+  }
 
   for (let st of statements.slice(1)) {
     if (inNote) {
       if (asciiLower(st) === 'end note') inNote = false
       continue
     }
-    st = dropStyleTags(st)
+    const captured = captureStyleTags(st)
+    st = captured.st
+    for (const [id, name] of captured.classes) classAssignments.push([[id], [name]])
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {
       graph.dir = parseDir(words(st)[1] ?? '')
@@ -53,7 +77,46 @@ export function parseState(src: string): Graph | null {
       // A single-line `note ... : text` needs no terminator.
       if (!st.includes(':')) inNote = true
     } else if (first === 'state') {
-      if (parseStateDecl(st, graph) === null) graph.drop(st)
+      const rest = st.slice(firstWord(st).length).trim()
+      const open = rest.endsWith('{')
+      const body = open ? rest.slice(0, -1).trim() : rest
+      if (!open) {
+        if (parseStateDecl(body, graph) === null) graph.drop(st)
+      } else {
+        // A composite. An unreadable declaration still opens an anonymous
+        // frame: the `{` was consumed, so the `}` balance must hold.
+        const named = compositeName(body)
+        if (named === null) graph.drop(st)
+        const gi = newGroup(named?.id ?? `anon ${graph.groups.length}`, named?.label ?? '')
+        if (gi !== null) {
+          stack.push({ base: gi, region: null })
+          graph.curGroup = gi
+        }
+      }
+    } else if (first === '}') {
+      stack.pop()
+      graph.curGroup = scopeOf()
+    } else if (first === '--') {
+      // Region divider: members so far move into region 1 on the first `--`;
+      // each divider opens the next unlabelled sibling region.
+      const top = stack.at(-1)
+      if (top !== undefined) {
+        if (top.region === null) {
+          const r1 = newGroup(`region ${graph.groups.length}`, '')
+          if (r1 !== null) {
+            graph.nodeGroup.forEach((g, i) => {
+              if (g === top.base) graph.nodeGroup[i] = r1
+            })
+            graph.groups.forEach((g, i) => {
+              if (i !== r1 && g.parent === top.base) g.parent = r1
+            })
+          }
+        }
+        graph.curGroup = top.base
+        const next = newGroup(`region ${graph.groups.length}`, '')
+        top.region = next
+        graph.curGroup = next ?? top.base
+      }
     } else if (first === 'classdef') {
       const def = parseClassDef(st.slice(firstWord(st).length))
       if (def) for (const name of def.names) graph.classDefs[name] = def.props
@@ -62,8 +125,8 @@ export function parseState(src: string): Graph | null {
       const ids = firstWord(rest).split(',')
       const names = rest.slice(firstWord(rest).length).trim().split(',')
       classAssignments.push([ids, names])
-    } else if (['hide', 'scale', '}', '--'].includes(first)) {
-      // Styling and composite-state punctuation carry no layout meaning.
+    } else if (['hide', 'scale'].includes(first)) {
+      // Styling directives carry no layout meaning.
     } else if (st.includes('-->')) {
       if (parseTransition(st, graph) === null) graph.drop(st)
     } else if (parseStateDesc(st, graph) === null) {
@@ -88,9 +151,23 @@ export function parseState(src: string): Graph | null {
   return graph.nodes.length === 0 ? null : graph
 }
 
-/** `state "Label" as id`, `state id <<choice>>`, or `state id {`. */
-function parseStateDecl(st: string, graph: Graph): true | null {
-  const rest = st.slice('state'.length).trim().replace(/\{$/, '').trim()
+/** The id and label of a composite declaration body, or `null`. */
+function compositeName(body: string): { id: string; label: string } | null {
+  if (body.startsWith('"')) {
+    const close = body.indexOf('"', 1)
+    if (close === -1) return null
+    const label = decodeHtmlEntities(body.slice(1, close))
+    const after = body.slice(close + 1).trim()
+    const id = after.startsWith('as') ? after.slice(2).trim() : label
+    return id === '' ? null : { id, label }
+  }
+  // A stereotype on a composite carries no drawing of its own; keep the name.
+  const id = body.split('<<')[0].trim()
+  return id === '' || /\s/.test(id) ? null : { id, label: id }
+}
+
+/** `state "Label" as id` or `state id <<choice>>` — the non-composite forms. */
+function parseStateDecl(rest: string, graph: Graph): true | null {
   if (rest === '') return true
 
   if (rest.startsWith('"')) {
@@ -164,9 +241,15 @@ function parseTransition(st: string, graph: Graph): true | null {
   return true
 }
 
-/** `[*]` is start or end depending on which side of the arrow it sits. */
+/**
+ * `[*]` is start or end depending on which side of the arrow it sits, and is
+ * scoped to the enclosing composite — each frame has its own start and end.
+ */
 function stateEndpoint(graph: Graph, id: string, isSource: boolean): number | null {
-  if (id === '[*]') return graph.nodeIndex(isSource ? '[*]start' : '[*]end', '●', 'round')
+  if (id === '[*]') {
+    const scope = graph.curGroup === null ? '' : ` g${graph.curGroup}`
+    return graph.nodeIndex(`[*]${isSource ? 'start' : 'end'}${scope}`, '●', 'round')
+  }
   return graph.nodeIndex(id, null, 'round')
 }
 

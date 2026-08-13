@@ -47,12 +47,44 @@ test('the source box carries no classDefs', () => {
   expect(sourceBox('gantt\n title Plan', 80).classDefs).toEqual({})
 })
 
+test('v2 @{} node syntax parses shape and label', () => {
+  const out = plain('flowchart TD\n A@{shape: cyl, label: "Database"}\n B[Server] --> A')
+  expect(out).toContain('Database')
+  expect(out).toContain('╭') // cylinder maps to the rounded silhouette
+  expect(out).not.toContain('@{')
+
+  // Quoted values keep their commas; unknown shapes draw as a plain box.
+  const out2 = plain('flowchart LR\n A@{shape: doc, label: "Write, then file"} --> B')
+  expect(out2).toContain('Write, then file')
+
+  const art = render('flowchart TD\n X@{shape: cyl, label: "unclosed')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.warnings).toEqual(['node "X": label is missing its closing `}`'])
+})
+
 test('a `:::` class is swallowed and the edge survives', () => {
   const out = render('flowchart TD\n A:::hot --> B\n classDef hot fill:#f00')
   expect(out?.warnings).toEqual([])
   expect(out?.plain.join('\n')).toContain('▼')
   expect(plain('flowchart LR\n A:::my-class --> B')).toContain('▶')
   expect(plain('flowchart LR\n A:::x-->B')).toContain('▶')
+})
+
+test('`:::` classes are captured in state and class diagrams', () => {
+  const st = render(
+    'stateDiagram-v2\n [*] --> Still:::quiet\n Still --> Moving\n classDef quiet fill:#eee',
+  )
+  if (st === null) throw new Error('render drew nothing')
+  expect(st.classDefs).toEqual({ quiet: { fill: '#eee' } })
+  expect(
+    st.styled.flat().some((s) => s.text.includes('Still') && s.classes?.includes('quiet')),
+  ).toBe(true)
+
+  const cls = render('classDiagram\n class Animal:::hot\n Animal <|-- Dog')
+  if (cls === null) throw new Error('render drew nothing')
+  expect(
+    cls.styled.flat().some((s) => s.text.includes('Animal') && s.classes?.includes('hot')),
+  ).toBe(true)
 })
 
 test('a `:::` class is swallowed in state and class diagrams', () => {
@@ -551,10 +583,10 @@ test('class generics display as angle brackets', () => {
   expect(out).not.toContain('~')
 })
 
-test('class cardinalities fold into the edge label', () => {
-  expect(plain('classDiagram\n Student "many" --> "1" School : attends')).toContain(
-    'many attends 1',
-  )
+test('class cardinalities sit at their own edge ends', () => {
+  const out = plain('classDiagram\n Student "many" --> "1" School : attends')
+  expect(rowOf(out, 'many')).toBeLessThan(rowOf(out, 'attends'))
+  expect(rowOf(out, 'attends')).toBeLessThan(rowOf(out, '1'))
 })
 
 test('a from-end head survives a fan-out jog', () => {
@@ -597,7 +629,9 @@ test('an ER diagram renders entities and relationship labels', () => {
   expect(out).toContain('ORDER')
   expect(out).toContain('string name PK')
   expect(out).not.toContain('full name')
-  expect(out).toContain('1 places 0..*')
+  // Cardinalities at their own ends, verb between them; `0..*` shortens.
+  expect(rowOf(out, '│1')).toBeLessThan(rowOf(out, 'places'))
+  expect(rowOf(out, 'places')).toBeLessThan(rowOf(out, '│*'))
   expect(out).toContain('├')
 })
 
@@ -613,14 +647,23 @@ test('ER relationships have no arrowheads', () => {
 
 // Upstream's equivalent asserts the labels appear, but it reads the fallback
 // box, which merely echoes the source. Neither grammar accepts the alias form.
-test('an ER entity alias is not parsed', () => {
-  expect(render('erDiagram\n p[Person] ||--o{ a["Bank Account"] : owns')).toBeNull()
+test('ER entity aliases render their labels, spaces included', () => {
+  const out = plain('erDiagram\n p[Person] ||--o{ a["Bank Account"] : owns')
+  expect(out).toContain('Person')
+  expect(out).toContain('Bank Account')
+  expect(out).toContain('owns')
+  const aliased = plain(
+    'erDiagram\n a["Bank Account"] {\n string iban\n }\n a ||--|| p[Person] : held by',
+  )
+  expect(aliased).toContain('Bank Account')
+  expect(aliased).toContain('string iban')
 })
 
 test('a bare ER entity declaration renders', () => {
   const out = plain('erDiagram\n LONER\n A ||--|| B : linked')
   expect(out).toContain('LONER')
-  expect(out).toContain('1 linked 1')
+  expect(out).toContain('linked')
+  expect(countOf(out, '1')).toBe(2)
 })
 
 test('ER attributes elide past the cap', () => {
@@ -779,6 +822,32 @@ test('state notes are skipped', () => {
   expect(out).not.toContain('block text')
 })
 
+test('a composite state renders as a titled frame', () => {
+  const out = plain(
+    'stateDiagram-v2\n [*] --> Idle\n Idle --> Active\n state Active {\n [*] --> Fetching\n Fetching --> Rendering\n }\n Active --> [*]',
+  )
+  expect(out).toContain(' Active ')
+  expect(rowOf(out, 'Idle')).toBeLessThan(rowOf(out, 'Fetching'))
+  // The inner start dot is scoped to the frame: outer start, inner start,
+  // outer end.
+  expect(countOf(out, '●')).toBe(3)
+})
+
+test('`--` splits a composite into unlabelled regions', () => {
+  const out = plain('stateDiagram-v2\n state Fork {\n A --> B\n --\n C --> D\n }\n Fork --> Done')
+  expect(out).toContain(' Fork ')
+  const row = out.split('\n').find((l) => l.includes('A')) as string
+  expect(row).toContain('C') // regions sit side by side
+  expect(countOf(out, '┌')).toBe(3) // Fork frame + two region frames
+})
+
+test('a bad composite declaration keeps the brace balance', () => {
+  const art = render('stateDiagram-v2\n state "unclosed {\n A --> B\n }\n B --> C')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.warnings.length).toBe(1)
+  expect(art.plain.join('\n')).toContain('C')
+})
+
 test('a state back transition uses a lane', () => {
   const out = plain('stateDiagram-v2\n A --> B\n B --> C\n C --> B: retry')
   expect(out).toContain('◄')
@@ -921,11 +990,30 @@ test('a sequence diagram renders truncated at the item cap', () => {
   expect(art.warnings.some((w) => w.startsWith('diagram truncated:'))).toBe(true)
 })
 
-test('activation markers are stripped', () => {
+test('activations thicken the lifeline over the active range', () => {
   const out = plain('sequenceDiagram\n A->>+B: call\n B-->>-A: return')
   expect(out).toContain('call')
-  expect(out).toContain('return')
   expect(out).not.toContain('+')
+  expect(out).toContain('┃') // B's lifeline is hot between call and return
+  expect(out).toContain('┫') // the deactivating arrow leaves a thick junction
+  // A stays thin: only the activated column changes.
+  const hotRows = out.split('\n').filter((l) => l.includes('┃') || l.includes('┫'))
+  expect(hotRows.every((l) => l.indexOf('│') < l.indexOf('┃') || l.includes('┫'))).toBe(true)
+})
+
+test('activate/deactivate statements drive the lifeline too', () => {
+  const out = plain('sequenceDiagram\n A->>B: go\n activate B\n B-->>A: done\n deactivate B')
+  expect(out).toContain('┃')
+})
+
+test('an unclosed activation runs to the bottom', () => {
+  const out = plain('sequenceDiagram\n A->>+B: go\n B->>A: hm')
+  const lastHot = out
+    .split('\n')
+    .reduce((acc, l, i) => (l.includes('┃') || l.includes('┴') ? i : acc), 0)
+  expect(out).toContain('┃')
+  // The row above the bottom boxes is still thick.
+  expect(out.split('\n')[lastHot]).toContain('┴')
 })
 
 test('sequence rows are sentinel free', () => {

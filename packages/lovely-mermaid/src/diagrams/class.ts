@@ -11,7 +11,7 @@ import { asciiLower, decodeHtmlEntities, displayGenerics, isIdChar } from '../la
 import { layoutClass } from '../layout.ts'
 import type { Diagram } from '../registry.ts'
 import {
-  dropStyleTags,
+  captureStyleTags,
   firstWord,
   headerKind,
   nonEmpty,
@@ -67,6 +67,8 @@ export function parseClass(src: string): Graph | null {
   }
   /** The open `{` body: a class index, `'skip'` for a dropped class, or none. */
   let curClass: number | 'skip' | null = null
+  /** `:::name` tags, applied after the walk. */
+  const classAssignments: [string[], string[]][] = []
 
   for (let st of statements.slice(1)) {
     if (curClass !== null) {
@@ -74,7 +76,9 @@ export function parseClass(src: string): Graph | null {
       else if (curClass !== 'skip') pushMember(graph.nodes[curClass], st)
       continue
     }
-    st = dropStyleTags(st)
+    const captured = captureStyleTags(st)
+    st = captured.st
+    for (const [id, name] of captured.classes) classAssignments.push([[id], [name]])
 
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {
@@ -123,6 +127,8 @@ export function parseClass(src: string): Graph | null {
             from: f,
             to: t,
             label: rel.label,
+            cardFrom: rel.cardFrom,
+            cardTo: rel.cardTo,
             headTo: rel.headTo,
             headFrom: rel.headFrom,
             line: rel.line,
@@ -143,6 +149,16 @@ export function parseClass(src: string): Graph | null {
     if (graph.truncated !== null) {
       graph.warnings.push(`diagram truncated: ${graph.truncated}`)
       break
+    }
+  }
+
+  for (const [ids, names] of classAssignments) {
+    for (const id of ids) {
+      const idx = graph.index.get(id.trim())
+      if (idx === undefined) continue
+      for (const name of names) {
+        if (name.trim() !== '') graph.addClass(idx, name.trim())
+      }
     }
   }
 
@@ -175,6 +191,8 @@ interface ClassRelation {
   headTo: Head
   line: LineKind
   label: string | null
+  cardFrom?: string
+  cardTo?: string
 }
 
 function parseClassRelation(st: string): ClassRelation | null {
@@ -210,14 +228,15 @@ function parseClassRelation(st: string): ClassRelation | null {
 
   if (lhs === '' || toId === '' || /\s/.test(lhs) || /\s/.test(toId)) return null
 
-  const label = nonEmpty([cardFrom, relLabel ?? '', cardTo].filter((s) => s !== '').join(' '))
   return {
     from: lhs,
     to: toId,
     headFrom: found.headFrom,
     headTo: found.headTo,
     line: found.line,
-    label,
+    label: relLabel,
+    cardFrom: cardFrom === '' ? undefined : cardFrom,
+    cardTo: cardTo === '' ? undefined : cardTo,
   }
 }
 

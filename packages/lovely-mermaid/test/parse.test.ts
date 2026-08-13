@@ -317,13 +317,15 @@ test('ER cardinality operators map to labels', () => {
   const cases: [string, string, string][] = [
     ['||--||', '1', '1'],
     ['|o--o|', '0..1', '0..1'],
-    ['}o--o{', '0..*', '0..*'],
+    ['}o--o{', '*', '*'],
     ['}|--|{', '1..*', '1..*'],
-    ['||--o{', '1', '0..*'],
+    ['||--o{', '1', '*'],
   ]
   for (const [op, l, r] of cases) {
     const g = parseEr(`erDiagram\n A ${op} B : x`)
-    expect(g?.edges[0].label).toBe(`${l} x ${r}`)
+    expect(g?.edges[0].label).toBe('x')
+    expect(g?.edges[0].cardFrom).toBe(l)
+    expect(g?.edges[0].cardTo).toBe(r)
     expect(g?.edges[0].line).toBe('solid')
   }
   expect(parseEr('erDiagram\n A ||..o{ B : x')?.edges[0].line).toBe('dotted')

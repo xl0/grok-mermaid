@@ -51,6 +51,12 @@ export interface Edge {
   from: number
   to: number
   label: string | null
+  /**
+   * Cardinalities (ER crow's-foot, class multiplicities), painted at their
+   * own end of the edge so position says which side a number belongs to.
+   */
+  cardFrom?: string
+  cardTo?: string
   headTo: Head
   headFrom: Head
   line: LineKind

@@ -43,6 +43,18 @@ export type CanvasResult = Canvas | null
 const sat = (a: number, b: number): number => Math.max(0, a - b)
 const half = (n: number): number => Math.floor(n / 2)
 
+/**
+ * Everything an edge says, joined — the fallback for routes that have no
+ * per-end placement (lanes, self-loops). Forward routes place `cardFrom` /
+ * `cardTo` at their own ends instead.
+ */
+function edgeText(edge: Edge): string | null {
+  const joined = [edge.cardFrom ?? '', edge.label ?? '', edge.cardTo ?? '']
+    .filter((part) => part !== '')
+    .join(' ')
+  return joined === '' ? null : joined
+}
+
 export interface Placed {
   x: number
   y: number
@@ -402,9 +414,13 @@ function placeTd(
   const rankH = byRank.map((row) =>
     row.length === 0 ? 3 : Math.max(...row.map((i) => sizes.boxH[i] + sizes.extraH[i])),
   )
+  // Per-end cardinalities want a row each around the verb: source card,
+  // label, arrow-and-target-card.
+  const hasCards = graph.edges.some((e) => e.cardFrom !== undefined || e.cardTo !== undefined)
+  const gapY = hasCards ? Math.max(GAP_Y, 3) : GAP_Y
   const rankY = new Array<number>(maxRank + 1).fill(0)
   for (let r = 1; r <= maxRank; r++) {
-    rankY[r] = rankY[r - 1] + rankH[r - 1] + Math.max(GAP_Y, busTracks[r - 1] + 1)
+    rankY[r] = rankY[r - 1] + rankH[r - 1] + Math.max(gapY, busTracks[r - 1] + 1)
   }
   const canvasH = rankY[maxRank] + rankH[maxRank]
   const bandEnd = Array.from({ length: maxRank + 1 }, (_, r) => rankY[r] + rankH[r])
@@ -427,12 +443,22 @@ function placeTd(
 
   let contentW = diagramW
   for (const e of graph.edges) {
-    if (e.from === e.to || e.label === null) continue
-    const lw = Math.min(stringWidth(e.label), MAX_LABEL)
-    contentW =
-      ranks[e.to] === ranks[e.from] + 1
-        ? Math.max(contentW, placed[e.to].cx + 2 + lw)
-        : Math.max(contentW, diagramW + lw + 1)
+    if (e.from === e.to) continue
+    if (ranks[e.to] === ranks[e.from] + 1) {
+      const parts = [e.label, e.cardTo].filter((part) => part != null) as string[]
+      for (const part of parts) {
+        const lw = Math.min(stringWidth(part), MAX_LABEL)
+        contentW = Math.max(contentW, placed[e.to].cx + 2 + lw)
+      }
+      if (e.cardFrom !== undefined) {
+        contentW = Math.max(contentW, placed[e.from].cx + 2 + stringWidth(e.cardFrom))
+      }
+    } else {
+      const text = edgeText(e)
+      if (text !== null) {
+        contentW = Math.max(contentW, diagramW + Math.min(stringWidth(text), MAX_LABEL) + 1)
+      }
+    }
   }
 
   const edgeLane = new Array<number>(graph.edges.length).fill(0)
@@ -465,8 +491,14 @@ function placeLr(
   // to be wide enough for the widest of them.
   const labelWidths = graph.edges
     .filter((e) => e.from === e.to || ranks[e.to] === ranks[e.from] + 1)
-    .filter((e) => e.label !== null)
-    .map((e) => Math.min(stringWidth(e.label as string), MAX_LABEL))
+    .map((e) => {
+      const verb = e.label === null ? 0 : Math.min(stringWidth(e.label), MAX_LABEL)
+      const cards = [e.cardFrom, e.cardTo]
+        .filter((c) => c !== undefined)
+        .reduce((w, c) => w + stringWidth(c as string) + 1, 0)
+      return verb + cards
+    })
+    .filter((w) => w > 0)
   const maxLabel = labelWidths.length === 0 ? 0 : Math.max(...labelWidths)
   const baseGap = Math.max(GAP_X + 1, maxLabel + 3)
 
@@ -560,8 +592,9 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   for (const e of graph.edges) {
     if (e.from !== e.to) continue
     extraH[e.from] = 2
-    if (e.label !== null) {
-      selfLabelW[e.from] = Math.max(selfLabelW[e.from], Math.min(stringWidth(e.label), MAX_LABEL))
+    const text = edgeText(e)
+    if (text !== null) {
+      selfLabelW[e.from] = Math.max(selfLabelW[e.from], Math.min(stringWidth(text), MAX_LABEL))
     }
   }
   for (let i = 0; i < n; i++) if (extraH[i] > 0) boxW[i] = Math.max(boxW[i], 7)
@@ -854,8 +887,11 @@ function drawClassBox(canvas: Canvas, p: Placed, sections: string[][]): void {
 /** A subgraph frame: a titled box with a finished sub-canvas centred inside. */
 function drawFrame(canvas: Canvas, p: Placed, title: string, sub: Canvas): void {
   drawBox(canvas, p, [], 'rect')
-  const t = fitLabel(title, sat(p.w, 4))
-  drawTextOverEdges(canvas, ` ${t} `, p.x + 1, p.y, 'text')
+  // An unlabelled frame (a state `--` region) keeps its border unbroken.
+  if (title !== '') {
+    const t = fitLabel(title, sat(p.w, 4))
+    drawTextOverEdges(canvas, ` ${t} `, p.x + 1, p.y, 'text')
+  }
   canvas.blit(sub, p.x + 1 + half(p.w - 2 - sub.w), p.y + 1 + half(p.h - 2 - sub.h))
 }
 
@@ -899,7 +935,29 @@ function routeForward(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus:
   else canvas.set(tx, headRow, headGlyph(edge.headTo, '▼'), 'edge')
   if (edge.headFrom !== 'none') canvas.set(bx, by, headGlyph(edge.headFrom, '▲'), 'edge')
 
-  if (edge.label !== null) placeLabel(canvas, edge.label, headRow, tx + 1)
+  if (edge.cardFrom === undefined && edge.cardTo === undefined) {
+    if (edge.label !== null) placeLabel(canvas, edge.label, headRow, tx + 1)
+    return
+  }
+  // Cardinalities sit at their own ends; the verb takes the row above the
+  // head, falling back beside the target card when the gap has no spare row.
+  const srcRow = by + 1
+  if (edge.cardFrom !== undefined) placeLabel(canvas, edge.cardFrom, srcRow, bx + 1)
+  if (edge.cardTo !== undefined) placeLabel(canvas, edge.cardTo, headRow, tx + 1)
+  if (edge.label !== null) {
+    const midRow = headRow - 1
+    if (midRow > srcRow) {
+      const lineX = midRow > bus ? tx : bx
+      placeLabel(canvas, edge.label, midRow, lineX + 1)
+    } else {
+      placeLabel(
+        canvas,
+        edge.label,
+        headRow,
+        tx + 1 + (edge.cardTo === undefined ? 0 : stringWidth(edge.cardTo) + 1),
+      )
+    }
+  }
 }
 
 /** A self-edge: a stub loop hanging below the box. */
@@ -922,7 +980,8 @@ function routeSelf(canvas: Canvas, p: Placed, edge: Edge): void {
   for (let x = exitX + 1; x < retX; x++) canvas.set(x, bottom + 2, h, 'edge')
   canvas.set(retX, bottom + 2, br, 'edge')
   canvas.set(retX, bottom + 1, headGlyph(edge.headTo, '▲'), 'edge')
-  if (edge.label !== null) placeLabel(canvas, edge.label, bottom + 1, p.x + p.w + 1)
+  const selfText = edgeText(edge)
+  if (selfText !== null) placeLabel(canvas, selfText, bottom + 1, p.x + p.w + 1)
 }
 
 /** Skip or back edge, top-down: out the right side, up a lane, back in. */
@@ -941,8 +1000,9 @@ function routeBack(canvas: Canvas, from: Placed, to: Placed, edge: Edge, laneX: 
   else canvas.set(tx + 1, tyc, headGlyph(edge.headTo, '◄'), 'edge')
   if (edge.headFrom !== 'none') canvas.set(sx, sy, headGlyph(edge.headFrom, '◄'), 'edge')
 
-  if (edge.label !== null) {
-    placeLabel(canvas, edge.label, sat(tyc, 1), sat(laneX, stringWidth(edge.label) + 1))
+  const backText = edgeText(edge)
+  if (backText !== null) {
+    placeLabel(canvas, backText, sat(tyc, 1), sat(laneX, stringWidth(backText) + 1))
   }
 }
 
@@ -966,7 +1026,13 @@ function routeForwardLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bu
   else canvas.set(headCol, ly, headGlyph(edge.headTo, '▶'), 'edge')
   if (edge.headFrom !== 'none') canvas.set(rx, ry, headGlyph(edge.headFrom, '◄'), 'edge')
 
+  // The verb keeps its usual spot above the line; cardinalities hug their
+  // own ends on the rows above the departure and arrival cells.
   if (edge.label !== null) placeLabel(canvas, edge.label, sat(ly, 1), bus + 1)
+  if (edge.cardFrom !== undefined) placeLabel(canvas, edge.cardFrom, sat(ry, 1), rx + 1)
+  if (edge.cardTo !== undefined) {
+    placeLabel(canvas, edge.cardTo, sat(ly, 1), sat(headCol, stringWidth(edge.cardTo)))
+  }
 }
 
 /** Skip or back edge, left-to-right: down out the bottom, along a lane, back up. */
@@ -985,7 +1051,8 @@ function routeBackLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, laneY
   else canvas.set(tx, ty + 1, headGlyph(edge.headTo, '▲'), 'edge')
   if (edge.headFrom !== 'none') canvas.set(sx, sy, headGlyph(edge.headFrom, '▲'), 'edge')
 
-  if (edge.label !== null) placeLabel(canvas, edge.label, sat(laneY, 1), half(sx + tx))
+  const backText = edgeText(edge)
+  if (backText !== null) placeLabel(canvas, backText, sat(laneY, 1), half(sx + tx))
 }
 
 /** Write an edge label, stopping at the first cell already occupied. */

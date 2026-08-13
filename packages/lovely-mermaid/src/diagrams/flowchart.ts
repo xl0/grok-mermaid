@@ -24,6 +24,7 @@ import {
   headerKind,
   nonEmpty,
   parseClassDef,
+  splitOnce,
   statementsOf,
   words,
 } from '../statements.ts'
@@ -220,7 +221,8 @@ function parseNode(
   if (i === idStart) return null
   const id = chars.slice(idStart, i).join('')
 
-  const shaped = readShapeAt(chars, i)
+  const shaped =
+    chars[i] === '@' && chars[i + 1] === '{' ? readAtShape(chars, i + 2) : readShapeAt(chars, i)
   if (shaped.unclosed !== undefined) {
     graph.warnings.push(`node "${id}": label is missing its closing \`${shaped.unclosed}\``)
   }
@@ -306,6 +308,103 @@ function readShape(chars: string[], start: number, closer: string, shape: Shape)
   // Ran off the end still looking for the closer: everything after the opening
   // bracket became label text, so any link operator in it was swallowed.
   return { shape, label: cleanLabel(text), after: chars.length, unclosed: closer }
+}
+
+/**
+ * Flowchart v2 shape names that read as something other than a plain box.
+ * The terminal has three silhouettes; every name not listed here means
+ * "some kind of box" and maps to `rect`.
+ */
+const AT_SHAPES: Record<string, Shape> = {
+  rounded: 'round',
+  stadium: 'round',
+  pill: 'round',
+  terminal: 'round',
+  cyl: 'round',
+  cylinder: 'round',
+  database: 'round',
+  db: 'round',
+  circle: 'round',
+  circ: 'round',
+  'sm-circ': 'round',
+  'small-circle': 'round',
+  'dbl-circ': 'round',
+  'double-circle': 'round',
+  'fr-circ': 'round',
+  'framed-circle': 'round',
+  start: 'round',
+  stop: 'round',
+  event: 'round',
+  delay: 'round',
+  cloud: 'round',
+  bang: 'round',
+  diam: 'diamond',
+  diamond: 'diamond',
+  decision: 'diamond',
+  question: 'diamond',
+  hex: 'diamond',
+  hexagon: 'diamond',
+  prepare: 'diamond',
+}
+
+/**
+ * The v2 node syntax `id@{shape: cyl, label: "..."}`, cursor past the `@{`.
+ *
+ * The body is `key: value` pairs split on top-level commas; quoted values may
+ * contain commas and `}`. Unknown keys are ignored, unknown shapes draw as a
+ * plain box. A body that never closes reports itself like any unterminated
+ * label bracket.
+ */
+function readAtShape(chars: string[], start: number): Shaped {
+  let i = start
+  let depth = 0
+  let inQuotes = false
+  for (; i < chars.length; i++) {
+    const c = chars[i]
+    if (inQuotes) {
+      if (c === '"') inQuotes = false
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === '{') {
+      depth++
+    } else if (c === '}') {
+      if (depth === 0) break
+      depth--
+    }
+  }
+  const body = chars.slice(start, i).join('')
+  const closed = chars[i] === '}'
+
+  let shape: Shape = 'rect'
+  let label: string | null = null
+  for (const pair of splitTopLevel(body)) {
+    const kv = splitOnce(pair, ':')
+    if (kv === null) continue
+    const key = asciiLower(kv[0].trim())
+    if (key === 'shape') shape = AT_SHAPES[asciiLower(kv[1].trim())] ?? 'rect'
+    else if (key === 'label') label = nonEmpty(cleanLabel(kv[1]))
+  }
+  return closed
+    ? { shape, label, after: i + 1 }
+    : { shape, label, after: chars.length, unclosed: '}' }
+}
+
+/** Split on commas outside double quotes. */
+function splitTopLevel(s: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (const c of s) {
+    if (c === '"') inQuotes = !inQuotes
+    if (c === ',' && !inQuotes) {
+      out.push(cur)
+      cur = ''
+    } else {
+      cur += c
+    }
+  }
+  out.push(cur)
+  return out
 }
 
 const isLinkChar = (c: string): boolean =>

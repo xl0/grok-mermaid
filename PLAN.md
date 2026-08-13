@@ -44,15 +44,14 @@ enforced, parse warnings, control characters stripped, staged npm releases.
 
 ## [ ] Features (order from REDESIGN.md)
 
-- [ ] Composite states as frames: `state X { ... }` currently renders flat —
-      structurally wrong. Reuse the subgraph machinery; `--` concurrency
-      regions come nearly free.
-- [ ] Flowchart v2 node syntax `A@{shape: cyl, label: "..."}`: parse, map
-      shapes onto rect/round/diamond.
-- [ ] Sequence activations: thicken the lifeline over the active range.
-- [ ] Cardinalities at their own edge ends (`Edge.cardFrom`/`cardTo`), verb
-      mid-edge; `0..*` → `*`. Fixes ER and class relations reading ambiguously.
-- [ ] ER aliases with spaces (`a["Bank Account"]`).
+- [x] Composite states as frames, `--` regions, `[*]` scoped per group.
+- [x] Flowchart v2 `A@{shape: cyl, label: "..."}` node syntax.
+- [x] Sequence activations thicken the lifeline over the active range.
+- [x] Cardinalities at their own edge ends (`Edge.cardFrom`/`cardTo`), verb
+      mid-edge; `0..*` → `*`.
+- [x] ER aliases with spaces (`a["Bank Account"]`).
+- [x] `:::` capture in state/class diagrams — classes work in every grammar
+      that has them.
 - [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
       gitGraph (commit lanes). Registry makes each a one-file addition.
 - [x] Demo app in `demo/` (SvelteKit, pulled from the old `classnames` branch,
@@ -63,10 +62,7 @@ enforced, parse warnings, control characters stripped, staged npm releases.
 
 ## Open questions
 
-- `:::` in state/class diagrams is swallowed statement-level, not attached to
-  its node — needs per-id capture if anyone wants classes there.
-- Whether to expose the parsers publicly. Tests import them from module
-  paths; keeping them off the entry point leaves the API surface small.
-- Parked ideas with data: auto-orient to fit (flip `down`↔`right` rescues all
-  five over-wide cases measured; wants a caller opt-in), truncating sequence
-  message text at `MAX_LABEL`, word-wrapping the source-box body.
+- Parked ideas with data: truncating sequence message text at `MAX_LABEL`,
+  word-wrapping the source-box body.
+- Decided: parsers stay internal (tests import module paths); no auto-flip /
+  direction override to fit — width policy stays entirely with the caller.

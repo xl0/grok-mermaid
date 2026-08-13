@@ -178,6 +178,46 @@ function stricterHeaderHere(src: string, want: string): boolean {
   return junkHeader && !want.includes('mermaid: ')
 }
 
+/**
+ * Upstream flattens `state X { ... }` composites into siblings; the port
+ * draws them as titled frames (and `--` regions as unlabelled ones), so any
+ * state diagram with a composite body renders structurally differently.
+ */
+function compositeHere(src: string, got: string): boolean {
+  return got !== '#NONE' && diagramKind(src) === 'state' && src.includes('{')
+}
+
+/**
+ * The v2 node syntax `id@{shape: ..., label: ...}` is unknown to upstream —
+ * it keeps a bare `id` node and drops the rest of the statement. The port
+ * parses it, so any flowchart using `@{` renders differently.
+ */
+function v2ShapeHere(src: string, got: string): boolean {
+  return got !== '#NONE' && diagramKind(src) === 'flowchart' && src.includes('@{')
+}
+
+/**
+ * Upstream strips activation markers (`->>+`, `-->>-`, `activate X`); the
+ * port thickens the lifeline over the active range, so any sequence diagram
+ * using them renders differently.
+ */
+function activationsHere(src: string, got: string): boolean {
+  if (got === '#NONE' || diagramKind(src) !== 'sequence') return false
+  return /(>>|->|-x|--x|-\)|--\))\s*[+-]/.test(src) || /^\s*(de)?activate\b/im.test(src)
+}
+
+/**
+ * Upstream folds ER and class cardinalities into one mid-edge string; the
+ * port paints each at its own end (and shortens `0..*` to `*`), so any such
+ * diagram with a relationship renders differently.
+ */
+function cardsHere(src: string, got: string): boolean {
+  if (got === '#NONE') return false
+  const kind = diagramKind(src)
+  if (kind === 'er') return true
+  return kind === 'class' && src.includes('"')
+}
+
 function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): boolean {
   // Upstream printed a source box; we drew art that fits. Matching on the box
   // title rather than the note, which wraps and so is not contiguous at small
@@ -200,6 +240,10 @@ function trimmedOnlyHere(want: string, got: string): boolean {
 let same = 0
 const expected: number[] = []
 const lenient: number[] = []
+const composite: number[] = []
+const v2shape: number[] = []
+const activations: number[] = []
+const cards: number[] = []
 const header: number[] = []
 const slack: number[] = []
 const trimmed: number[] = []
@@ -215,6 +259,10 @@ corpus.forEach((line, i) => {
   else if (trimmedOnlyHere(golden[i], got)) trimmed.push(i)
   else if (expectedToDiffer(src)) expected.push(i)
   else if (lenientHere(src, golden[i])) lenient.push(i)
+  else if (compositeHere(src, got)) composite.push(i)
+  else if (v2ShapeHere(src, got)) v2shape.push(i)
+  else if (activationsHere(src, got)) activations.push(i)
+  else if (cardsHere(src, got)) cards.push(i)
   else if (stricterHeaderHere(src, golden[i])) header.push(i)
   else if (fitsOnlyHere(src, maxWidth, golden[i])) slack.push(i)
   else regressions.push({ i, width, src, want: golden[i], got })
@@ -226,6 +274,14 @@ console.log(`expected:    ${expected.length}  (grapheme clustering — see CODE.
 console.log(
   `lenient:     ${lenient.length}  (unreadable statements dropped, caps truncate — see CODE.md)`,
 )
+console.log(
+  `composite:   ${composite.length}  (composite states framed, not flattened — see CODE.md)`,
+)
+console.log(`v2shape:     ${v2shape.length}  (v2 @{} node syntax parsed — see CODE.md)`)
+console.log(
+  `activations: ${activations.length}  (sequence activations thicken lifelines — see CODE.md)`,
+)
+console.log(`cards:       ${cards.length}  (cardinalities at their own edge ends — see CODE.md)`)
 console.log(`header:      ${header.length}  (exact header match — see CODE.md)`)
 console.log(`slack:       ${slack.length}  (painted vs allocated width — see CODE.md)`)
 console.log(`trimmed:     ${trimmed.length}  (empty outer rows removed — see CODE.md)`)

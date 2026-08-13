@@ -7,7 +7,7 @@
  * self-message stub — then items stack down the canvas in source order.
  */
 
-import { Canvas, D, drawTextOverEdges, L, R, U } from './canvas.ts'
+import { Canvas, D, drawTextOverEdges, L, R, STY_THICK, U } from './canvas.ts'
 import type { NoteAnchor, SeqItem, Sequence } from './diagrams/sequence.ts'
 import { fitLabel, WRAP_WIDTH } from './labels.ts'
 import { type CanvasResult, drawBox, type Placed } from './layout.ts'
@@ -130,6 +130,27 @@ export function layoutSequence(seq: Sequence): CanvasResult {
     if (item.kind === 'message') drawMessage(canvas, item, xs, r)
     else if (item.kind === 'divider') drawDivider(canvas, item.text, r, canvasW)
   })
+
+  // Activations thicken the lifeline from the activating message's arrow row
+  // to the deactivating one's (to the bottom while still open). Overwriting
+  // the style keeps junction glyphs on the run thick too (│→┃, ├→┣).
+  const startRow = (k: number): number => {
+    const item = seq.items[k]
+    const labeled = item.kind === 'message' && item.from !== item.to && item.text !== null
+    return rows[k] + (labeled ? 1 : 0)
+  }
+  const endRow = (k: number): number => {
+    const item = seq.items[k]
+    // A self-message stub returns two rows below where it left.
+    return item.kind === 'message' && item.from === item.to ? rows[k] + 2 : startRow(k)
+  }
+  for (const a of seq.activations) {
+    const y1 = a.to === null ? bottomTop - 1 : endRow(a.to)
+    for (let y = startRow(a.from); y <= y1; y++) {
+      const i = canvas.idx(xs[a.at], y)
+      if (canvas.mask[i] !== 0) canvas.style[i] = STY_THICK
+    }
+  }
 
   canvas.finalizeMask()
   return canvas

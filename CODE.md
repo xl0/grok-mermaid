@@ -104,10 +104,11 @@ or `class A,B name` — carried by every cell the classed node paints, including
 blank box interior (so a consumer can fill the box). `art.classDefs` holds the
 parsed `classDef` declarations (`name -> {prop: value}`), uninterpreted.
 `toAnsi` maps roles only; class-aware styling is the consumer's, via `styled`
-+ `classDefs`. Class assignment is parsed for flowcharts (`:::` and `class`)
-and state diagrams (`class`); classDefs for flowchart/state/class diagrams. A
-`:::` in state/class diagrams is still only swallowed by `dropStyleTags` —
-statement-level, so it cannot know its node.
++ `classDefs`. Class assignment is parsed in every grammar that has it:
+flowchart `:::` at the node cursor, state/class `:::` via `captureStyleTags`
+(the tag names the id token before it; applied post-walk), and `class A,B
+name` statements in flowchart/state. classDefs parse in flowchart/state/class
+diagrams.
 
 ## Syntax errors
 
@@ -209,9 +210,30 @@ title row centres, the rest left-align.
 - **`:::` tags and `class`/`classDef` statements are captured, not mishandled.**
   Upstream corrupts the parse everywhere `:::` can appear (drops the edge in
   `A:::x --> B`, leaks the tag into state names, declares `Animal:::hot`);
-  the port attaches the class to the node (flowchart), or swallows the tag
-  (state/class statement-level), and surfaces `classDef`s. No differential
-  case exercises `:::`.
+  the port attaches the class to its node in every grammar and surfaces
+  `classDef`s. No differential case exercises `:::`.
+- **Composite states are framed, not flattened.** `state X { ... }` becomes a
+  `Group` drawn by the subgraph frame machinery; `--` splits a composite into
+  unlabelled sibling regions; `[*]` is scoped per group. Upstream hoists the
+  contents to the top level, which is structurally wrong. Differential class
+  `composite` — 7 cases.
+- **Flowchart v2 `@{shape: ..., label: ...}` nodes parse.** Upstream keeps a
+  bare-id node and drops the rest of the statement. Shape names fold onto the
+  three silhouettes (`AT_SHAPES`; unknown means rect). Differential class
+  `v2shape` (0 corpus cases; pinned by unit tests).
+- **Sequence activations thicken the lifeline.** `->>+` / `-->>-` and
+  `activate`/`deactivate` drive per-participant spans, drawn by overwriting
+  the cell style to thick (`│`→`┃`, junctions `├`→`┣`) between the activating
+  and deactivating rows; an unclosed span runs to the bottom. Upstream strips
+  the markers. Differential class `activations` — 6 cases.
+- **Cardinalities sit at their own edge ends.** ER and class relations carry
+  `cardFrom`/`cardTo` beside `label`; forward routes paint each at its end
+  with the verb between (TD rank gaps grow to 3 rows to make space), lanes
+  and self-loops fall back to the joined string. `0..*` shortens to `*`.
+  Upstream folds everything into one mid-edge string, so nothing says which
+  end a number belongs to. ER aliases are also parsed quote-aware, so
+  `a["Bank Account"]` renders instead of failing. Differential class `cards`
+  — 68 cases (all ER art plus quoted-cardinality class diagrams).
 
 ## Verification
 
@@ -223,10 +245,9 @@ a case that diverges for a reason not on the deviations list above.
 since `render` no longer has one; that shim lives there rather than in `src`
 precisely because it is upstream's behaviour and not the port's.
 
-Current state: 4274 identical, 2353 expected (clustering), 135 lenient
-(statements dropped / caps truncated where upstream refused), 0 header,
-8 slack (painted vs allocated width), 410 trimmed (empty outer rows),
-0 regressions.
+Current state: 4170 identical, 2377 expected (clustering), 135 lenient,
+7 composite, 0 v2shape, 6 activations, 68 cards, 0 header, 7 slack,
+410 trimmed, 0 regressions.
 
 Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
 byte for byte on all 7180 cases. Divergence after it is deliberate and listed
@@ -262,9 +283,6 @@ notions is what the port dropped.
   `splitStatements` treats `;` outside double quotes as a statement separator,
   so `A -->|go&#160;| B` splits mid-entity and the edge is dropped. Quoting the
   label works; mermaid proper wants special characters quoted anyway.
-- **ER entity aliases with spaces are not parsed.** `a["Bank Account"]` splits
-  on the internal space before the relationship tokens are read, so the
-  statement drops (with a warning). Single-word aliases (`p[Person]`) work.
 
 ## Porting notes
 
@@ -286,7 +304,7 @@ notions is what the port dropped.
 
 ## Tests
 
-191 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
+198 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
 and `test/labels.test.ts` descend from the upstream `mod tests` (intent
 preserved; updated where behaviour deliberately diverged). `test/width.test.ts`
 and `test/spans.test.ts` are new — the latter covers the span contract, which
