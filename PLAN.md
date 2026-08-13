@@ -55,8 +55,11 @@ enforced, parse warnings, control characters stripped, staged npm releases.
 - [ ] ER aliases with spaces (`a["Bank Account"]`).
 - [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
       gitGraph (commit lanes). Registry makes each a one-file addition.
-- [ ] Demo app in `demo/` (SvelteKit or plain TUI capture), maybe a `bin` CLI
-      in the main package (mermaid/markdown → art).
+- [x] Demo app in `demo/` (SvelteKit, pulled from the old `classnames` branch,
+      classes stripped for now). lovely-mermaid by source alias;
+      svelte-asciiart via `bun link` until its 0.0.6 (with `cellSize`) is
+      published — Pages deploy waits on that.
+- [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
 
 ## Open questions
 
