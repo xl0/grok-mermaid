@@ -464,7 +464,17 @@ function parseLink(chars: string[], start: number): Link | null {
   if (right === 'none') {
     const textStart = skipSpaces(chars, i)
     let j = textStart
-    while (j < chars.length && !isLinkChar(chars[j])) j++
+    // The label runs to the closing operator, which always starts with two
+    // link chars (`--`, `-.`, `==`): a lone `=`/`.`/`-` is label text, and a
+    // quoted stretch is label text throughout (`A --"a=b"--> B`).
+    while (j < chars.length) {
+      if (chars[j] === '"') {
+        j++
+        while (j < chars.length && chars[j] !== '"') j++
+        if (j < chars.length) j++
+      } else if (isLinkChar(chars[j]) && isLinkChar(chars[j + 1])) break
+      else j++
+    }
     if (j < chars.length && j > textStart && chars[j] !== '<') {
       const text = chars.slice(textStart, j).join('')
       const op2Start = j

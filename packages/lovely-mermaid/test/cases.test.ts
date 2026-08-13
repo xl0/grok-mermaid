@@ -44,7 +44,8 @@ const files = (readdirSync(CASES, { recursive: true }) as string[])
 for (const file of files) {
   test(file.slice(0, -3), () => {
     const path = join(CASES, file)
-    const lines = readFileSync(path, 'utf8').split('\n')
+    const raw = readFileSync(path, 'utf8')
+    const lines = raw.split('\n')
     const blocks = blocksOf(lines, file)
     // Replacements of [start, end) line ranges, applied bottom-up after the pass.
     const edits: { start: number; end: number; rows: string[] }[] = []
@@ -82,8 +83,11 @@ for (const file of files) {
     if (edits.length > 0) {
       edits.sort((a, z) => z.start - a.start)
       for (const e of edits) lines.splice(e.start, e.end - e.start, ...e.rows)
-      writeFileSync(path, lines.join('\n'))
-      console.log(`updated ${file}`)
+      const next = lines.join('\n')
+      if (next !== raw) {
+        writeFileSync(path, next)
+        console.log(`updated ${file}`)
+      }
     }
   })
 }

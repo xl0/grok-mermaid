@@ -12,6 +12,10 @@
 
 - Author classes are surfaced: `A:::name` and `class A,B name` land on the spans of the cells that node paints (`span.classes`), and `classDef` declarations are parsed into `art.classDefs` (`{ name: { fill: '#f96', … } }`). The renderer never interprets either; `toAnsi` ignores them.
 
+### Fixed
+
+- Flowchart inline edge labels containing `=`, `.` or `-` — quoted (`A --"a=b"--> B`) or not (`A -- a=b --> B`) — render their label instead of being dropped or mangled; the label now runs to the closing operator ([#2](https://github.com/xl0/lovely-mermaid/issues/2)).
+
 ### Changed
 
 - Every grammar is now lenient. State, class, ER and sequence diagrams drop an unreadable statement with a warning and render the rest, instead of refusing the whole diagram; the one-final-line salvage retry is gone, subsumed by the general rule. A source in which nothing parses still returns `null`.
