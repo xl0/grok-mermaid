@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "test": "bun test",
+    "test:update": "UPDATE=1 bun test packages/lovely-mermaid/test/cases.test.ts",
     "check": "biome check .",
     "fix": "biome check --write .",
     "typecheck": "tsgo --noEmit -p packages/lovely-mermaid",

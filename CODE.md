@@ -304,11 +304,22 @@ notions is what the port dropped.
 
 ## Tests
 
-198 tests. `test/render.test.ts`, `test/parse.test.ts`, `test/layout.test.ts`
-and `test/labels.test.ts` descend from the upstream `mod tests` (intent
-preserved; updated where behaviour deliberately diverged). `test/width.test.ts`
-and `test/spans.test.ts` are new — the latter covers the span contract, which
-upstream has no equivalent of.
+107 tests. The bulk of rendering behaviour is pinned by markdown golden files
+in `test/cases/<type>/<name>.md`, run by `test/cases.test.ts`: each file holds
+one or more ```mermaid fences, each followed by a ```text fence with the
+expected `plain` (or a bare `(null)` line for sources that must refuse) and an
+optional ```warnings fence (absent = no warnings expected). GitHub renders the
+mermaid fences, so each file doubles as an official-mermaid vs our-art gallery.
+`bun run test:update` (repo root) rewrites the text/warnings fences from
+actual output for review via `git diff`.
+
+The programmatic suites keep what the art can't show: `test/spans.test.ts`
+(span contract), `test/width.test.ts`, `test/labels.test.ts` and
+`test/layout.test.ts` (unit-level), `test/parse.test.ts` (model invariants:
+edge endpoints/markers, entity decoding at sinks, choice shape),
+`test/render.test.ts` (classes/classDefs on spans, `diagramKind`, streaming
+flip counts, caps on generated sources, width reporting, sourceBox, control
+characters).
 
 The unit suite alone is not sufficient: it passed while four width bugs were
 live. `bun run differential` is what actually pins fidelity.
@@ -317,7 +328,8 @@ live. `bun run differential` is what actually pins fidelity.
 
 bun (runtime + test runner + workspace), tsgo (typecheck + emit), biome
 (lint + format, configured at the repo root). No runtime dependencies.
-Root scripts: `test`, `check`, `fix`, `typecheck`, `differential`; package
+Root scripts: `test`, `test:update`, `check`, `fix`, `typecheck`,
+`differential`; package
 scripts: `build`, `gen:width`, `gen:demo`, `release`, `prepublishOnly`.
 
 ## Releasing

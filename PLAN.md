@@ -15,7 +15,7 @@ and one module per diagram type so new types are cheap to add.
 ## [x] The port (2026-07)
 
 Skeleton, renderer, all five grammars, `toAnsi`, fallback box; upstream test
-suite ported (now 191 tests); differential harness over ~7180 cases —
+suite ported; differential harness over ~7180 cases —
 byte-identical at the fidelity cutoff (`617cbf3`). Post-cutoff wins: grapheme
 clustering via `Intl.Segmenter`, `width` reported instead of `maxWidth`
 enforced, parse warnings, control characters stripped, staged npm releases.
@@ -35,6 +35,9 @@ enforced, parse warnings, control characters stripped, staged npm releases.
   `span.classes` (flowchart `:::` + `class`, state `class`); `classDef`s
   parsed into `art.classDefs`. `toAnsi` stays role-only.
 - Package renamed `lovely-mermaid`; next release 0.3.0.
+- Tests reworked into markdown golden files (`test/cases/`, one runner,
+  `bun run test:update` to regenerate); programmatic tests keep only what
+  the art can't show.
 
 ## [ ] Release 0.3.0
 
