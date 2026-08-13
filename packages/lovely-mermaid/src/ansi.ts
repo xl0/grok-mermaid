@@ -1,12 +1,12 @@
-import type { Cls, MermaidArt } from './types.ts'
+import type { MermaidArt, Role } from './types.ts'
 
 const ESC = String.fromCharCode(27)
 
 /**
- * SGR parameter per semantic class, e.g. `'2'` for dim, `'36'` for cyan,
- * `'38;5;244'` for a 256-colour index. A class left out is printed unstyled.
+ * SGR parameter per role, e.g. `'2'` for dim, `'36'` for cyan,
+ * `'38;5;244'` for a 256-colour index. A role left out is printed unstyled.
  */
-export type AnsiTheme = Partial<Record<Cls, string>>
+export type AnsiTheme = Partial<Record<Role, string>>
 
 /** Dim frame, plain labels, cyan connectors. Readable on light and dark. */
 export const DEFAULT_THEME: AnsiTheme = {
@@ -26,7 +26,7 @@ export function toAnsi(art: MermaidArt, theme: AnsiTheme = DEFAULT_THEME): strin
   return art.styled.map((row) =>
     row
       .map((span) => {
-        const sgr = theme[span.cls]
+        const sgr = theme[span.role]
         return sgr === undefined ? span.text : `${ESC}[${sgr}m${span.text}${ESC}[0m`
       })
       .join(''),

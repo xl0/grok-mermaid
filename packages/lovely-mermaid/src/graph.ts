@@ -32,6 +32,19 @@ export type Dir = 'down' | 'up' | 'right' | 'left'
 export interface Node {
   label: string
   shape: Shape
+  /**
+   * Compartment content for class and ER boxes, pre-formatted by the parser:
+   * one string per row, one array per compartment (title, attributes,
+   * methods). Absent on plain nodes; layout draws whatever is here verbatim,
+   * separated by horizontal rules.
+   */
+  sections?: string[][]
+  /**
+   * Author-assigned class names, from `:::name` or a `class A,B name`
+   * statement. The renderer never interprets them; the cells the node paints
+   * carry them out through `Span.classes`.
+   */
+  classes?: string[]
 }
 
 export interface Edge {
@@ -48,15 +61,6 @@ export interface Group {
   label: string
   parent: number | null
 }
-
-/** Extra compartment content for class and ER boxes. */
-export interface ClassInfo {
-  annotation: string | null
-  attrs: string[]
-  methods: string[]
-}
-
-export const emptyClassInfo = (): ClassInfo => ({ annotation: null, attrs: [], methods: [] })
 
 /** `LR`/`RL`/`BT` as written in a header or `direction` statement; else `down`. */
 export function parseDir(token: string): Dir {
@@ -80,16 +84,22 @@ export class Graph {
   /** Innermost subgraph each node was declared in, parallel to `nodes`. */
   nodeGroup: (number | null)[] = []
   curGroup: number | null = null
-  /** Set when a cap was hit; the caller abandons the parse. */
-  overCap = false
   /**
-   * Text the flowchart grammar could not read and silently discarded.
-   *
-   * Flowchart parsing is deliberately lenient — a malformed statement
-   * contributes whatever prefix parsed and the rest is dropped — so without
-   * these the reader gets a clean diagram that is not what they wrote.
+   * Set when a size cap was hit, naming the cap. The parser stops consuming
+   * statements and renders the prefix, warning about the truncation — a
+   * streamed diagram that outgrows a cap can never shrink back under it, so
+   * a stable truncated render beats flipping to the source box for good.
+   */
+  truncated: string | null = null
+  /**
+   * Source the grammar could not read and dropped. Parsing is lenient in
+   * every grammar: a statement either contributes what parsed or is dropped
+   * and recorded here, so the reader can tell a clean diagram from one that
+   * is missing something they wrote.
    */
   warnings: string[] = []
+  /** Parsed `classDef` declarations: name -> property map. */
+  classDefs: Record<string, Record<string, string>> = {}
   dir: Dir = 'down'
 
   constructor(dir: Dir = 'down') {
@@ -99,7 +109,7 @@ export class Graph {
   /**
    * Index of `id`, creating the node if new. A later declaration carrying a
    * label overwrites the placeholder one an edge created. Returns `null` once
-   * `MAX_NODES` is reached, which aborts the parse.
+   * `MAX_NODES` is reached, which truncates the parse.
    */
   nodeIndex(id: string, label: string | null, shape: Shape): number | null {
     const existing = this.index.get(id)
@@ -111,7 +121,7 @@ export class Graph {
       return existing
     }
     if (this.nodes.length >= MAX_NODES) {
-      this.overCap = true
+      this.truncated ??= `node cap (${MAX_NODES}) reached`
       return null
     }
     this.index.set(id, this.nodes.length)
@@ -130,10 +140,25 @@ export class Graph {
     return this.nodeIndex(id, label, 'round')
   }
 
-  /** Append an edge, or flag `overCap` when `MAX_EDGES` is reached. */
+  /** Attach an author class name to a node, ignoring a repeat. */
+  addClass(idx: number, name: string): void {
+    const node = this.nodes[idx]
+    node.classes ??= []
+    if (!node.classes.includes(name)) node.classes.push(name)
+  }
+
+  /**
+   * Record an unreadable statement; the diagram renders without it. Skipped
+   * once truncated — a cap-caused parse failure is not the statement's fault.
+   */
+  drop(st: string): void {
+    if (this.truncated === null) this.warnings.push(`dropped, unreadable statement: "${st}"`)
+  }
+
+  /** Append an edge, or flag `truncated` when `MAX_EDGES` is reached. */
   pushEdge(edge: Edge): boolean {
     if (this.edges.length >= MAX_EDGES) {
-      this.overCap = true
+      this.truncated ??= `edge cap (${MAX_EDGES}) reached`
       return false
     }
     this.edges.push(edge)

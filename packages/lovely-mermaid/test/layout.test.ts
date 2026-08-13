@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
+import { parseGraph } from '../src/diagrams/flowchart.ts'
 import { computeRanks, countCrossings, orderRanks } from '../src/layout.ts'
-import { parseGraph } from '../src/parse.ts'
 
 function orderedRanks(src: string) {
   const g = parseGraph(src)

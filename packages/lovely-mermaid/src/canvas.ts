@@ -1,4 +1,4 @@
-import type { Cls, Span } from './types.ts'
+import type { Role, Span } from './types.ts'
 import { measured } from './width.ts'
 
 /**
@@ -30,18 +30,23 @@ export class Canvas {
   readonly w: number
   readonly h: number
   ch: string[]
-  cls: Cls[]
+  role: Role[]
+  /** Space-joined author classes per cell, or undefined; see `Span.classes`. */
+  tag: (string | undefined)[]
   mask: Uint8Array
   style: Uint8Array
   occupied: Uint8Array
   curStyle: number = STY_SOLID
+  /** Author classes stamped on cells painted while set, like `curStyle`. */
+  curTag: string | undefined
 
   constructor(w: number, h: number) {
     const n = w * h
     this.w = w
     this.h = h
     this.ch = new Array(n).fill(' ')
-    this.cls = new Array(n).fill('none')
+    this.role = new Array(n).fill('none')
+    this.tag = new Array(n).fill(undefined)
     this.mask = new Uint8Array(n)
     this.style = new Uint8Array(n)
     this.occupied = new Uint8Array(n)
@@ -51,26 +56,28 @@ export class Canvas {
     return y * this.w + x
   }
 
-  set(x: number, y: number, c: string, cls: Cls): void {
+  set(x: number, y: number, c: string, role: Role): void {
     if (x >= this.w || y >= this.h) return
     const i = this.idx(x, y)
     this.ch[i] = c
-    this.cls[i] = cls
+    this.role[i] = role
+    if (this.curTag !== undefined) this.tag[i] = this.curTag
   }
 
   /**
    * Accumulate direction bits on a free cell.
    *
-   * `cls` is the class to claim the cell for; `border` cells are never
+   * `role` is the role to claim the cell for; `border` cells are never
    * reclassified, so a connector meeting a box keeps the box's styling.
    */
-  addBits(x: number, y: number, bits: number, cls: Cls = 'edge'): void {
+  addBits(x: number, y: number, bits: number, role: Role = 'edge'): void {
     if (x >= this.w || y >= this.h) return
     const i = this.idx(x, y)
     if (this.occupied[i]) return
     this.mask[i] |= bits
     this.style[i] |= this.curStyle
-    if (this.cls[i] !== 'border') this.cls[i] = cls
+    if (this.role[i] !== 'border') this.role[i] = role
+    if (this.curTag !== undefined) this.tag[i] = this.curTag
   }
 
   /** Stamp a finished sub-canvas (a subgraph frame's contents) at an offset. */
@@ -83,7 +90,8 @@ export class Canvas {
         const si = sub.idx(sx, sy)
         const di = this.idx(x, y)
         this.ch[di] = sub.ch[si]
-        this.cls[di] = sub.cls[si]
+        this.role[di] = sub.role[si]
+        this.tag[di] = sub.tag[si]
         this.style[di] = sub.style[si]
         this.occupied[di] = 1
       }
@@ -95,7 +103,7 @@ export class Canvas {
     if (x >= this.w || y >= this.h) return
     const i = this.idx(x, y)
     this.mask[i] |= bits
-    if (this.cls[i] !== 'border') this.cls[i] = 'edge'
+    if (this.role[i] !== 'border') this.role[i] = 'edge'
   }
 
   segV(x: number, y0: number, y1: number): void {
@@ -142,7 +150,8 @@ export class Canvas {
         const i = this.idx(x, y)
         const j = this.idx(x, y2)
         ;[this.ch[i], this.ch[j]] = [this.ch[j], this.ch[i]]
-        ;[this.cls[i], this.cls[j]] = [this.cls[j], this.cls[i]]
+        ;[this.role[i], this.role[j]] = [this.role[j], this.role[i]]
+        ;[this.tag[i], this.tag[j]] = [this.tag[j], this.tag[i]]
       }
     }
     for (let i = 0; i < this.ch.length; i++) this.ch[i] = flipGlyphV(this.ch[i])
@@ -159,17 +168,18 @@ export class Canvas {
         const i = this.idx(x, y)
         const j = this.idx(x2, y)
         ;[this.ch[i], this.ch[j]] = [this.ch[j], this.ch[i]]
-        ;[this.cls[i], this.cls[j]] = [this.cls[j], this.cls[i]]
+        ;[this.role[i], this.role[j]] = [this.role[j], this.role[i]]
+        ;[this.tag[i], this.tag[j]] = [this.tag[j], this.tag[i]]
       }
     }
     for (let i = 0; i < this.ch.length; i++) this.ch[i] = flipGlyphH(this.ch[i])
     for (let y = 0; y < this.h; y++) {
       let x = 0
       while (x < this.w) {
-        const cls = this.cls[this.idx(x, y)]
-        if (cls === 'text' || cls === 'edgeLabel') {
+        const role = this.role[this.idx(x, y)]
+        if (role === 'text' || role === 'edgeLabel') {
           const start = this.idx(x, y)
-          while (x < this.w && this.cls[this.idx(x, y)] === cls) x++
+          while (x < this.w && this.role[this.idx(x, y)] === role) x++
           const end = this.idx(x, y)
           reverseSlice(this.ch, start, end)
         } else {
@@ -179,7 +189,7 @@ export class Canvas {
     }
   }
 
-  /** Group each row into runs of one class, dropping wide-glyph continuations. */
+  /** Group each row into runs of one role and tag, dropping continuations. */
   toLines(): { plain: string[]; styled: Span[][]; width: number } {
     const plain: string[] = []
     const styled: Span[][] = []
@@ -196,23 +206,28 @@ export class Canvas {
       }
       width = Math.max(width, last)
       const spans: Span[] = []
+      const push = (text: string, role: Role, tag: string | undefined): void => {
+        if (text === '') return
+        spans.push(tag === undefined ? { text, role } : { text, role, classes: tag.split(' ') })
+      }
       let plainRow = ''
       let run = ''
-      let runCls: Cls = 'none'
+      let runRole: Role = 'none'
+      let runTag: string | undefined
       for (let x = 0; x < last; x++) {
         const i = this.idx(x, y)
         const c = this.ch[i]
         if (c === CONT) continue
-        const cls = this.cls[i]
         plainRow += c
-        if (cls !== runCls && run !== '') {
-          spans.push({ text: run, cls: runCls })
+        if ((this.role[i] !== runRole || this.tag[i] !== runTag) && run !== '') {
+          push(run, runRole, runTag)
           run = ''
         }
-        runCls = cls
+        runRole = this.role[i]
+        runTag = this.tag[i]
         run += c
       }
-      if (run !== '') spans.push({ text: run, cls: runCls })
+      push(run, runRole, runTag)
       styled.push(spans)
       // Only ASCII spaces, which is all a blank cell ever holds. Trimming `\s`
       // would eat a trailing NBSP that `styled` keeps, desyncing the two.
@@ -238,12 +253,12 @@ function reverseSlice(arr: string[], start: number, end: number): void {
  * A wide cluster claims a second cell, marked with `CONT` so the line builder
  * emits one character for it rather than a stray space.
  */
-export function drawText(canvas: Canvas, text: string, x: number, y: number, cls: Cls): void {
+export function drawText(canvas: Canvas, text: string, x: number, y: number, role: Role): void {
   let cur = x
   for (const [cluster, cw] of measured(text)) {
     if (cw === 0) continue
-    canvas.set(cur, y, cluster, cls)
-    for (let k = 1; k < cw; k++) canvas.set(cur + k, y, CONT, cls)
+    canvas.set(cur, y, cluster, role)
+    for (let k = 1; k < cw; k++) canvas.set(cur + k, y, CONT, role)
     cur += cw
   }
 }
@@ -259,14 +274,14 @@ export function drawTextOverEdges(
   text: string,
   x: number,
   y: number,
-  cls: Cls,
+  role: Role,
 ): void {
   let cur = x
   for (const [cluster, cw] of measured(text)) {
     if (cw === 0) continue
     for (let k = 0; k < cw; k++) {
       if (cur + k < canvas.w && y < canvas.h) canvas.mask[canvas.idx(cur + k, y)] = 0
-      canvas.set(cur + k, y, k === 0 ? cluster : CONT, cls)
+      canvas.set(cur + k, y, k === 0 ? cluster : CONT, role)
     }
     cur += cw
   }

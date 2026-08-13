@@ -8,9 +8,9 @@
  */
 
 import { Canvas, D, drawTextOverEdges, L, R, U } from './canvas.ts'
+import type { NoteAnchor, SeqItem, Sequence } from './diagrams/sequence.ts'
 import { fitLabel, WRAP_WIDTH } from './labels.ts'
 import { type CanvasResult, drawBox, type Placed } from './layout.ts'
-import type { NoteAnchor, SeqItem, Sequence } from './parse.ts'
 import { stringWidth } from './width.ts'
 
 const PAD = 1

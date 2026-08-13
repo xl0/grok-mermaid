@@ -38,7 +38,7 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Verify release tag matches package version
-        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./packages/lovely-mermaid/package.json').version")"
 
       # prepublishOnly's steps, run explicitly so a failure names itself and so
       # the publish below can skip lifecycle scripts entirely.
@@ -46,18 +46,20 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run build
+        working-directory: packages/lovely-mermaid
 
       # Skipping an already-published version is what lets a half-failed release
       # be re-run. A registry error still fails: only a 404 means "not there".
       # Staged-but-unapproved versions are invisible to `npm view`; re-running
       # then fails on the stage publish itself (versions share one index).
       - name: Stage on npm
+        working-directory: packages/lovely-mermaid
         run: |
           set -euo pipefail
 
           version="$(node -p "require('./package.json').version")"
-          if seen="$(npm view "grok-mermaid@${version}" version 2>&1)"; then
-            echo "grok-mermaid@${version} is already published (${seen}); skipping."
+          if seen="$(npm view "lovely-mermaid@${version}" version 2>&1)"; then
+            echo "lovely-mermaid@${version} is already published (${seen}); skipping."
             exit 0
           fi
           case "$seen" in
@@ -93,7 +95,7 @@ jobs:
             index($0, want) == 1 { found = 1; next }
             found && /^## \[/ { exit }
             found { print }
-          ' CHANGELOG.md > NOTES.md
+          ' packages/lovely-mermaid/CHANGELOG.md > NOTES.md
 
           test -s NOTES.md || { echo "::error::no CHANGELOG.md section for $GITHUB_REF_NAME"; exit 1; }
 

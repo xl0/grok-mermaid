@@ -1,11 +1,13 @@
-# grok-mermaid
+# lovely-mermaid
 
 Render Mermaid diagrams as Unicode box-drawing art, for terminals.
 
-A TypeScript port of the terminal Mermaid renderer in
+Formerly published as `grok-mermaid`. Started as a TypeScript port of the
+terminal Mermaid renderer in
 [xai-org/grok-build](https://github.com/xai-org/grok-build)
-(`crates/codegen/xai-grok-markdown/src/mermaid.rs`). No browser, no headless
-Chrome, no SVG — a self-contained layout engine that emits text.
+(`crates/codegen/xai-grok-markdown/src/mermaid.rs`); diverges deliberately
+where terminal output can be better. No browser, no headless Chrome, no SVG —
+a self-contained layout engine that emits text.
 
 ```
       ┌──────────────┐
@@ -31,13 +33,13 @@ Chrome, no SVG — a self-contained layout engine that emits text.
 ## Install
 
 ```sh
-npm install grok-mermaid
+npm install lovely-mermaid
 ```
 
 ## Usage
 
 ```ts
-import { render } from 'grok-mermaid'
+import { render } from 'lovely-mermaid'
 
 const art = render('flowchart LR\n  A[Start] --> B[Done]')
 if (art) console.log(art.plain.join('\n'))
@@ -45,26 +47,29 @@ if (art) console.log(art.plain.join('\n'))
 
 `render` draws the diagram at whatever size it needs and reports that as
 `art.width`. It returns `null` when there is no art to show: blank input, a
-syntax error, a diagram type it does not draw, or one large enough that laying
-it out is refused.
+diagram type it does not draw, or a source in which not one statement parsed.
 
 ### Syntax errors
 
-Rendering is best-effort: a source that does not fully parse still draws what it
-can, and reports the rest in `art.warnings`.
+Rendering is best-effort in every grammar: a source that does not fully parse
+still draws what it can, and reports the rest in `art.warnings`.
 
 ```ts
-// Flowcharts are lenient, as mermaid.js is: the parseable prefix survives.
+// Flowcharts keep the parseable prefix of a statement, as mermaid.js does.
 render('graph TD\n A[Start --> B')
 // plain     one box labelled `Start --> B` — the edge you wrote is gone
 // warnings  ['node "A": label is missing its closing `]`']
 
-// The rest fail on any unreadable statement, but retry once without the last
-// line — the one a half-finished source ends on.
+// The other grammars drop unreadable statements individually.
 render('stateDiagram-v2\n A --> B\n some garbage line')
 // plain     the A --> B transition, drawn
-// warnings  ['dropped, unreadable final line: "some garbage line"']
+// warnings  ['dropped, unreadable statement: "some garbage line"']
 ```
+
+A diagram that outgrows a size cap (128 nodes, 512 edges) renders its prefix
+with a `diagram truncated: …` warning instead of disappearing — a streamed
+diagram can never shrink back under a cap, so a stable truncated render beats
+flipping to the source box for good.
 
 An empty `warnings` means the whole source made it into the art.
 
@@ -88,7 +93,7 @@ Call `render` on each prefix as it arrives — no special handling, no waiting f
 a complete diagram. Best-effort parsing is what keeps it drawn instead of
 alternating with the source box.
 
-<img src="https://raw.githubusercontent.com/xl0/grok-mermaid/master/docs/streaming.gif" width="900" alt="A terminal replaying a stream of Mermaid diagrams — flowcharts and a state machine drawing themselves as box-drawing art, each one growing in place without ever reverting to a block of source text.">
+<img src="https://raw.githubusercontent.com/xl0/lovely-mermaid/master/packages/lovely-mermaid/docs/streaming.gif" width="900" alt="A terminal replaying a stream of Mermaid diagrams — flowcharts and a state machine drawing themselves as box-drawing art, each one growing in place without ever reverting to a block of source text.">
 
 ### Fitting a viewport
 
@@ -97,7 +102,7 @@ wide diagram should be shrunk, scrolled, linked to an image or just printed, so
 the decision stays with you — compare `art.width` against the space you have:
 
 ```ts
-import { render, sourceBox } from 'grok-mermaid'
+import { render, sourceBox } from 'lovely-mermaid'
 
 const cols = process.stdout.columns
 const art = render(src)
@@ -115,26 +120,27 @@ exist, but it is yours to choose and yours to caption.
 ### Colour
 
 The core is colour-blind. `styled` carries the same rows as `plain`, split into
-runs tagged with a semantic class, so you map classes to your own theme:
+runs tagged with a role — what a cell *is* — so you map roles to your own
+theme:
 
-<img src="https://raw.githubusercontent.com/xl0/grok-mermaid/master/docs/demo.svg" width="330" alt="A flowchart rendered as Unicode box-drawing art on a dark panel: grey box outlines, white node labels, cyan connectors and arrowheads, grey edge labels.">
+<img src="https://raw.githubusercontent.com/xl0/lovely-mermaid/master/packages/lovely-mermaid/docs/demo.svg" width="330" alt="A flowchart rendered as Unicode box-drawing art on a dark panel: grey box outlines, white node labels, cyan connectors and arrowheads, grey edge labels.">
 
 That image is real `render()` output painted through one such theme.
 
 ```ts
-import { type Cls, render } from 'grok-mermaid'
+import { type Role, render } from 'lovely-mermaid'
 
 const art = render(src)!
 
-const theme: Partial<Record<Cls, (s: string) => string>> = {
+const theme: Partial<Record<Role, (s: string) => string>> = {
   border: dim, text: white, edge: cyan, edgeLabel: gray,
 }
 const out = art.styled.map((row) =>
-  row.map((span) => (theme[span.cls] ?? identity)(span.text)).join(''),
+  row.map((span) => (theme[span.role] ?? identity)(span.text)).join(''),
 )
 ```
 
-| Class | What it covers |
+| Role | What it covers |
 | --- | --- |
 | `border` | box outlines, subgraph frames, compartment rules |
 | `text` | node, participant and compartment labels |
@@ -150,14 +156,31 @@ a worker.
 For the common case there is a helper:
 
 ```ts
-import { render, toAnsi } from 'grok-mermaid'
+import { render, toAnsi } from 'lovely-mermaid'
 
 console.log(toAnsi(render(src)!).join('\n'))
 ```
 
-`toAnsi(art, theme)` takes `Partial<Record<Cls, string>>` of SGR parameters
+`toAnsi(art, theme)` takes `Partial<Record<Role, string>>` of SGR parameters
 (`'2'` dim, `'36'` cyan, `'38;5;244'` for 256-colour), defaulting to a dim
 frame with cyan connectors.
+
+### Author classes
+
+Roles are what the renderer decided a cell is; classes are what the author
+assigned. `A:::hot` and `class A,B hot` tag nodes, and the cells those nodes
+paint carry the names out through `span.classes`. `classDef` declarations are
+parsed and surfaced on `art.classDefs`, uninterpreted:
+
+```ts
+const art = render('flowchart TD\n A[DB]:::hot --> B\n classDef hot fill:#f96')!
+art.classDefs               // { hot: { fill: '#f96' } }
+art.styled.flat().find((s) => s.text.includes('DB'))?.classes  // ['hot']
+```
+
+The renderer never styles by class itself — map `classDefs` (or your own
+palette) onto the classed spans however your UI styles things. `toAnsi`
+ignores classes.
 
 ## Supported diagrams
 

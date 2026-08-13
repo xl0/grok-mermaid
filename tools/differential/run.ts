@@ -50,8 +50,10 @@ const golden = (
   await run([join(here, 'target/release/differential')], here, `${corpus.join('\n')}\n`)
 ).split('\n')
 
-const { render, sourceBox } = await import('../../src/index.ts')
-const { measured, stringWidth } = await import('../../src/width.ts')
+const { diagramKind, render, sourceBox } = await import(
+  '../../packages/lovely-mermaid/src/index.ts'
+)
+const { measured, stringWidth } = await import('../../packages/lovely-mermaid/src/width.ts')
 
 const TOO_WIDE_HINT =
   'This diagram is too wide to display here — open the image to view it in full.'
@@ -149,14 +151,31 @@ function expectedToDiffer(src: string): boolean {
  */
 /**
  * Upstream fails a state / class / ER / sequence diagram outright on one
- * unreadable statement. The port retries once without the final line, so a
- * source whose last statement is junk — or, while streaming, half-typed —
- * draws the rest instead of printing itself. The drop is always warned about.
+ * unreadable statement, and refuses any diagram over a size cap. The port is
+ * lenient everywhere: unreadable statements drop with a warning, caps truncate
+ * with a warning, and the rest renders. Upstream box + our warned art =
+ * deliberate.
  */
-function salvagedHere(src: string, want: string): boolean {
+function lenientHere(src: string, want: string): boolean {
   if (!want.includes('mermaid: ')) return false
-  const warnings = render(src)?.warnings ?? []
-  return warnings.some((w) => w.startsWith('dropped, unreadable final line'))
+  return (render(src)?.warnings.length ?? 0) > 0
+}
+
+/**
+ * Upstream matches `stateDiagram`/`classDiagram` headers by prefix, accepting
+ * junk like `stateDiagramFoo` that mermaid proper rejects; the port matches
+ * exactly. Upstream art + our source box on such a header = deliberate.
+ */
+function stricterHeaderHere(src: string, want: string): boolean {
+  const header =
+    src
+      .trimStart()
+      .split(/[\s;]+/)[0]
+      ?.toLowerCase() ?? ''
+  const junkHeader =
+    (header.startsWith('statediagram') || header.startsWith('classdiagram')) &&
+    diagramKind(src) === null
+  return junkHeader && !want.includes('mermaid: ')
 }
 
 function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): boolean {
@@ -180,7 +199,8 @@ function trimmedOnlyHere(want: string, got: string): boolean {
 
 let same = 0
 const expected: number[] = []
-const salvaged: number[] = []
+const lenient: number[] = []
+const header: number[] = []
 const slack: number[] = []
 const trimmed: number[] = []
 const regressions: { i: number; width: string; src: string; want: string; got: string }[] = []
@@ -194,7 +214,8 @@ corpus.forEach((line, i) => {
   if (got === golden[i]) same++
   else if (trimmedOnlyHere(golden[i], got)) trimmed.push(i)
   else if (expectedToDiffer(src)) expected.push(i)
-  else if (salvagedHere(src, golden[i])) salvaged.push(i)
+  else if (lenientHere(src, golden[i])) lenient.push(i)
+  else if (stricterHeaderHere(src, golden[i])) header.push(i)
   else if (fitsOnlyHere(src, maxWidth, golden[i])) slack.push(i)
   else regressions.push({ i, width, src, want: golden[i], got })
 })
@@ -202,7 +223,10 @@ corpus.forEach((line, i) => {
 console.log(`\ncases:       ${corpus.length}`)
 console.log(`identical:   ${same}`)
 console.log(`expected:    ${expected.length}  (grapheme clustering — see CODE.md)`)
-console.log(`salvaged:    ${salvaged.length}  (unreadable final line dropped — see CODE.md)`)
+console.log(
+  `lenient:     ${lenient.length}  (unreadable statements dropped, caps truncate — see CODE.md)`,
+)
+console.log(`header:      ${header.length}  (exact header match — see CODE.md)`)
 console.log(`slack:       ${slack.length}  (painted vs allocated width — see CODE.md)`)
 console.log(`trimmed:     ${trimmed.length}  (empty outer rows removed — see CODE.md)`)
 console.log(`regressions: ${regressions.length}`)

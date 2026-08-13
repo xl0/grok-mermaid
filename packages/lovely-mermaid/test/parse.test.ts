@@ -1,14 +1,10 @@
 import { expect, test } from 'bun:test'
-import { emptyClassInfo } from '../src/graph.ts'
-import {
-  parseClass,
-  parseEr,
-  parseGraph,
-  parseSequence,
-  parseState,
-  pushErAttribute,
-  pushMember,
-} from '../src/parse.ts'
+import { parseClass, pushMember } from '../src/diagrams/class.ts'
+import { parseEr, pushErAttribute } from '../src/diagrams/er.ts'
+import { parseGraph } from '../src/diagrams/flowchart.ts'
+import { parseSequence } from '../src/diagrams/sequence.ts'
+import { parseState } from '../src/diagrams/state.ts'
+import type { Node } from '../src/graph.ts'
 
 const graphOf = (src: string) => {
   const g = parseGraph(src)
@@ -226,9 +222,7 @@ test('entities decode at every direct-push sink', () => {
 
   const cls = parseClass('classDiagram\n  A --> B : "uses &lt;X&gt;"')
   expect(
-    cls?.graph.edges.some(
-      (e) => e.label?.includes('uses <X>') === true && !e.label.includes('&lt;'),
-    ),
+    cls?.edges.some((e) => e.label?.includes('uses <X>') === true && !e.label.includes('&lt;')),
   ).toBe(true)
 
   const seq = parseSequence(
@@ -248,12 +242,12 @@ test('entities decode at every direct-push sink', () => {
 
   // Class members and ER attributes have no clean quoted form, so exercise
   // those decodes at the finalizer directly.
-  const member = emptyClassInfo()
+  const member: Node = { label: 'M', shape: 'rect', sections: [['M'], [], []] }
   pushMember(member, '+run &lt;R&gt;')
-  expect(member.attrs).toEqual(['+run <R>'])
-  const attr = emptyClassInfo()
+  expect(member.sections?.[1]).toEqual(['+run <R>'])
+  const attr: Node = { label: 'A', shape: 'rect', sections: [['A'], []] }
   pushErAttribute(attr, 'string &lt;pk&gt;')
-  expect(attr.attrs).toEqual(['string <pk>'])
+  expect(attr.sections?.[1]).toEqual(['string <pk>'])
 })
 
 test('a choice state parses as a diamond', () => {
@@ -309,14 +303,14 @@ test('a state chain with markers and a label', () => {
 
 test('class realization is a dotted triangle', () => {
   const cls = parseClass('classDiagram\n IShape <|.. Circle')
-  expect(cls?.graph.edges[0].headFrom).toBe('triangle')
-  expect(cls?.graph.edges[0].line).toBe('dotted')
+  expect(cls?.edges[0].headFrom).toBe('triangle')
+  expect(cls?.edges[0].line).toBe('dotted')
 })
 
 test('class dependency is a dotted arrow', () => {
   const cls = parseClass('classDiagram\n A ..> B')
-  expect(cls?.graph.edges[0].headTo).toBe('arrow')
-  expect(cls?.graph.edges[0].line).toBe('dotted')
+  expect(cls?.edges[0].headTo).toBe('arrow')
+  expect(cls?.edges[0].line).toBe('dotted')
 })
 
 test('ER cardinality operators map to labels', () => {
@@ -329,15 +323,15 @@ test('ER cardinality operators map to labels', () => {
   ]
   for (const [op, l, r] of cases) {
     const g = parseEr(`erDiagram\n A ${op} B : x`)
-    expect(g?.graph.edges[0].label).toBe(`${l} x ${r}`)
-    expect(g?.graph.edges[0].line).toBe('solid')
+    expect(g?.edges[0].label).toBe(`${l} x ${r}`)
+    expect(g?.edges[0].line).toBe('solid')
   }
-  expect(parseEr('erDiagram\n A ||..o{ B : x')?.graph.edges[0].line).toBe('dotted')
+  expect(parseEr('erDiagram\n A ||..o{ B : x')?.edges[0].line).toBe('dotted')
   expect(parseEr('erDiagram\n A ||==o{ B : x')).toBeNull()
   expect(parseEr('erDiagram\n A garbage B : x')).toBeNull()
 })
 
 test('an ER entity may be declared bare', () => {
   const g = parseEr('erDiagram\n LONER\n A ||--|| B : linked')
-  expect(g?.graph.nodes.length).toBe(3)
+  expect(g?.nodes.length).toBe(3)
 })

@@ -70,7 +70,7 @@ test('adjacent spans never repeat a class', () => {
   for (const [name, art] of CORPUS) {
     for (const row of art.styled) {
       for (let i = 1; i < row.length; i++) {
-        expect(`${name}: ${row[i].cls}`).not.toBe(`${name}: ${row[i - 1].cls}`)
+        expect(`${name}: ${row[i].role}`).not.toBe(`${name}: ${row[i - 1].role}`)
       }
     }
   }
@@ -80,7 +80,7 @@ test('a box outline is a single border span', () => {
   const art = render('graph TD\n A[Start] --> B[End]')
   if (art === null) throw new Error('render drew nothing')
   const top = art.styled[art.plain.findIndex((l) => l.includes('┌'))]
-  expect(top.filter((s) => s.cls !== 'none')).toEqual([{ text: '┌───────┐', cls: 'border' }])
+  expect(top.filter((s) => s.role !== 'none')).toEqual([{ text: '┌───────┐', role: 'border' }])
 })
 
 test('toAnsi leaves text intact when the theme is empty', () => {

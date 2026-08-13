@@ -1,130 +1,69 @@
 # Plan
 
-Port the terminal Mermaid renderer from `xai-org/grok-build`
-(`crates/codegen/xai-grok-markdown/src/mermaid.rs`) to a modern TypeScript
-library.
+`lovely-mermaid`: render Mermaid as Unicode box-drawing art for terminals.
+Born as a byte-faithful port of the Rust renderer in `xai-org/grok-build`;
+that bar has been met and retired. The bar now is good terminal output — the
+differential harness gates on regressions only, and every deliberate
+divergence is listed in `CODE.md`. `REDESIGN.md` holds the design review that
+set the current direction.
 
-**Intent:** output-compatible with the Rust original — same layout decisions,
-same glyphs, same fallbacks. Deviations must be deliberate and recorded in
-`CODE.md`. The public API is idiomatic TS (semantic spans, no ratatui types);
-everything under it mirrors the Rust structure closely enough to diff against
-upstream when it changes.
+**Intent:** best-effort rendering everywhere (draw as much as possible, warn
+about the rest — it is what makes streaming work), a small semantic API
+(`role` for what the renderer decided, `classes` for what the author wrote),
+and one module per diagram type so new types are cheap to add.
 
-Cargo has no usable toolchain here, so golden files cannot be generated from
-the Rust build. The upstream `mod tests` suite was ported instead.
+## [x] The port (2026-07)
 
-## [x] Skeleton
+Skeleton, renderer, all five grammars, `toAnsi`, fallback box; upstream test
+suite ported (now 191 tests); differential harness over ~7180 cases —
+byte-identical at the fidelity cutoff (`617cbf3`). Post-cutoff wins: grapheme
+clustering via `Intl.Segmenter`, `width` reported instead of `maxWidth`
+enforced, parse warnings, control characters stripped, staged npm releases.
 
-Package, tsgo, biome, Apache-2.0 attribution, public types.
+## [x] Redesign (2026-08-12)
 
-## [x] Renderer
+- Workspace: library moved to `packages/lovely-mermaid`; `demo/` to come as a
+  sibling. Tools stay at the repo root. Repo renamed to `xl0/lovely-mermaid`.
+- `parse.ts` split into `statements.ts` + `diagrams/{flowchart,state,class,er,
+  sequence}.ts` + `registry.ts`; `diagramKind` and dispatch derive from one
+  table. `ClassInfo` parallel arrays replaced by `Node.sections`.
+- Lenient everywhere: strict grammars drop unreadable statements with
+  warnings (block bodies swallowed structurally); the salvage retry died.
+  Caps truncate with a warning instead of refusing (`MAX_CANVAS_CELLS` stays
+  fatal). Headers match exactly.
+- API: `Cls`/`span.cls` → `Role`/`span.role`; author classes surfaced on
+  `span.classes` (flowchart `:::` + `class`, state `class`); `classDef`s
+  parsed into `art.classDefs`. `toAnsi` stays role-only.
+- Package renamed `lovely-mermaid`; next release 0.3.0.
 
-Width tables generated from Unicode 17; canvas with direction-bit glyph
-resolution; label cleaning; all five parsers; graph and sequence layout;
-fallback box; `toAnsi` helper.
+## [ ] Release 0.3.0
 
-## [x] Tests
+- [ ] Re-create the npm trusted publisher for `lovely-mermaid` (stage-only,
+      `publish.yml`), then `bun run release minor` from the package dir.
+- [ ] Deprecate `grok-mermaid` on npm with a pointer.
 
-184 passing. Upstream suite ported, plus new width, span-contract,
-syntax-warning and streaming-stability tests.
-Fuzzed 20k generated sources: no throws, span invariant holds throughout.
+## [ ] Features (order from REDESIGN.md)
 
-## [x] Differential verification
-
-`bun run differential` diffs ~7180 rendered cases against the Rust original.
-7180/7180 identical. Found four width/line bugs the unit suite missed.
-Per-code-point widths are now generated from the `unicode-width` crate itself
-rather than re-derived from the UCD.
-
-**This is the fidelity cutoff.** Up to this commit the port matches upstream
-byte for byte. Deviations after it are deliberate and listed below.
-
-## [x] Grapheme clustering (post-cutoff)
-
-Measure and paint in grapheme clusters, via `Intl.Segmenter`. Fixes emoji and
-combining sequences overflowing their boxes — an upstream bug the port had
-faithfully reproduced — and deletes the hand-written Unicode clustering and its
-Extended_Pictographic table. `width.ts` 147 → 73 lines, `width-data.ts` one
-column instead of two, `drawWidth`/`codePointWidth` gone from the public
-surface. Differential: 0 regressions, 1987 expected divergences.
-
-## [x] Width is the caller's decision (post-cutoff, API break)
-
-`render(src)` no longer takes `maxWidth`. It lays the diagram out at its natural
-size and reports `art.width`; the caller compares that against the space it has
-and decides. `sourceBox(src, maxWidth?)` is public and opt-in — `render` never
-substitutes it, and never emits prose about images the library cannot know
-exist. Removed the `maxWidth` parameter from seven signatures, the `Oversize`
-union, `RenderOptions` and the `hint` class.
-
-Upstream's width gate lives on in `tools/differential/run.ts`, which is the only
-place that needs it — to keep comparing byte for byte against Rust.
-
-## [x] Syntax errors are reported, not swallowed (post-cutoff)
-
-Flowchart parsing is lenient by inheritance, so a malformed statement kept its
-prefix and dropped the rest in silence — a clean diagram missing an edge the
-author wrote. Every drop now lands in `art.warnings`: unterminated label
-brackets, text where a link was expected, links with no target, statements that
-are not nodes. Zero warnings across the 134 hand-written corpus diagrams.
-
-`diagramKind(src)` reads the header alone, separating the two `null`s a caller
-would word differently: malformed vs a type this renderer does not draw.
-
-Warnings are advisory. Gating rendering on them makes a streaming diagram flip
-between art and source box 11 times where ignoring them flips once — the docs
-now say so outright, and a test pins it.
-
-## [x] Best-effort rendering for the strict grammars (post-cutoff)
-
-State, class, ER and sequence failed a whole diagram on one unreadable
-statement, so a streamed one alternated with the source box the entire way in.
-They now get a single retry without the final line — the only one a partial
-source can end mid-way through — and draw the rest, warning about the drop.
-Streaming flips: sequence 7 → 1, class 3 → 1, state 7 → 3, flowchart already 1.
-
-Exactly one line, once. Two bad lines still yield `null`; this salvages a
-trailing fragment rather than hunting for a parseable subset. `attempt` now
-dispatches via `diagramKind` instead of trying all five parsers, which makes the
-retry one branch. Differential: 58 `salvaged` cases, 0 regressions.
-
-## [ ] Possible further divergence
-
-Byte-compatibility is no longer the bar; good-looking output is. The
-differential harness now gates on regressions only, so each change can be
-reviewed against upstream rather than blocked by it.
-
-Candidates, none obviously worth it yet:
-- **Auto-orient to fit.** Retry a too-wide layout with the flow axis swapped
-  (`down`↔`right`), since `dir` is already a free layout input. Measured on 12
-  realistic diagrams at 80 columns: five overflow, tightening `WRAP_WIDTH` /
-  `GAP_X` / `MAX_LABEL` rescues none of them, flipping rescues all five (133→24,
-  149→45). Layout costs 0.48 ms, so retrying is free. Wants a caller-visible
-  opt-in, since it overrides the author's declared direction — hence parked
-  until someone asks.
-- Sequence diagrams have no orientation lever and are the stuck case. Their
-  message text is never truncated, unlike every other label; capping it at
-  `MAX_LABEL` is the one-line equivalent.
-- Truncate the source-box title so the box always honours `maxWidth`. Judged not
-  worth it: only a junk header overflows a realistic viewport.
-- Wrap source-box body lines on word boundaries rather than hard-chunking.
-- Revisit the `assignTracks` O(n²) compatibility scan if large diagrams show up.
-
-Done post-cutoff: literal control characters are stripped at both public entry
-points (they broke box geometry and leaked ANSI into the caller's terminal);
-empty canvas rows outside the painted diagram are omitted.
-
-## [x] Ship
-
-Releasing is split: `/cl` audits changelog entries, `bun run release` does the
-mechanical rest and pushes the tag, and CI publishes to npm with provenance and
-creates the GitHub Release. Proven end to end on 0.2.1.
+- [ ] Composite states as frames: `state X { ... }` currently renders flat —
+      structurally wrong. Reuse the subgraph machinery; `--` concurrency
+      regions come nearly free.
+- [ ] Flowchart v2 node syntax `A@{shape: cyl, label: "..."}`: parse, map
+      shapes onto rect/round/diamond.
+- [ ] Sequence activations: thicken the lifeline over the active range.
+- [ ] Cardinalities at their own edge ends (`Edge.cardFrom`/`cardTo`), verb
+      mid-edge; `0..*` → `*`. Fixes ER and class relations reading ambiguously.
+- [ ] ER aliases with spaces (`a["Bank Account"]`).
+- [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
+      gitGraph (commit lanes). Registry makes each a one-file addition.
+- [ ] Demo app in `demo/` (SvelteKit or plain TUI capture), maybe a `bin` CLI
+      in the main package (mermaid/markdown → art).
 
 ## Open questions
 
-- Upstream `render` is called per repaint by the pager, re-parsing each time.
-  If a consumer wants cheap relayout on resize, parse could be cached
-  separately from layout. Not needed until someone asks.
-- Whether to expose the parsers publicly. Tests import them from module paths;
-  keeping them off the entry point leaves the API surface small.
-- Known limits inherited from upstream are listed in `CODE.md`.
+- `:::` in state/class diagrams is swallowed statement-level, not attached to
+  its node — needs per-id capture if anyone wants classes there.
+- Whether to expose the parsers publicly. Tests import them from module
+  paths; keeping them off the entry point leaves the API surface small.
+- Parked ideas with data: auto-orient to fit (flip `down`↔`right` rescues all
+  five over-wide cases measured; wants a caller opt-in), truncating sequence
+  message text at `MAX_LABEL`, word-wrapping the source-box body.

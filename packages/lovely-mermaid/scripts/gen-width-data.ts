@@ -17,7 +17,7 @@
 /** Run the oracle, returning `[lo, hi, charWidth, strWidth]` runs. */
 async function oracleRuns(): Promise<[number, number, number, number][]> {
   const proc = Bun.spawn(['cargo', 'run', '--release', '-q'], {
-    cwd: new URL('../tools/width-oracle', import.meta.url).pathname,
+    cwd: new URL('../../../tools/width-oracle', import.meta.url).pathname,
     stdout: 'pipe',
     stderr: 'inherit',
   })

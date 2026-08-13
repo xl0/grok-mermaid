@@ -15,7 +15,7 @@
  */
 
 import { render } from '../src/index.ts'
-import type { Cls } from '../src/types.ts'
+import type { Role } from '../src/types.ts'
 import { clusterWidth, measured } from '../src/width.ts'
 
 const SRC = `flowchart TD
@@ -25,7 +25,7 @@ const SRC = `flowchart TD
   C --> D`
 
 /** Terminal-ish palette. Deliberately not GitHub's — this is a demo of a theme. */
-const FILL: Record<Cls, string | null> = {
+const FILL: Record<Role, string | null> = {
   border: '#6e7681',
   text: '#e6edf3',
   edge: '#39c5cf',
@@ -64,7 +64,7 @@ art.styled.forEach((spans, row) => {
   const y = PAD + row * LINE_H + FONT_SIZE
   let col = 0
   for (const span of spans) {
-    const fill = FILL[span.cls]
+    const fill = FILL[span.role]
     const xs: number[] = []
     for (const [cluster, cw] of measured(span.text)) {
       // One x per UTF-16 unit, so the glyph grid survives any font's metrics.
@@ -82,7 +82,7 @@ art.styled.forEach((spans, row) => {
 })
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width.toFixed(0)}" height="${height.toFixed(0)}" viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour">
-  <title>grok-mermaid output, coloured by semantic class</title>
+  <title>lovely-mermaid output, coloured by role</title>
   <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
   <g font-family="${FONT}" font-size="${FONT_SIZE}" xml:space="preserve">
 ${rows.join('\n')}

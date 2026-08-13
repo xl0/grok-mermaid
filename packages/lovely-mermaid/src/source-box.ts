@@ -47,26 +47,26 @@ export function sourceBox(src: string, maxWidth?: number): MermaidArt {
   const rule = '─'.repeat(sat(inner, stringWidth(title)))
   plain.push(`╭${title}${rule}╮`)
   styled.push([
-    { text: '╭', cls: 'border' },
-    { text: title, cls: 'title' },
-    { text: `${rule}╮`, cls: 'border' },
+    { text: '╭', role: 'border' },
+    { text: title, role: 'title' },
+    { text: `${rule}╮`, role: 'border' },
   ])
 
   for (const line of body) {
     const pad = ' '.repeat(sat(contentW, stringWidth(line)))
     plain.push(`│ ${line}${pad} │`)
     styled.push([
-      { text: '│ ', cls: 'border' },
-      { text: line, cls: 'text' },
-      { text: `${pad} │`, cls: 'border' },
+      { text: '│ ', role: 'border' },
+      { text: line, role: 'text' },
+      { text: `${pad} │`, role: 'border' },
     ])
   }
 
   const bottom = `╰${'─'.repeat(inner)}╯`
   plain.push(bottom)
-  styled.push([{ text: bottom, cls: 'border' }])
+  styled.push([{ text: bottom, role: 'border' }])
 
-  return { plain, styled, width: inner + 2, warnings: [] }
+  return { plain, styled, width: inner + 2, classDefs: {}, warnings: [] }
 }
 
 /** Hard-break a line at `limit` columns, never splitting a wide glyph. */

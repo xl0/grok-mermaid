@@ -23,7 +23,7 @@ import {
   STY_THICK,
   U,
 } from './canvas.ts'
-import type { ClassInfo, Edge, Head, Node, Shape } from './graph.ts'
+import type { Edge, Head, Node, Shape } from './graph.ts'
 import { Graph } from './graph.ts'
 import { fitLabel, MAX_LABEL, MAX_LINES, WRAP_WIDTH, wrapLabel } from './labels.ts'
 import { measured, stringWidth } from './width.ts'
@@ -595,10 +595,12 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   const canvas = new Canvas(plan.canvasW, plan.canvasH)
   for (let idx = 0; idx < n; idx++) {
     const extra = extras[idx]
+    canvas.curTag = graph.nodes[idx].classes?.join(' ')
     if (extra.kind === 'frame') drawFrame(canvas, placed[idx], graph.nodes[idx].label, extra.sub)
     else if (extra.kind === 'compartments') drawClassBox(canvas, placed[idx], extra.sections)
     else drawBox(canvas, placed[idx], wrapped[idx], graph.nodes[idx].shape)
   }
+  canvas.curTag = undefined
 
   graph.edges.forEach((edge, i) => {
     canvas.curStyle =
@@ -641,29 +643,13 @@ export function layoutFlowchart(graph: Graph): CanvasResult {
 }
 
 /** Class and ER diagrams: boxes divided into title / attribute / method rows. */
-export function layoutClass(graph: Graph, infos: ClassInfo[]): CanvasResult {
-  const extras: NodeExtra[] = graph.nodes.map((node, i) => {
-    const title: string[] = []
-    if (infos[i].annotation !== null) title.push(`«${infos[i].annotation}»`)
-    title.push(displayGenerics(node.label))
-    return { kind: 'compartments', sections: [title, infos[i].attrs, infos[i].methods] }
-  })
+export function layoutClass(graph: Graph): CanvasResult {
+  const extras: NodeExtra[] = graph.nodes.map((node) => ({
+    kind: 'compartments',
+    sections: node.sections ?? [[node.label]],
+  }))
   const canvas = layoutCanvas(graph, extras)
   return canvas && orient(canvas, graph)
-}
-
-function displayGenerics(s: string): string {
-  let out = ''
-  let open = false
-  for (const c of s) {
-    if (c === '~') {
-      out += open ? '>' : '<'
-      open = !open
-    } else {
-      out += c
-    }
-  }
-  return out
 }
 
 // -------------------------------------------------------------------- groups
@@ -764,7 +750,11 @@ function buildScope(
     indexOf.set(item, nodes.length)
     const i = Number(item.slice(1))
     if (item.startsWith('n')) {
-      nodes.push({ label: graph.nodes[i].label, shape: graph.nodes[i].shape })
+      nodes.push({
+        label: graph.nodes[i].label,
+        shape: graph.nodes[i].shape,
+        classes: graph.nodes[i].classes,
+      })
       extras.push({ kind: 'plain' })
     } else {
       const sub = buildScope(graph, i, scopeEdges, directNodes, keep)
@@ -822,7 +812,11 @@ export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape
   }
 
   for (let cy = y; cy <= bottom; cy++) {
-    for (let cx = x; cx <= right; cx++) canvas.occupied[canvas.idx(cx, cy)] = 1
+    for (let cx = x; cx <= right; cx++) {
+      const i = canvas.idx(cx, cy)
+      canvas.occupied[i] = 1
+      if (canvas.curTag !== undefined) canvas.tag[i] = canvas.curTag
+    }
   }
 
   const inner = Math.max(1, sat(w, 2 * PAD + 2))

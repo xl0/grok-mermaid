@@ -18,6 +18,35 @@ test('an edge label is rendered', () => {
   expect(plain('graph TD\n A-->|yes| B')).toContain('yes')
 })
 
+test('author classes reach the spans and classDefs the art', () => {
+  const art = render(
+    'flowchart TD\n A[Hot node]:::hot --> B\n class B cold\n classDef hot fill:#f96,stroke:#333\n classDef cold fill:#69f',
+  )
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.classDefs).toEqual({
+    hot: { fill: '#f96', stroke: '#333' },
+    cold: { fill: '#69f' },
+  })
+  const classed = art.styled.flat().filter((s) => s.classes !== undefined)
+  expect(classed.some((s) => s.text.includes('Hot node') && s.classes?.[0] === 'hot')).toBe(true)
+  expect(classed.some((s) => s.text.includes('B') && s.classes?.[0] === 'cold')).toBe(true)
+  // Cells the node did not paint carry no classes.
+  expect(art.styled.flat().some((s) => s.role === 'edge' && s.classes !== undefined)).toBe(false)
+})
+
+test('state classDefs and class assignments are surfaced', () => {
+  const art = render('stateDiagram-v2\n A --> B\n class A warning\n classDef warning fill:#f00')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.classDefs).toEqual({ warning: { fill: '#f00' } })
+  expect(
+    art.styled.flat().some((s) => s.text.includes('A') && s.classes?.includes('warning')),
+  ).toBe(true)
+})
+
+test('the source box carries no classDefs', () => {
+  expect(sourceBox('gantt\n title Plan', 80).classDefs).toEqual({})
+})
+
 test('a `:::` class is swallowed and the edge survives', () => {
   const out = render('flowchart TD\n A:::hot --> B\n classDef hot fill:#f00')
   expect(out?.warnings).toEqual([])
@@ -283,17 +312,25 @@ test('the known entity limit explains itself in warnings', () => {
   expect(w[0]).toContain('link has no target')
 })
 
-test('the strict grammars give up only one line before failing', () => {
-  // One unreadable trailing line is dropped and reported; two means the
-  // salvage retry lands on a source that still does not parse.
+test('unreadable statements drop individually, the rest renders', () => {
+  // Each bad statement is dropped and warned about; a source in which not
+  // one statement parses still refuses.
   expect(warned('stateDiagram-v2\n A --> B\n bad line here').length).toBe(1)
+  expect(warned('stateDiagram-v2\n bad one here\n A --> B\n bad two here').length).toBe(2)
   expect(render('stateDiagram-v2\n bad one here\n bad two here')).toBeNull()
 })
 
-test('the salvage retry ignores trailing whitespace', () => {
+test('a dropped statement is reported verbatim', () => {
   expect(warned('stateDiagram-v2\n A --> B\n some garbage line\n')).toEqual([
-    'dropped, unreadable final line: "some garbage line"',
+    'dropped, unreadable statement: "some garbage line"',
   ])
+})
+
+test('a junk header suffix is not a diagram type', () => {
+  // Upstream accepts `stateDiagramFoo` by prefix; mermaid proper rejects it.
+  expect(render('stateDiagramFoo\n A --> B')).toBeNull()
+  expect(diagramKind('stateDiagramFoo\n A --> B')).toBeNull()
+  expect(diagramKind('classDiagram-v2\n A --> B')).toBe('class')
 })
 
 test('diagramKind separates an unsupported type from a malformed one', () => {
@@ -368,16 +405,21 @@ test('the source box carries no warnings', () => {
   expect(sourceBox('gantt\n title Plan', 80).warnings).toEqual([])
 })
 
-test('an adversarial chain is over the cell cap', () => {
+test('an adversarial chain renders truncated at the node cap', () => {
   let src = 'graph TD\n'
   for (let i = 0; i < 10_000; i++) src += ` N${i} --> N${i + 1}\n`
-  expect(render(src)).toBeNull()
+  const art = render(src)
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.plain.join('\n')).toContain('N100')
+  expect(art.warnings.some((w) => w.startsWith('diagram truncated:'))).toBe(true)
 })
 
-test('a single-statement chain over the cap draws nothing', () => {
+test('a single-statement chain renders truncated at the node cap', () => {
   let src = 'graph LR\n '
   for (let i = 0; i < 10_000; i++) src += `N${i}-->`
-  expect(render(`${src}N10000`)).toBeNull()
+  const art = render(`${src}N10000`)
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.warnings.some((w) => w.startsWith('diagram truncated:'))).toBe(true)
 })
 
 test('a deep chain within the caps renders', () => {
@@ -526,7 +568,7 @@ test('an empty class is a plain titled box', () => {
 
 test('an unknown class statement is dropped, not fatal', () => {
   expect(warned('classDiagram\n A --> B\n total garbage here')).toEqual([
-    'dropped, unreadable final line: "total garbage here"',
+    'dropped, unreadable statement: "total garbage here"',
   ])
 })
 
@@ -592,7 +634,7 @@ test('ER attributes elide past the cap', () => {
 
 test('an unknown ER statement is dropped, not fatal', () => {
   expect(warned('erDiagram\n A ||--|| B : ok\n utter nonsense statement')).toEqual([
-    'dropped, unreadable final line: "utter nonsense statement"',
+    'dropped, unreadable statement: "utter nonsense statement"',
   ])
 })
 
@@ -745,14 +787,16 @@ test('a state back transition uses a lane', () => {
 
 test('an unknown state statement is dropped, not fatal', () => {
   expect(warned('stateDiagram-v2\n A --> B\n some garbage line')).toEqual([
-    'dropped, unreadable final line: "some garbage line"',
+    'dropped, unreadable statement: "some garbage line"',
   ])
 })
 
-test('a state diagram over the cap draws nothing', () => {
+test('a state diagram renders truncated at the node cap', () => {
   let src = 'stateDiagram-v2\n'
   for (let i = 0; i < 600; i++) src += ` S${i} --> S${i + 1}\n`
-  expect(render(src)).toBeNull()
+  const art = render(src)
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.warnings.some((w) => w.startsWith('diagram truncated:'))).toBe(true)
 })
 
 test('a state chain with markers and a label renders', () => {
@@ -761,8 +805,11 @@ test('a state chain with markers and a label renders', () => {
   expect(out).toContain('done')
 })
 
-test('a dangling state chain draws nothing', () => {
-  expect(render('stateDiagram-v2\n A --> B -->')).toBeNull()
+test('a dangling state chain keeps its parsed prefix', () => {
+  const art = render('stateDiagram-v2\n A --> B -->')
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.plain.join('\n')).toContain('A')
+  expect(art.warnings.length).toBe(1)
 })
 
 // ---------------------------------------------------------------- sequence
@@ -856,7 +903,7 @@ test('an unparseable arrow draws nothing', () => {
 
 test('an unknown sequence statement is dropped, not fatal', () => {
   expect(warned('sequenceDiagram\n A->>B: hi\n garbage statement here')).toEqual([
-    'dropped, unreadable final line: "garbage statement here"',
+    'dropped, unreadable statement: "garbage statement here"',
   ])
 })
 
@@ -866,10 +913,12 @@ test('a wide sequence diagram renders and reports its width', () => {
   expect(art.width).toBeGreaterThan(30)
 })
 
-test('a sequence diagram over the cap draws nothing', () => {
+test('a sequence diagram renders truncated at the item cap', () => {
   let src = 'sequenceDiagram\n'
   for (let i = 0; i < 600; i++) src += ` A->>B: msg ${i}\n`
-  expect(render(src)).toBeNull()
+  const art = render(src)
+  if (art === null) throw new Error('render drew nothing')
+  expect(art.warnings.some((w) => w.startsWith('diagram truncated:'))).toBe(true)
 })
 
 test('activation markers are stripped', () => {

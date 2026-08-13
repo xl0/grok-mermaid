@@ -2,8 +2,21 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Renamed the package to `lovely-mermaid` (formerly `grok-mermaid`); the repository moved to `xl0/lovely-mermaid` and the library now lives in `packages/lovely-mermaid` of a workspace.
+- Renamed the span classification from `Cls`/`span.cls` to `Role`/`span.role`, freeing the word "class" for mermaid's author-assigned classes. `AnsiTheme` keys by `Role`.
+- `MermaidArt` gained a required `classDefs` field.
+
+### Added
+
+- Author classes are surfaced: `A:::name` and `class A,B name` land on the spans of the cells that node paints (`span.classes`), and `classDef` declarations are parsed into `art.classDefs` (`{ name: { fill: '#f96', … } }`). The renderer never interprets either; `toAnsi` ignores them.
+
 ### Changed
 
+- Every grammar is now lenient. State, class, ER and sequence diagrams drop an unreadable statement with a warning and render the rest, instead of refusing the whole diagram; the one-final-line salvage retry is gone, subsumed by the general rule. A source in which nothing parses still returns `null`.
+- Size caps truncate instead of refusing: a diagram over 128 nodes / 512 edges renders its prefix with a `diagram truncated: …` warning. A streamed diagram that outgrows a cap keeps its stable render instead of flipping to the source box forever.
+- Diagram headers are matched exactly: `stateDiagramFoo` no longer parses as a state diagram, matching mermaid proper. `classDiagram-v2` is now recognised.
 - CI now stages releases on npm instead of publishing directly. Builds keep OIDC provenance; the release script waits for the staged version, then asks for a 2FA code and approves it — publishing stays a manual act.
 
 ## [0.2.3] - 2026-08-11

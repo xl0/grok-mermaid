@@ -240,6 +240,21 @@ export function cleanLabel(raw: string): string {
   return decodeHtmlEntities(md === null ? unquoted : stripMarkdown(md.trim()))
 }
 
+/** Mermaid writes generics as `List~T~`; show them as `List<T>`. */
+export function displayGenerics(s: string): string {
+  let out = ''
+  let open = false
+  for (const c of s) {
+    if (c === '~') {
+      out += open ? '>' : '<'
+      open = !open
+    } else {
+      out += c
+    }
+  }
+  return out
+}
+
 /** Index of the last identifier-boundary character, or -1. */
 function lastBreak(s: string): number {
   let best = -1

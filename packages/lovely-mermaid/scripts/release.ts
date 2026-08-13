@@ -58,7 +58,7 @@ else {
 
 if ((await $`git tag -l ${`v${version}`}`.text()).trim()) die(`tag v${version} already exists`)
 
-const onNpm = await $`npm view ${`grok-mermaid@${version}`} version`.nothrow().quiet()
+const onNpm = await $`npm view ${`lovely-mermaid@${version}`} version`.nothrow().quiet()
 if (onNpm.exitCode === 0 && onNpm.stdout.toString().trim())
   die(`${version} is already published to npm`)
 
@@ -90,7 +90,7 @@ await $`bun pm pack --dry-run`
 console.log(`\n=== committing and tagging ${version} ===\n`)
 await $`git add CHANGELOG.md package.json`
 await $`git commit -m ${`chore(release): ${version}`}`
-await $`git tag -a ${`v${version}`} -m ${`grok-mermaid ${version}`}`
+await $`git tag -a ${`v${version}`} -m ${`lovely-mermaid ${version}`}`
 
 if (!push) {
   console.log(`
@@ -112,7 +112,7 @@ console.log(`\n=== waiting for CI to stage ${version} on npm ===\n`)
 const deadline = Date.now() + 10 * 60 * 1000
 let stageId: string | undefined
 while (!stageId) {
-  const list = await $`npm stage list grok-mermaid --json`.nothrow().quiet()
+  const list = await $`npm stage list lovely-mermaid --json`.nothrow().quiet()
   if (list.exitCode !== 0) die(`npm stage list failed:\n${list.stderr.toString()}`)
   const items = JSON.parse(list.stdout.toString()) as { id: string; version: string }[]
   stageId = items.find((item) => item.version === version)?.id
