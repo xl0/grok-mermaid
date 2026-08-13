@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { type MermaidArt, render, type Role, sourceBox } from 'lovely-mermaid';
+	import { tick } from 'svelte';
+	import { diagramKind, type MermaidArt, render, type Role, sourceBox } from 'lovely-mermaid';
 	import { AsciiArt } from 'svelte-asciiart';
 	// Bundled at build time: full box-drawing coverage (incl. ╭╮╰╯ arcs), so
 	// no per-glyph fallback to a mismatched font can misalign the line art.
 	import jbmRegular from 'jetbrains-mono/fonts/webfonts/JetBrainsMono-Regular.woff2';
 	import jbmBold from 'jetbrains-mono/fonts/webfonts/JetBrainsMono-Bold.woff2';
 
-	const presets: { name: string; src: string }[] = [
+	const presets: { name: string; desc: string; src: string }[] = [
 		{
 			name: 'flowchart',
+			desc: 'nodes, branches, edge labels',
 			src: `flowchart TD
   A[Parse source] --> B{Supported?}
   B -->|yes| C[Lay out]
@@ -18,7 +20,29 @@
   D --> E`
 		},
 		{
+			name: 'shapes',
+			desc: 'v2 @{shape, label} node syntax',
+			src: `flowchart TD
+  S@{shape: start, label: "Boot"} --> D@{shape: cyl, label: "Config DB"}
+  D --> Q@{shape: diamond, label: "Valid?"}
+  Q -->|yes| P@{shape: stadium, label: "Run app"}
+  Q -->|no| E@{shape: dbl-circ, label: "Halt"}`
+		},
+		{
+			name: 'subgraph',
+			desc: 'nested titled frames',
+			src: `flowchart TD
+  In[Request] --> R
+  subgraph svc [Service]
+    R[Router] --> H1[Handler A]
+    R --> H2[Handler B]
+  end
+  H1 --> Out[(Store)]
+  H2 --> Out`
+		},
+		{
 			name: 'sequence',
+			desc: 'participants, messages, notes',
 			src: `sequenceDiagram
   participant U as User
   participant T as Terminal
@@ -29,7 +53,17 @@
   T-->>U: pretty boxes`
 		},
 		{
+			name: 'activations',
+			desc: 'hot lifelines between +/- marks',
+			src: `sequenceDiagram
+  Client->>+Server: request
+  Server->>+DB: query
+  DB-->>-Server: rows
+  Server-->>-Client: response`
+		},
+		{
 			name: 'state',
+			desc: 'transitions, start/end markers',
 			src: `stateDiagram-v2
   [*] --> Idle
   Idle --> Parsing: source arrives
@@ -39,7 +73,23 @@
   Framed --> [*]`
 		},
 		{
+			name: 'composite',
+			desc: 'nested states and -- regions',
+			src: `stateDiagram-v2
+  [*] --> Idle
+  Idle --> Active
+  state Active {
+    [*] --> Fetching
+    Fetching --> Rendering
+    Rendering --> Fetching : retry
+    --
+    Log --> Flush
+  }
+  Active --> [*]`
+		},
+		{
 			name: 'class',
+			desc: 'compartments, members, relations',
 			src: `classDiagram
   class MermaidArt {
     +plain: string[]
@@ -51,17 +101,19 @@
     +text: string
     +role: Role
   }
-  MermaidArt --> Span`
+  MermaidArt "1" --> "*" Span : rows of`
 		},
 		{
 			name: 'er',
+			desc: 'cardinalities at edge ends, aliases',
 			src: `erDiagram
-  DIAGRAM ||--|{ NODE : contains
-  DIAGRAM ||--o{ EDGE : contains
-  NODE }o--o{ EDGE : connects`
+  CUSTOMER ||--o{ ORDER : places
+  ORDER ||--|{ LINE_ITEM : contains
+  c["Credit Card"] |o--|| CUSTOMER : pays with`
 		},
 		{
 			name: 'cjk',
+			desc: 'wide glyphs measured correctly',
 			src: `flowchart LR
   A[你好世界] --> B[こんにちは]
   B --> C[🚀 Launch]
@@ -69,6 +121,7 @@
 		},
 		{
 			name: 'broken',
+			desc: 'lenient parsing, advisory warnings',
 			src: `flowchart TD
   A[Start --> B
   C --> `
@@ -158,6 +211,16 @@
 		setTimeout(() => (copiedTheme = false), 1200);
 	}
 
+	// Presets differ in height, so switching reflows everything above the
+	// commands. Pegging the viewport to the page bottom keeps the input and
+	// the command grid (where the cursor is) exactly where they were.
+	async function pick(p: { src: string }) {
+		const fromBottom = document.documentElement.scrollHeight - window.scrollY;
+		src = p.src;
+		await tick();
+		window.scrollTo({ top: document.documentElement.scrollHeight - fromBottom });
+	}
+
 	function initialSrc(): string {
 		if (browser && location.hash.length > 1) {
 			try {
@@ -173,8 +236,18 @@
 		history.replaceState(null, '', src === '' ? location.pathname : `#${encodeURIComponent(src)}`);
 	});
 
-	const art = $derived(src.trim() === '' ? null : render(src));
+	const rendered = $derived.by(() => {
+		const t0 = performance.now();
+		const art = src.trim() === '' ? null : render(src);
+		return { art, ms: performance.now() - t0 };
+	});
+	const art = $derived(rendered.art);
 	const fits = $derived(art !== null && art.width <= cols);
+	// When the art overflows the viewport, the smallest wider setting that
+	// would fit — the button the overlay arrow points at.
+	const fitTarget = $derived(
+		art !== null && !fits ? ([30, 60, 120].find((w) => w > cols && art.width <= w) ?? null) : null
+	);
 	const shown: MermaidArt | null = $derived(
 		src.trim() === '' ? null : fits ? art : sourceBox(src, cols)
 	);
@@ -192,6 +265,8 @@
 	const toolCall = $derived(
 		art === null || !fits ? `sourceBox(src, ${cols})` : 'render(src)'
 	);
+	// The selected example's description, shown beside the call while active.
+	const activeDesc = $derived(presets.find((p) => p.src === src)?.desc ?? null);
 
 	// lovely-mermaid spans carry a role — the theme maps roles to ANSI SGR,
 	// exactly what a terminal consumer does; the component parses it.
@@ -216,6 +291,13 @@
 		setTimeout(() => (copied = false), 1200);
 	}
 </script>
+
+<svelte:window
+	onclick={() => (paletteFor = null)}
+	onkeydown={(e) => {
+		if (e.key === 'Escape') paletteFor = null;
+	}}
+/>
 
 <svelte:head>
 	<title>lovely-mermaid — Mermaid diagrams as Unicode art</title>
@@ -242,73 +324,15 @@
 <main>
 	<!-- assistant turn: the pitch -->
 	<div class="assistant">
-		<div class="md-h"># lovely-mermaid</div>
-		<p>
-			I render Mermaid diagrams as Unicode box-drawing art, for terminals. No headless browser, no
-			SVG — a self-contained layout engine that emits text. Edit the message below, or pick a
-			preset; I re-render on every keystroke.
-		</p>
-	</div>
-
-	<!-- user turn: the diagram source is the message -->
-	<div class="user-block">
-		<div class="slash-row" role="toolbar" aria-label="Example diagrams">
-			{#each presets as p}
-				<button class="slash" class:active={src === p.src} onclick={() => (src = p.src)}
-					>/{p.name}</button
-				>
-			{/each}
-		</div>
-		<textarea
-			bind:value={src}
-			rows={Math.max(4, src.split('\n').length)}
-			wrap="off"
-			spellcheck="false"
-			aria-label="Mermaid source"
-		></textarea>
-	</div>
-
-	<!-- tool turn: the call this page actually makes -->
-	<div class="tool-block" data-state={toolState}>
-		<div class="tool-title">
-			<span class="dot">⏺</span>
-			<code>{toolCall}</code>
-			{#if art}
-				<span class="dim">art is {art.width} cols{fits ? '' : ` > ${cols}`}</span>
-			{:else if shown}
-				<span class="err">render(src) → null</span>
-			{/if}
+		<div class="header-row">
+			<span class="md-h"># lovely-mermaid</span>
 			<span class="spacer"></span>
-			<span class="cols">
-				<span class="dim">viewport</span>
-				{#each [30, 60, 120] as w (w)}
-					<button class="ghost" class:active={cols === w} onclick={() => (cols = w)}>[{w}]</button>
-				{/each}
-			</span>
-			<button class="ghost" onclick={copy} disabled={!shown}>{copied ? 'copied' : '[copy]'}</button>
+			<a href="https://github.com/xl0/lovely-mermaid">GitHub</a>
+			<a href="https://www.npmjs.com/package/lovely-mermaid">npm</a>
 		</div>
-
-		{#if shown}
-			<div class="art">
-				<AsciiArt
-					text={ansi}
-					cols={Math.max(cols, shown.width)}
-					frame
-					margin={1}
-					frameClass="term"
-					cellSize={CELL}
-					aria-label="Rendered diagram"
-				/>
-			</div>
-		{:else}
-			<div class="art empty">⏳ waiting for a diagram…</div>
-		{/if}
-
-		{#if art && art.warnings.length}
-			<div class="tool-warnings">
-				{#each art.warnings as w}<div>⚠ {w}</div>{/each}
-			</div>
-		{/if}
+		<p>
+			I render Mermaid diagrams as Unicode box-drawing art, for terminals.
+		</p>
 	</div>
 
 	<!-- custom extension turn: the AnsiTheme editor -->
@@ -338,16 +362,18 @@
 							class:auto={theme[c][slot] === null}
 							style={theme[c][slot] === null ? '' : `background:${swatch(theme[c][slot])}`}
 							title={theme[c][slot] === null ? 'terminal default' : `ANSI color ${theme[c][slot]}`}
-							onclick={() =>
-								(paletteFor =
-									paletteFor?.c === c && paletteFor.slot === slot ? null : { c, slot })}
+							onclick={(e) => {
+								e.stopPropagation();
+								paletteFor = paletteFor?.c === c && paletteFor.slot === slot ? null : { c, slot };
+							}}
 							>{theme[c][slot] === null ? '–' : ''}</button
 						>
 					{/each}
 					{#if paletteFor?.c === c}
 						{@const slot = paletteFor.slot}
 						{@const pick = (n: number | null) => (theme[c][slot] = n)}
-						<div class="palette">
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div class="palette" onclick={(e) => e.stopPropagation()} role="presentation">
 							<!-- the xterm-256 chart in its natural structure: 16 basics,
 							     the 6x6x6 cube one red-level per row, the gray ramp -->
 							{#each [[null, ...Array.from({ length: 16 }, (_, n) => n)], ...Array.from({ length: 6 }, (_, r) => Array.from({ length: 36 }, (_, i) => 16 + r * 36 + i)), Array.from({ length: 24 }, (_, i) => 232 + i)] as prow}
@@ -381,27 +407,108 @@
 
 		<div class="themecode">
 			<pre>{themeCode}</pre>
-			<button class="ghost" onclick={copyTheme}>{copiedTheme ? 'copied' : '[copy]'}</button>
+			<button class="tb-copy" onclick={copyTheme} title="Copy the AnsiTheme literal"
+				>{copiedTheme ? '[copied]' : '[copy]'}</button
+			>
 		</div>
 	</div>
 
-	<!-- the idle editor -->
+	<!-- tool turn: the call this page actually makes -->
+	<div class="tool-block" data-state={toolState}>
+		<div class="tool-title">
+			<span class="dot">⏺</span>
+			<code>{toolCall}</code>
+			{#if activeDesc}<span class="dim">· {activeDesc}</span>{/if}
+			{#if art}
+				<span class="dim">art is {art.width} cols{fits ? '' : ` > ${cols}`}</span>
+			{:else if shown}
+				<span class="err">render(src) → null</span>
+			{/if}
+			<span class="spacer"></span>
+			<span class="cols">
+				<span class="dim">viewport</span>
+				{#each [30, 60, 120] as w (w)}
+					<span class="vp"
+						><button class="ghost" class:active={cols === w} onclick={() => (cols = w)}>[{w}]</button
+						>{#if fitTarget === w}<span class="fit-arrow">▲ fits</span>{/if}</span
+					>
+				{/each}
+			</span>
+			<button class="ghost" onclick={copy} disabled={!shown}>{copied ? 'copied' : '[copy]'}</button>
+		</div>
+
+		{#if shown}
+			<div class="art">
+				<AsciiArt
+					text={ansi}
+					cols={Math.max(cols, shown.width)}
+					frame
+					margin={1}
+					cellAspect={0.6}
+					frameClass="term"
+					cellSize={CELL}
+					aria-label="Rendered diagram"
+				/>
+			</div>
+		{:else}
+			<div class="art empty">⏳ waiting for a diagram…</div>
+		{/if}
+
+		{#if art && art.warnings.length}
+			<div class="tool-warnings">
+				{#each art.warnings as w}<div>⚠ {w}</div>{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- the editor: the diagram source is the prompt -->
 	<div class="editor-box">
+		<span class="editor-title">Edit me</span>
 		<span class="accent">❯</span>
-		<span class="cursor"></span>
-		<span class="dim hint">the real input is the message above — this one is just for looks</span>
+		<textarea
+			bind:value={src}
+			rows={Math.max(2, src.split('\n').length)}
+			wrap="off"
+			spellcheck="false"
+			aria-label="Mermaid source"
+		></textarea>
+	</div>
+
+	<!-- not a real autocomplete, just dressed as one -->
+	<div class="examples" role="listbox" aria-label="Example diagrams">
+		{#each presets as p (p.name)}
+			<button
+				class="example"
+				role="option"
+				aria-selected={src === p.src}
+				class:active={src === p.src}
+				onclick={() => pick(p)}
+			>/{p.name}</button
+			>
+		{/each}
 	</div>
 
 	<div class="statusline">
-		<span>lovely-mermaid</span>
-		<a href="https://github.com/xl0/lovely-mermaid">GitHub</a>
-		<a href="https://www.npmjs.com/package/lovely-mermaid">npm</a>
+		<span class="accent">lovely-mermaid</span>
+		<span>{diagramKind(src) ?? 'unknown'}</span>
+		{#if shown}
+			<span>{shown.width}×{shown.plain.length} cells</span>
+		{/if}
+		<span>{rendered.ms < 0.05 ? '<0.1' : rendered.ms.toFixed(1)} ms</span>
+		<span class:warn={art !== null && art.warnings.length > 0}>
+			⚠ {art?.warnings.length ?? 0}
+		</span>
 		<span class="spacer"></span>
-		<span class="dim">100% text · no browser required · width is the caller's decision</span>
+		<span class="dim">100% text</span>
 	</div>
 </main>
 
 <style>
+	/* reserve the scrollbar gutter so pages shorter than the viewport don't
+	   shift when the bar appears; the bar itself only shows when needed */
+	:global(html) {
+		scrollbar-gutter: stable;
+	}
 	:global(body) {
 		margin: 0;
 		background: #101014;
@@ -440,6 +547,35 @@
 		color: #81a2be;
 	}
 
+	.header-row {
+		display: flex;
+		align-items: baseline;
+		gap: 1rem;
+	}
+	.vp {
+		position: relative;
+	}
+	/* overlay nudge at the viewport button wide enough for the art */
+	.fit-arrow {
+		position: absolute;
+		top: calc(100% + 0.15rem);
+		left: 50%;
+		/* centre the ▲ glyph itself on the button; the label trails right */
+		transform: translateX(-0.5ch);
+		color: #f0c674;
+		white-space: nowrap;
+		pointer-events: none;
+		animation: nudge 1s ease-in-out infinite;
+	}
+	@keyframes nudge {
+		50% {
+			translate: 0 3px;
+		}
+	}
+	.warn {
+		color: #ffff00;
+		opacity: 0.85;
+	}
 	.assistant .md-h {
 		color: #f0c674;
 		font-weight: bold;
@@ -449,30 +585,29 @@
 		max-width: 60rem;
 	}
 
-	/* user message: padded block on Pi's userMessageBg */
-	.user-block {
-		background: #343541;
-		border-radius: 4px;
-		padding: 0.6rem 0.8rem;
+	/* the examples under the input, dressed as slash commands: an evenly
+	   spaced grid of /names, left to right, top to bottom */
+	.examples {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+		gap: 0.15rem 0.5rem;
+		padding: 0 0.3rem;
 	}
-	.slash-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.15rem 0.7rem;
-		margin-bottom: 0.5rem;
-	}
-	.slash {
+	.example {
 		font: inherit;
 		border: none;
 		background: none;
-		color: #808080;
-		cursor: pointer;
-		padding: 0;
-	}
-	.slash:hover {
 		color: #00d7ff;
+		text-align: left;
+		cursor: pointer;
+		padding: 0.1rem 0.4rem;
+		border-radius: 3px;
 	}
-	.slash.active {
+	.example:hover {
+		background: #343541;
+	}
+	.example.active {
+		background: #2a3a44;
 		color: #8abeb7;
 	}
 	textarea {
@@ -492,10 +627,16 @@
 		color: #d4d4d4;
 	}
 
-	/* tool execution: no background — the art is the content. State lives in
-	   the ⏺ dot instead. */
+	/* the rendered diagram mimics the user message: a padded block on Pi's
+	   userMessageBg, sitting above the input. State lives in the ⏺ dot. */
 	.tool-block {
-		padding: 0.2rem 0.8rem;
+		background: #343541;
+		border-radius: 4px;
+		padding: 0.6rem 0.8rem;
+	}
+	/* dim text has too little contrast on the grey message background */
+	.tool-block .dim {
+		color: #d4d4d4;
 	}
 	.tool-block .dot {
 		color: #666666;
@@ -547,6 +688,13 @@
 	.art {
 		overflow-x: auto;
 		overflow-y: hidden;
+		/* the art sits on its own dark panel, like a terminal on the page */
+		background: #101014;
+		border-radius: 4px;
+		padding: 0.4rem 0.6rem;
+		width: fit-content;
+		max-width: 100%;
+		box-sizing: border-box;
 	}
 	/* inline svg baseline gap would add phantom height inside the scroller */
 	.art :global(svg) {
@@ -593,6 +741,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
+		/* anchor for the palette overlay */
+		position: relative;
 	}
 	.clsname {
 		width: 6.5rem;
@@ -639,12 +789,20 @@
 	.swatch.selected {
 		outline: 2px solid #00d7ff;
 	}
+	/* an overlay, so opening it never reflows the page */
 	.palette {
-		flex-basis: 100%;
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 20;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 0.3rem 0 0.2rem;
+		padding: 0.45rem;
+		background: #1c1826;
+		border: 1px solid #505050;
+		border-radius: 4px;
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
 	}
 	.prow {
 		display: flex;
@@ -652,44 +810,62 @@
 	}
 
 	.themecode {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.4rem;
+		position: relative;
+		display: inline-block;
 		margin-top: 0.8rem;
 	}
 	.themecode pre {
 		margin: 0;
-		padding: 0.5rem 0.7rem;
+		padding: 0.5rem 0.9rem;
 		background: #101014;
+		/* the same frame the rendered diagrams get */
+		border: 1px solid #505050;
 		border-radius: 4px;
 		tab-size: 2;
 		color: #b5bd68;
 	}
+	/* the copy control breaks the top border, styled like [reset] above */
+	.tb-copy {
+		position: absolute;
+		top: -0.8em;
+		right: 1rem;
+		font: inherit;
+		border: none;
+		background: #101014;
+		padding: 0 0.3em;
+		color: #808080;
+		cursor: pointer;
+	}
+	.tb-copy:hover {
+		color: #00d7ff;
+	}
+	.tb-copy:hover {
+		color: #00d7ff;
+	}
 
-	/* the idle editor at the bottom, DynamicBorder-style */
+	/* the editor, DynamicBorder-style: the prompt is the real input */
 	.editor-box {
 		border: 1px solid #5f87ff;
 		border-radius: 6px;
 		padding: 0.45rem 0.7rem;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.5rem;
+		position: relative;
 	}
-	.cursor {
-		display: inline-block;
-		width: 0.55em;
-		height: 1.1em;
-		background: #d4d4d4;
-		animation: blink 1.1s steps(1) infinite;
-	}
-	@keyframes blink {
-		50% {
-			opacity: 0;
-		}
-	}
-	.hint {
+	/* a legend breaking the top border, DynamicBorder title style */
+	.editor-title {
+		position: absolute;
+		top: -0.75em;
+		right: 1rem;
+		padding: 0 0.4em;
+		background: #101014;
+		color: #5f87ff;
+		font-size: 0.8rem;
 		user-select: none;
+	}
+	.editor-box textarea {
+		flex: 1;
 	}
 
 	.statusline {
