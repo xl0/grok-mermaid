@@ -55,10 +55,14 @@ enforced, parse warnings, control characters stripped, staged npm releases.
 - [x] ER aliases with spaces (`a["Bank Account"]`).
 - [x] `:::` capture in state/class diagrams — classes work in every grammar
       that has them.
+- [x] classDef styles applied best-effort: `resolveClassStyle` (fill/stroke/
+      color/bold, normalized colors) + contrast guard; `toAnsi` layers it
+      over the role theme (bold-only merges rather than replaces), demo
+      calls `toAnsi` (`/styles` preset).
 - [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
       gitGraph (commit lanes). Registry makes each a one-file addition.
-- [x] Demo app in `demo/` (SvelteKit, pulled from the old `classnames` branch,
-      classes stripped for now). lovely-mermaid by source alias;
+- [x] Demo app in `demo/` (SvelteKit): light/dark page theme, class-styled
+      `/styles` preset. lovely-mermaid by source alias;
       svelte-asciiart via `bun link` until its 0.0.6 (with `cellSize`) is
       published — Pages deploy waits on that.
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).

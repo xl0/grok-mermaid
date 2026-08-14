@@ -4,9 +4,9 @@
  *   bun run gen:demo
  *
  * A code fence already shows the art; what it cannot show is the semantic
- * classes, which is the whole point of `styled`. So this paints real `render()`
- * output through a theme, and is generated rather than hand-drawn so it cannot
- * drift from what the library actually emits.
+ * roles, which is the whole point of `styled`. So this pipes real `render()`
+ * output through `toAnsi` and lovely-ansi-svg's `exportSvg` — generated, not
+ * hand-drawn, so it cannot drift from what the library actually emits.
  *
  * The panel carries its own background: an SVG in a README is loaded as an
  * `<img>`, where `prefers-color-scheme` follows the OS rather than GitHub's
@@ -14,9 +14,11 @@
  * correctly under both.
  */
 
-import { render } from '../src/index.ts'
-import type { Role } from '../src/types.ts'
-import { clusterWidth, measured } from '../src/width.ts'
+// Until lovely-ansi-svg is on npm this resolves through a manual link
+// (`ln -s ../../../../svelte-asciiart/packages/lovely-ansi-svg node_modules/lovely-ansi-svg`);
+// once published it becomes a plain devDependency, same import.
+import { defaultTheme, exportSvg } from 'lovely-ansi-svg'
+import { type AnsiTheme, render, toAnsi } from '../src/index.ts'
 
 const SRC = `flowchart TD
   A[Parse source] -->|ok| B[Lay out]
@@ -25,70 +27,30 @@ const SRC = `flowchart TD
   C --> D`
 
 /** Terminal-ish palette. Deliberately not GitHub's — this is a demo of a theme. */
-const FILL: Record<Role, string | null> = {
-  border: '#6e7681',
-  text: '#e6edf3',
-  edge: '#39c5cf',
-  edgeLabel: '#9198a1',
-  title: '#e6edf3',
-  none: null,
+const THEME: AnsiTheme = {
+  border: '38;2;110;118;129', // #6e7681
+  edge: '38;2;57;197;207', // #39c5cf
+  edgeLabel: '38;2;145;152;161', // #9198a1
+  title: '1',
 }
 
 const FONT =
   "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace"
-const FONT_SIZE = 14
-const CHAR_W = 8.4
-/**
- * One em, so box-drawing glyphs always tile.
- *
- * `│` spans at least a full em in every monospace font worth naming, so a line
- * height at or below the em makes adjacent rows overlap invisibly. Anything
- * taller leaves a gap at every row boundary and the boxes read as broken — at
- * 20 they visibly fall apart. Erring short is the only font-independent choice,
- * since the SVG renders in the *viewer's* font, not one we ship.
- */
-const LINE_H = FONT_SIZE
-const PAD = 18
-
-const esc = (s: string): string =>
-  s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 
 const art = render(SRC)
 if (art === null) throw new Error('demo source rendered blank')
 
-const width = art.width * CHAR_W + 2 * PAD
-const height = art.plain.length * LINE_H + 2 * PAD
-
-const rows: string[] = []
-art.styled.forEach((spans, row) => {
-  const y = PAD + row * LINE_H + FONT_SIZE
-  let col = 0
-  for (const span of spans) {
-    const fill = FILL[span.role]
-    const xs: number[] = []
-    for (const [cluster, cw] of measured(span.text)) {
-      // One x per UTF-16 unit, so the glyph grid survives any font's metrics.
-      if (cluster.length !== 1 || clusterWidth(cluster) !== 1) {
-        throw new Error(`demo source must stay single-width BMP, got ${JSON.stringify(cluster)}`)
-      }
-      xs.push(PAD + col * CHAR_W)
-      col += cw
-    }
-    if (fill === null || span.text.trim() === '') continue
-    rows.push(
-      `  <text x="${xs.map((n) => n.toFixed(1)).join(' ')}" y="${y}" fill="${fill}">${esc(span.text)}</text>`,
-    )
-  }
-})
-
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width.toFixed(0)}" height="${height.toFixed(0)}" viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour">
-  <title>lovely-mermaid output, coloured by role</title>
-  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
-  <g font-family="${FONT}" font-size="${FONT_SIZE}" xml:space="preserve">
-${rows.join('\n')}
-  </g>
-</svg>
-`
+const svg = exportSvg(toAnsi(art, THEME).join('\n'), {
+  cellSize: 14,
+  margin: [1, 2],
+  fontFamily: FONT,
+  background: '#0d1117',
+  theme: { ...defaultTheme, foreground: '#e6edf3' },
+  extraCss: 'rect:first-of-type { rx: 8px }',
+}).replace(
+  '<svg ',
+  '<svg role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour" ',
+)
 
 await Bun.write(new URL('../docs/demo.svg', import.meta.url), svg)
-console.log(`wrote docs/demo.svg (${art.width}x${art.plain.length} cells, ${rows.length} runs)`)
+console.log(`wrote docs/demo.svg (${art.width}x${art.plain.length} cells)`)

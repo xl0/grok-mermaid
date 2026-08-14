@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { Canvas, drawText } from '../src/canvas.ts'
-import { render, sourceBox, toAnsi } from '../src/index.ts'
+import { contrastOn, render, resolveClassStyle, sourceBox, toAnsi } from '../src/index.ts'
 import type { MermaidArt } from '../src/types.ts'
 import { stringWidth } from '../src/width.ts'
 
@@ -98,4 +98,59 @@ test('toAnsi wraps styled runs in SGR sequences', () => {
   // Stripping the sequences must return exactly the plain art.
   const sgr = new RegExp(`${ESC}\\[[0-9;]*m`, 'g')
   expect(out.replace(sgr, '')).toBe(art.plain.join('\n'))
+})
+
+// --------------------------------------------------------------- class styles
+
+test('resolveClassStyle normalizes colors and merges classes in order', () => {
+  const defs = {
+    hot: { fill: '#f96', stroke: 'rgb(51, 51, 51)', 'font-weight': 'bold' },
+    cold: { fill: 'lightblue', 'stroke-width': '4px', wobble: 'yes' },
+  }
+  expect(resolveClassStyle(['hot'], defs)).toEqual({
+    fill: '#ff9966',
+    stroke: '#333333',
+    bold: true,
+  })
+  // Later classes win; unknown props and unknown classes are ignored.
+  expect(resolveClassStyle(['hot', 'cold', 'ghost'], defs)).toEqual({
+    fill: '#add8e6',
+    stroke: '#333333',
+    bold: true,
+  })
+  expect(resolveClassStyle(['ghost'], defs)).toBeNull()
+  expect(resolveClassStyle(undefined, defs)).toBeNull()
+  // A class whose only props are inexpressible resolves to null.
+  expect(resolveClassStyle(['thin'], { thin: { 'stroke-width': '1px' } })).toBeNull()
+})
+
+test('contrastOn picks the readable foreground', () => {
+  expect(contrastOn('#ffffe0')).toBe('#000000')
+  expect(contrastOn('#4b0082')).toBe('#ffffff')
+})
+
+test('toAnsi applies class styles over the role theme', () => {
+  const art = render('flowchart TD\n A[Hot]:::hot --> B\n classDef hot fill:#ff9966,color:#000000')
+  if (art === null) throw new Error('render drew nothing')
+  const out = toAnsi(art, { border: '2' }).join('\n')
+  expect(out).toContain('48;2;255;153;102') // fill backs the node's cells
+  expect(out).toContain(`${ESC}[2m`) // the unclassed node keeps the theme
+  // Stripping the sequences must still return exactly the plain art.
+  const sgr = new RegExp(`${ESC}\\[[0-9;]*m`, 'g')
+  expect(out.replace(sgr, '')).toBe(art.plain.join('\n'))
+})
+
+test('a fill with no color gets a contrasting foreground', () => {
+  const art = render('flowchart TD\n A[Pale]:::pale --> B\n classDef pale fill:#ffffe0')
+  if (art === null) throw new Error('render drew nothing')
+  const out = toAnsi(art).join('\n')
+  expect(out).toContain('38;2;0;0;0') // black text on the pale fill
+})
+
+test('a bold-only class bolds the themed look instead of replacing it', () => {
+  const art = render('flowchart TD\n A[Em]:::em --> B\n classDef em font-weight:bold')
+  if (art === null) throw new Error('render drew nothing')
+  const out = toAnsi(art, { border: '2;36' }).join('\n')
+  expect(out).toContain(`${ESC}[1;2;36m`) // bold on top of the theme border
+  expect(out).toContain(`${ESC}[2;36m`) // the unclassed node keeps the theme
 })

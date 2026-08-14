@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { tick } from 'svelte';
-	import { diagramKind, type MermaidArt, render, type Role, sourceBox } from 'lovely-mermaid';
+	import {
+		type AnsiTheme,
+		diagramKind,
+		type MermaidArt,
+		render,
+		type Role,
+		sourceBox,
+		toAnsi
+	} from 'lovely-mermaid';
 	import { AsciiArt } from 'svelte-asciiart';
 	// Bundled at build time: full box-drawing coverage (incl. ╭╮╰╯ arcs), so
 	// no per-glyph fallback to a mismatched font can misalign the line art.
@@ -104,6 +112,20 @@
   MermaidArt "1" --> "*" Span : rows of`
 		},
 		{
+			name: 'styles',
+			desc: 'classDef colors, best-effort applied',
+			src: `flowchart TD
+  A[Request]:::hot --> B{Authorized?}
+  B -->|yes| C[Serve]:::ok
+  B -->|no| D[401 Denied]:::err
+  C --> E[(Cache)]
+  class E cold
+  classDef hot fill:#ff9966,color:#000000
+  classDef ok stroke:#22a06b,color:#22a06b
+  classDef err fill:#8b0000,color:#ffdddd
+  classDef cold fill:lightblue,color:#000000,font-weight:bold`
+		},
+		{
 			name: 'er',
 			desc: 'cardinalities at edge ends, aliases',
 			src: `erDiagram
@@ -129,8 +151,8 @@
 	];
 
 	// The theme is a Role → ANSI-style mapping — lovely-mermaid's AnsiTheme made
-	// tangible. Defaults mirror the library's DEFAULT_THEME: dim border, cyan
-	// edges, dim cyan edge labels, bold title.
+	// tangible, one default per terminal scheme: dim border, bold title, plain
+	// labels; yellow edges on dark, blue on light.
 	type RoleKey = Exclude<Role, 'none'>;
 	interface RoleStyle {
 		bold: boolean;
@@ -141,27 +163,27 @@
 	}
 	type Slot = 'color' | 'bg';
 	const ROLE_KEYS: RoleKey[] = ['border', 'text', 'edge', 'edgeLabel', 'title'];
-	const defaultTheme: Record<RoleKey, RoleStyle> = {
-		border: { bold: false, dim: true, color: null, bg: null },
-		text: { bold: false, dim: false, color: null, bg: null },
-		edge: { bold: false, dim: false, color: 6, bg: null },
-		edgeLabel: { bold: false, dim: true, color: 6, bg: null },
-		title: { bold: true, dim: false, color: null, bg: null }
+	const defaultThemes: Record<'dark' | 'light', Record<RoleKey, RoleStyle>> = {
+		dark: {
+			border: { bold: false, dim: true, color: 14, bg: null },
+			text: { bold: false, dim: false, color: null, bg: null },
+			edge: { bold: false, dim: false, color: 12, bg: null },
+			edgeLabel: { bold: false, dim: false, color: 11, bg: null },
+			title: { bold: true, dim: false, color: null, bg: null }
+		},
+		light: {
+			border: { bold: false, dim: false, color: 4, bg: null },
+			text: { bold: false, dim: false, color: null, bg: null },
+			edge: { bold: false, dim: false, color: 4, bg: null },
+			edgeLabel: { bold: false, dim: false, color: 5, bg: null },
+			title: { bold: true, dim: false, color: null, bg: null }
+		}
 	};
 	function sgrOf(s: RoleStyle): string | null {
 		const p: string[] = [];
 		if (s.bold) p.push('1');
-		if (s.dim) {
-			// Dim as an opaque darkened truecolor, not SGR 2: svelte-asciiart
-			// renders 2 as opacity, and box glyphs overshoot their cell (JBM's
-			// │ by half a cell), so translucent rows double-composite into
-			// striped lines. Terminals implement dim as a color change too.
-			const base = s.color === null ? '#d4d4d4' : swatch(s.color);
-			const [r, g, b] = [1, 3, 5].map((i) =>
-				Math.round(parseInt(base.slice(i, i + 2), 16) * 0.55)
-			);
-			p.push(`38;2;${r};${g};${b}`);
-		} else if (s.color !== null) {
+		if (s.dim) p.push('2');
+		if (s.color !== null) {
 			if (s.color < 8) p.push(String(30 + s.color));
 			else if (s.color < 16) p.push(String(90 + s.color - 8));
 			else p.push(`38;5;${s.color}`);
@@ -192,16 +214,31 @@
 
 	let src = $state(initialSrc());
 	let cols = $state(60);
-	let theme = $state(structuredClone(defaultTheme));
+	// Page theme (CSS vars on body, overridden by body.light). The terminal
+	// panel follows it, so switching also loads the matching role theme.
+	let dark = $state(true);
+	$effect(() => {
+		document.body.classList.toggle('light', !dark);
+	});
+	let theme = $state(structuredClone(defaultThemes.dark));
+	function setMode(d: boolean) {
+		dark = d;
+		theme = structuredClone(defaultThemes[d ? 'dark' : 'light']);
+		paletteFor = null;
+	}
 	let paletteFor = $state<{ c: RoleKey; slot: Slot } | null>(null);
 	let copied = $state(false);
 	let copiedTheme = $state(false);
 
-	// The current selections as an AnsiTheme literal, ready for toAnsi().
+	// The current selections as an AnsiTheme, plus the same as a literal
+	// for copy-paste.
+	const themeEntries = $derived(
+		ROLE_KEYS.map((c) => [c, sgrOf(theme[c])] as const).filter(([, v]) => v !== null)
+	);
+	const ansiTheme = $derived(Object.fromEntries(themeEntries) as AnsiTheme);
 	const themeCode = $derived.by(() => {
-		const entries = ROLE_KEYS.map((c) => [c, sgrOf(theme[c])] as const).filter(([, v]) => v !== null);
-		if (entries.length === 0) return 'const theme: AnsiTheme = {};';
-		const body = entries.map(([c, v]) => `\t${c}: '${v}',`).join('\n');
+		if (themeEntries.length === 0) return 'const theme: AnsiTheme = {};';
+		const body = themeEntries.map(([c, v]) => `\t${c}: '${v}',`).join('\n');
 		return `const theme: AnsiTheme = {\n${body}\n};`;
 	});
 
@@ -221,10 +258,22 @@
 		window.scrollTo({ top: document.documentElement.scrollHeight - fromBottom });
 	}
 
+	// The source rides in the hash as base64url of its UTF-8 bytes — far more
+	// compact than percent-encoding, where every space and newline is 3 chars.
+	const b64 = (s: string) =>
+		btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+			.replaceAll('+', '-')
+			.replaceAll('/', '_')
+			.replace(/=+$/, '');
+	function unB64(h: string): string {
+		const bin = atob(h.replaceAll('-', '+').replaceAll('_', '/'));
+		return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+	}
+
 	function initialSrc(): string {
 		if (browser && location.hash.length > 1) {
 			try {
-				return decodeURIComponent(location.hash.slice(1));
+				return unB64(location.hash.slice(1));
 			} catch {
 				// junk hash from outside — fall through to the default
 			}
@@ -233,7 +282,7 @@
 	}
 
 	$effect(() => {
-		history.replaceState(null, '', src === '' ? location.pathname : `#${encodeURIComponent(src)}`);
+		history.replaceState(null, '', src === '' ? location.pathname : `#${b64(src)}`);
 	});
 
 	const rendered = $derived.by(() => {
@@ -268,21 +317,10 @@
 	// The selected example's description, shown beside the call while active.
 	const activeDesc = $derived(presets.find((p) => p.src === src)?.desc ?? null);
 
-	// lovely-mermaid spans carry a role — the theme maps roles to ANSI SGR,
-	// exactly what a terminal consumer does; the component parses it.
-	const ESC = String.fromCharCode(27);
-	const ansi = $derived(
-		(shown?.styled ?? [])
-			.map((row) =>
-				row
-					.map((s) => {
-						const code = s.role === 'none' ? null : sgrOf(theme[s.role]);
-						return code === null ? s.text : `${ESC}[${code}m${s.text}${ESC}[0m`;
-					})
-					.join('')
-			)
-			.join('\n')
-	);
+	// The library's own ANSI path with the picked theme — exactly what a
+	// terminal consumer gets, author classes (:::name + classDef) included;
+	// the component parses the SGR back.
+	const ansi = $derived(shown === null ? '' : toAnsi(shown, ansiTheme).join('\n'));
 
 	async function copy() {
 		if (!shown) return;
@@ -327,6 +365,7 @@
 		<div class="header-row">
 			<span class="md-h"># lovely-mermaid</span>
 			<span class="spacer"></span>
+			<button class="ghost" onclick={() => setMode(!dark)}>[{dark ? 'light' : 'dark'}]</button>
 			<a href="https://github.com/xl0/lovely-mermaid">GitHub</a>
 			<a href="https://www.npmjs.com/package/lovely-mermaid">npm</a>
 		</div>
@@ -400,9 +439,7 @@
 					{/if}
 				</div>
 			{/each}
-			<button class="ghost" onclick={() => ((theme = structuredClone(defaultTheme)), (paletteFor = null))}
-				>[reset]</button
-			>
+			<button class="ghost" onclick={() => setMode(dark)}>[reset]</button>
 		</div>
 
 		<div class="themecode">
@@ -442,11 +479,10 @@
 				<AsciiArt
 					text={ansi}
 					cols={Math.max(cols, shown.width)}
-					frame
+					frame="term"
 					margin={1}
-					cellAspect={0.6}
-					frameClass="term"
 					cellSize={CELL}
+					style="width: auto; height: auto;"
 					aria-label="Rendered diagram"
 				/>
 			</div>
@@ -509,14 +545,60 @@
 	:global(html) {
 		scrollbar-gutter: stable;
 	}
+	/* the page palette; body.light re-skins everything, terminal panel
+	   (--term-bg/--term-fg) included */
 	:global(body) {
+		--term-bg: #101014;
+		--term-fg: #d4d4d4;
+		--bg: #101014;
+		--fg: #d4d4d4;
+		--dim: #666666;
+		--accent: #8abeb7;
+		--err: #cc6666;
+		--link: #81a2be;
+		--gold: #f0c674;
+		--warnc: #ffff00;
+		--cmd: #00d7ff;
+		--msg-bg: #343541;
+		--msg-fg: #d4d4d4;
+		--active-bg: #2a3a44;
+		--ok: #b5bd68;
+		--ghost: #808080;
+		--muted: #505050;
+		--custom-bg: #2d2838;
+		--purple: #9575cd;
+		--palette-bg: #1c1826;
+		--shadow: rgba(0, 0, 0, 0.55);
 		margin: 0;
-		background: #101014;
-		color: #d4d4d4;
+		background: var(--bg);
+		color: var(--fg);
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.85rem;
 		line-height: 1.45;
 		--ascii-font-family: 'JetBrains Mono', ui-monospace, monospace;
+	}
+	:global(body.light) {
+		--term-bg: #f6f8fa;
+		--term-fg: #24292f;
+		--bg: #ffffff;
+		--fg: #2b2b2b;
+		--dim: #767676;
+		--accent: #2f7a6e;
+		--err: #b3413e;
+		--link: #3567a8;
+		--gold: #9a6700;
+		--warnc: #9a6700;
+		--cmd: #0087af;
+		--msg-bg: #ececf1;
+		--msg-fg: #3f3f46;
+		--active-bg: #cfe3ec;
+		--ok: #4f7d21;
+		--ghost: #6e6e6e;
+		--muted: #c0c0c0;
+		--custom-bg: #efe9f7;
+		--purple: #6a4fa3;
+		--palette-bg: #f6f3fb;
+		--shadow: rgba(0, 0, 0, 0.2);
 	}
 
 	main {
@@ -529,22 +611,22 @@
 	}
 
 	.dim {
-		color: #666666;
+		color: var(--dim);
 	}
 	.accent {
-		color: #8abeb7;
+		color: var(--accent);
 	}
 	.err {
-		color: #cc6666;
+		color: var(--err);
 	}
 	.spacer {
 		flex: 1;
 	}
 	code {
-		color: #8abeb7;
+		color: var(--accent);
 	}
 	a {
-		color: #81a2be;
+		color: var(--link);
 	}
 
 	.header-row {
@@ -562,7 +644,7 @@
 		left: 50%;
 		/* centre the ▲ glyph itself on the button; the label trails right */
 		transform: translateX(-0.5ch);
-		color: #f0c674;
+		color: var(--gold);
 		white-space: nowrap;
 		pointer-events: none;
 		animation: nudge 1s ease-in-out infinite;
@@ -573,11 +655,11 @@
 		}
 	}
 	.warn {
-		color: #ffff00;
+		color: var(--warnc);
 		opacity: 0.85;
 	}
 	.assistant .md-h {
-		color: #f0c674;
+		color: var(--gold);
 		font-weight: bold;
 	}
 	.assistant p {
@@ -597,18 +679,18 @@
 		font: inherit;
 		border: none;
 		background: none;
-		color: #00d7ff;
+		color: var(--cmd);
 		text-align: left;
 		cursor: pointer;
 		padding: 0.1rem 0.4rem;
 		border-radius: 3px;
 	}
 	.example:hover {
-		background: #343541;
+		background: var(--msg-bg);
 	}
 	.example.active {
-		background: #2a3a44;
-		color: #8abeb7;
+		background: var(--active-bg);
+		color: var(--accent);
 	}
 	textarea {
 		width: 100%;
@@ -624,31 +706,31 @@
 		border: none;
 		outline: none;
 		background: transparent;
-		color: #d4d4d4;
+		color: var(--fg);
 	}
 
 	/* the rendered diagram mimics the user message: a padded block on Pi's
 	   userMessageBg, sitting above the input. State lives in the ⏺ dot. */
 	.tool-block {
-		background: #343541;
+		background: var(--msg-bg);
 		border-radius: 4px;
 		padding: 0.6rem 0.8rem;
 	}
 	/* dim text has too little contrast on the grey message background */
 	.tool-block .dim {
-		color: #d4d4d4;
+		color: var(--msg-fg);
 	}
 	.tool-block .dot {
-		color: #666666;
+		color: var(--dim);
 	}
 	.tool-block[data-state='ok'] .dot {
-		color: #b5bd68;
+		color: var(--ok);
 	}
 	.tool-block[data-state='pending'] .dot {
-		color: #f0c674;
+		color: var(--gold);
 	}
 	.tool-block[data-state='error'] .dot {
-		color: #cc6666;
+		color: var(--err);
 	}
 	.tool-title {
 		display: flex;
@@ -658,7 +740,7 @@
 		margin-bottom: 0.5rem;
 	}
 	.tool-title code {
-		color: #d4d4d4;
+		color: var(--msg-fg);
 	}
 	.cols {
 		display: flex;
@@ -667,29 +749,33 @@
 		white-space: nowrap;
 	}
 	.ghost.active {
-		color: #8abeb7;
+		color: var(--accent);
 	}
 	.ghost {
 		font: inherit;
 		border: none;
 		background: none;
-		color: #808080;
+		color: var(--ghost);
 		cursor: pointer;
 		padding: 0;
 	}
 	.ghost:hover:enabled {
-		color: #00d7ff;
+		color: var(--cmd);
 	}
 	.ghost:disabled {
-		color: #505050;
+		color: var(--muted);
 		cursor: default;
 	}
 
 	.art {
 		overflow-x: auto;
 		overflow-y: hidden;
-		/* the art sits on its own dark panel, like a terminal on the page */
-		background: #101014;
+		/* the art sits on its own panel, like a terminal on the page; unstyled
+		   spans get the terminal's default fg, not the page's */
+		background: var(--term-bg);
+		color: var(--term-fg);
+		/* dim (SGR 2) mixes toward this, so it must match the panel */
+		--ansi-default-bg: var(--term-bg);
 		border-radius: 4px;
 		padding: 0.4rem 0.6rem;
 		width: fit-content;
@@ -701,28 +787,28 @@
 		display: block;
 	}
 	.art.empty {
-		color: #666666;
+		color: var(--dim);
 		padding: 0.4rem 0;
 	}
 	.art :global(rect.term) {
-		stroke: #505050;
+		stroke: var(--muted);
 		stroke-width: 0.05;
 	}
 
 	.tool-warnings {
 		margin-top: 0.4rem;
-		color: #ffff00;
+		color: var(--warnc);
 		opacity: 0.75;
 	}
 
 	/* custom extension message, with Pi's purple label */
 	.custom-block {
-		background: #2d2838;
+		background: var(--custom-bg);
 		border-radius: 4px;
 		padding: 0.6rem 0.8rem;
 	}
 	.custom-label {
-		color: #9575cd;
+		color: var(--purple);
 		font-weight: bold;
 	}
 	.note {
@@ -746,10 +832,10 @@
 	}
 	.clsname {
 		width: 6.5rem;
-		color: #d4d4d4;
+		color: var(--fg);
 	}
 	.slotname {
-		color: #666666;
+		color: var(--dim);
 		font-size: 0.75rem;
 	}
 	.tog {
@@ -757,26 +843,26 @@
 		font-size: 0.75rem;
 		border: none;
 		background: none;
-		color: #666666;
+		color: var(--dim);
 		cursor: pointer;
 		padding: 0;
 	}
 	.tog.active {
-		color: #b5bd68;
+		color: var(--ok);
 	}
 	.tog::before {
 		content: '[';
-		color: #505050;
+		color: var(--muted);
 	}
 	.tog::after {
 		content: ']';
-		color: #505050;
+		color: var(--muted);
 	}
 	.swatch {
 		width: 1.05rem;
 		height: 1.05rem;
 		padding: 0;
-		border: 1px solid #505050;
+		border: 1px solid var(--muted);
 		border-radius: 2px;
 		font-size: 0.7rem;
 		line-height: 1;
@@ -784,10 +870,10 @@
 	}
 	.swatch.auto {
 		background: transparent;
-		color: #808080;
+		color: var(--ghost);
 	}
 	.swatch.selected {
-		outline: 2px solid #00d7ff;
+		outline: 2px solid var(--cmd);
 	}
 	/* an overlay, so opening it never reflows the page */
 	.palette {
@@ -799,10 +885,10 @@
 		flex-direction: column;
 		gap: 2px;
 		padding: 0.45rem;
-		background: #1c1826;
-		border: 1px solid #505050;
+		background: var(--palette-bg);
+		border: 1px solid var(--muted);
 		border-radius: 4px;
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+		box-shadow: 0 6px 20px var(--shadow);
 	}
 	.prow {
 		display: flex;
@@ -814,15 +900,16 @@
 		display: inline-block;
 		margin-top: 0.8rem;
 	}
+	/* the SGR literal renders like terminal output, on the terminal panel */
 	.themecode pre {
 		margin: 0;
 		padding: 0.5rem 0.9rem;
-		background: #101014;
+		background: var(--term-bg);
 		/* the same frame the rendered diagrams get */
-		border: 1px solid #505050;
+		border: 1px solid var(--muted);
 		border-radius: 4px;
 		tab-size: 2;
-		color: #b5bd68;
+		color: var(--ok);
 	}
 	/* the copy control breaks the top border, styled like [reset] above */
 	.tb-copy {
@@ -831,16 +918,13 @@
 		right: 1rem;
 		font: inherit;
 		border: none;
-		background: #101014;
+		background: var(--term-bg);
 		padding: 0 0.3em;
-		color: #808080;
+		color: var(--ghost);
 		cursor: pointer;
 	}
 	.tb-copy:hover {
-		color: #00d7ff;
-	}
-	.tb-copy:hover {
-		color: #00d7ff;
+		color: var(--cmd);
 	}
 
 	/* the editor, DynamicBorder-style: the prompt is the real input */
@@ -859,7 +943,7 @@
 		top: -0.75em;
 		right: 1rem;
 		padding: 0 0.4em;
-		background: #101014;
+		background: var(--bg);
 		color: #5f87ff;
 		font-size: 0.8rem;
 		user-select: none;
@@ -872,6 +956,6 @@
 		display: flex;
 		gap: 1rem;
 		flex-wrap: wrap;
-		color: #808080;
+		color: var(--ghost);
 	}
 </style>

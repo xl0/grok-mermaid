@@ -10,7 +10,8 @@
 
 ### Added
 
-- Author classes are surfaced: `A:::name` and `class A,B name` land on the spans of the cells that node paints (`span.classes`), and `classDef` declarations are parsed into `art.classDefs` (`{ name: { fill: '#f96', … } }`). The renderer never interprets either; `toAnsi` ignores them.
+- Author classes are surfaced: `A:::name` and `class A,B name` land on the spans of the cells that node paints (`span.classes`), and `classDef` declarations are parsed into `art.classDefs` (`{ name: { fill: '#f96', … } }`). The renderer never interprets either.
+- `toAnsi` applies classDef styles best-effort on top of the role theme: `fill` backs the node's cells, `stroke` colors its border, `color` its text, `font-weight:bold` bolds (merging with the role theme rather than replacing it) — as truecolor SGR, with a black/white foreground picked by luminance when a fill declares no color. The interpreter is exported (`resolveClassStyle`, `classSgr`, `contrastOn`) for consumers with their own styling model; every other property is ignored.
 
 ### Fixed
 

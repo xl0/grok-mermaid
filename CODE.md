@@ -25,7 +25,8 @@ packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sib
   src/
     index.ts              public entry: render() + re-exports
     types.ts              Role / Span / MermaidArt
-    ansi.ts               toAnsi() convenience over the span roles
+    ansi.ts               toAnsi(): role theme + classDef styles as SGR
+    class-style.ts        classDef interpretation: resolveClassStyle, contrastOn
     width.ts              display widths; width-data.ts is generated, do not edit
     canvas.ts             cell grid, direction-bit glyphs, flips, span runs, class tags
     labels.ts             entity decoding, tag/markdown stripping, wrapping, fitting
@@ -102,9 +103,17 @@ does not depend on the theme, so a render survives a theme change and is plain
 JSON, hence worker-transferable. `Span.classes` is author-assigned — `:::name`
 or `class A,B name` — carried by every cell the classed node paints, including
 blank box interior (so a consumer can fill the box). `art.classDefs` holds the
-parsed `classDef` declarations (`name -> {prop: value}`), uninterpreted.
-`toAnsi` maps roles only; class-aware styling is the consumer's, via `styled`
-+ `classDefs`. Class assignment is parsed in every grammar that has it:
+parsed `classDef` declarations (`name -> {prop: value}`), uninterpreted by
+the renderer. `class-style.ts` interprets them best-effort for a cell grid:
+`resolveClassStyle` merges a span's classes into `{fill, stroke, color,
+bold}` (hex/`rgb()`/common named colors normalized to `#rrggbb`; other props
+ignored), `contrastOn` picks the black/white foreground for a fill with no
+declared color. `toAnsi` applies that over the role theme (`classSgr` →
+truecolor SGR); a style that colors nothing for a role (bold-only) merges
+with the theme SGR instead of replacing it. Consumers with their own
+styling model use the same resolver against `styled` + `classDefs`; the
+demo just calls `toAnsi`.
+Class assignment is parsed in every grammar that has it:
 flowchart `:::` at the node cursor, state/class `:::` via `captureStyleTags`
 (the tag names the id token before it; applied post-walk), and `class A,B
 name` statements in flowchart/state. classDefs parse in flowchart/state/class

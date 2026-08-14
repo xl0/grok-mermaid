@@ -1,33 +1,73 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="330" height="218" viewBox="0 0 330 218" role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour">
-  <title>grok-mermaid output, coloured by semantic class</title>
-  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace" font-size="14" xml:space="preserve">
-  <text x="68.4 76.8 85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6 186.0 194.4" y="32" fill="#6e7681">┌──────────────┐</text>
-  <text x="68.4" y="46" fill="#6e7681">│</text>
-  <text x="85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6" y="46" fill="#e6edf3">Parse source</text>
-  <text x="194.4" y="46" fill="#6e7681">│</text>
-  <text x="68.4 76.8 85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6 186.0 194.4" y="60" fill="#6e7681">└───────┬──────┘</text>
-  <text x="68.4 76.8 85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6 186.0 194.4 202.8 211.2" y="74" fill="#39c5cf">┌───────┴────────┐</text>
-  <text x="68.4" y="88" fill="#39c5cf">▼</text>
-  <text x="76.8 85.2" y="88" fill="#9198a1">ok</text>
-  <text x="211.2" y="88" fill="#39c5cf">▼</text>
-  <text x="219.6 228.0 236.4 244.8 253.2 261.6 270.0 278.4 286.8 295.2 303.6" y="88" fill="#9198a1">unsupported</text>
-  <text x="26.4 34.8 43.2 51.6 60.0 68.4 76.8 85.2 93.6 102.0 110.4" y="102" fill="#6e7681">┌─────────┐</text>
-  <text x="144.0 152.4 160.8 169.2 177.6 186.0 194.4 202.8 211.2 219.6 228.0 236.4 244.8 253.2 261.6 270.0 278.4" y="102" fill="#6e7681">┌───────────────┐</text>
-  <text x="26.4" y="116" fill="#6e7681">│</text>
-  <text x="43.2 51.6 60.0 68.4 76.8 85.2 93.6" y="116" fill="#e6edf3">Lay out</text>
-  <text x="110.4" y="116" fill="#6e7681">│</text>
-  <text x="144.0" y="116" fill="#6e7681">│</text>
-  <text x="160.8 169.2 177.6 186.0 194.4 202.8 211.2 219.6 228.0 236.4 244.8 253.2 261.6" y="116" fill="#e6edf3">Framed source</text>
-  <text x="278.4" y="116" fill="#6e7681">│</text>
-  <text x="26.4 34.8 43.2 51.6 60.0 68.4 76.8 85.2 93.6 102.0 110.4" y="130" fill="#6e7681">└────┬────┘</text>
-  <text x="144.0 152.4 160.8 169.2 177.6 186.0 194.4 202.8 211.2 219.6 228.0 236.4 244.8 253.2 261.6 270.0 278.4" y="130" fill="#6e7681">└───────┬───────┘</text>
-  <text x="68.4 76.8 85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6 186.0 194.4 202.8 211.2" y="144" fill="#39c5cf">└───────┬────────┘</text>
-  <text x="135.6" y="158" fill="#39c5cf">▼</text>
-  <text x="76.8 85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6 186.0 194.4" y="172" fill="#6e7681">┌─────────────┐</text>
-  <text x="76.8" y="186" fill="#6e7681">│</text>
-  <text x="93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6" y="186" fill="#e6edf3">Unicode art</text>
-  <text x="194.4" y="186" fill="#6e7681">│</text>
-  <text x="76.8 85.2 93.6 102.0 110.4 118.8 127.2 135.6 144.0 152.4 160.8 169.2 177.6 186.0 194.4" y="200" fill="#6e7681">└─────────────┘</text>
-  </g>
+<svg role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 23.4 15" width="327.6" height="210" overflow="hidden" preserveAspectRatio="xMinYMin meet" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace" style="color: #e6edf3">
+<defs><style>.ansi-bold { font-weight: bold }
+.ansi-dim { fill: color-mix(in srgb, currentColor 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-italic { font-style: italic }
+.ansi-underline { text-decoration: underline }
+.ansi-strike { text-decoration: line-through }
+.ansi-underline.ansi-strike { text-decoration: underline line-through }
+.ansi-inverse { fill: var(--ansi-default-bg, Canvas) }
+.ansi-bg-inverse { fill: currentColor }
+.ansi-fg-30 { fill: var(--ansi-fg-30, #000000) }
+.ansi-dim.ansi-fg-30 { fill: color-mix(in srgb, var(--ansi-fg-30, #000000) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-40 { fill: var(--ansi-bg-40, #000000) }
+.ansi-fg-31 { fill: var(--ansi-fg-31, #cd3131) }
+.ansi-dim.ansi-fg-31 { fill: color-mix(in srgb, var(--ansi-fg-31, #cd3131) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-41 { fill: var(--ansi-bg-41, #cd3131) }
+.ansi-fg-32 { fill: var(--ansi-fg-32, #00a600) }
+.ansi-dim.ansi-fg-32 { fill: color-mix(in srgb, var(--ansi-fg-32, #00a600) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-42 { fill: var(--ansi-bg-42, #00a600) }
+.ansi-fg-33 { fill: var(--ansi-fg-33, #b58900) }
+.ansi-dim.ansi-fg-33 { fill: color-mix(in srgb, var(--ansi-fg-33, #b58900) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-43 { fill: var(--ansi-bg-43, #b58900) }
+.ansi-fg-34 { fill: var(--ansi-fg-34, #0451a5) }
+.ansi-dim.ansi-fg-34 { fill: color-mix(in srgb, var(--ansi-fg-34, #0451a5) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-44 { fill: var(--ansi-bg-44, #0451a5) }
+.ansi-fg-35 { fill: var(--ansi-fg-35, #bc05bc) }
+.ansi-dim.ansi-fg-35 { fill: color-mix(in srgb, var(--ansi-fg-35, #bc05bc) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-45 { fill: var(--ansi-bg-45, #bc05bc) }
+.ansi-fg-36 { fill: var(--ansi-fg-36, #0598bc) }
+.ansi-dim.ansi-fg-36 { fill: color-mix(in srgb, var(--ansi-fg-36, #0598bc) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-46 { fill: var(--ansi-bg-46, #0598bc) }
+.ansi-fg-37 { fill: var(--ansi-fg-37, #a5a5a5) }
+.ansi-dim.ansi-fg-37 { fill: color-mix(in srgb, var(--ansi-fg-37, #a5a5a5) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-47 { fill: var(--ansi-bg-47, #a5a5a5) }
+.ansi-fg-90 { fill: var(--ansi-fg-90, #666666) }
+.ansi-dim.ansi-fg-90 { fill: color-mix(in srgb, var(--ansi-fg-90, #666666) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-100 { fill: var(--ansi-bg-100, #666666) }
+.ansi-fg-91 { fill: var(--ansi-fg-91, #f14c4c) }
+.ansi-dim.ansi-fg-91 { fill: color-mix(in srgb, var(--ansi-fg-91, #f14c4c) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-101 { fill: var(--ansi-bg-101, #f14c4c) }
+.ansi-fg-92 { fill: var(--ansi-fg-92, #23d18b) }
+.ansi-dim.ansi-fg-92 { fill: color-mix(in srgb, var(--ansi-fg-92, #23d18b) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-102 { fill: var(--ansi-bg-102, #23d18b) }
+.ansi-fg-93 { fill: var(--ansi-fg-93, #f5f543) }
+.ansi-dim.ansi-fg-93 { fill: color-mix(in srgb, var(--ansi-fg-93, #f5f543) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-103 { fill: var(--ansi-bg-103, #f5f543) }
+.ansi-fg-94 { fill: var(--ansi-fg-94, #3b8eea) }
+.ansi-dim.ansi-fg-94 { fill: color-mix(in srgb, var(--ansi-fg-94, #3b8eea) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-104 { fill: var(--ansi-bg-104, #3b8eea) }
+.ansi-fg-95 { fill: var(--ansi-fg-95, #d670d6) }
+.ansi-dim.ansi-fg-95 { fill: color-mix(in srgb, var(--ansi-fg-95, #d670d6) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-105 { fill: var(--ansi-bg-105, #d670d6) }
+.ansi-fg-96 { fill: var(--ansi-fg-96, #29b8db) }
+.ansi-dim.ansi-fg-96 { fill: color-mix(in srgb, var(--ansi-fg-96, #29b8db) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-106 { fill: var(--ansi-bg-106, #29b8db) }
+.ansi-fg-97 { fill: var(--ansi-fg-97, #ffffff) }
+.ansi-dim.ansi-fg-97 { fill: color-mix(in srgb, var(--ansi-fg-97, #ffffff) 55%, var(--ansi-default-bg, Canvas)) }
+.ansi-bg-107 { fill: var(--ansi-bg-107, #ffffff) }
+rect:first-of-type { rx: 8px }</style></defs>
+<rect width="23.4" height="15" fill="#0d1117"/>
+<text y="1.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(110,118,129)" x="4.8 5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8">┌──────────────┐</tspan></text>
+<text y="2.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(110,118,129)" x="4.8">│</tspan><tspan x="5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2"> Parse source </tspan><tspan style="fill: rgb(110,118,129)" x="13.8">│</tspan></text>
+<text y="3.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(110,118,129)" x="4.8 5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8">└───────┬──────┘</tspan></text>
+<text y="4.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(57,197,207)" x="4.8 5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8 14.4 15">┌───────┴────────┐</tspan></text>
+<text y="5.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(57,197,207)" x="4.8">▼</tspan><tspan style="fill: rgb(145,152,161)" x="5.4 6">ok</tspan><tspan x="6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8 14.4">              </tspan><tspan style="fill: rgb(57,197,207)" x="15">▼</tspan><tspan style="fill: rgb(145,152,161)" x="15.6 16.2 16.8 17.4 18 18.6 19.2 19.8 20.4 21 21.6">unsupported</tspan></text>
+<text y="6.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2"> </tspan><tspan style="fill: rgb(110,118,129)" x="1.8 2.4 3 3.6 4.2 4.8 5.4 6 6.6 7.2 7.8">┌─────────┐</tspan><tspan x="8.4 9 9.6">   </tspan><tspan style="fill: rgb(110,118,129)" x="10.2 10.8 11.4 12 12.6 13.2 13.8 14.4 15 15.6 16.2 16.8 17.4 18 18.6 19.2 19.8">┌───────────────┐</tspan></text>
+<text y="7.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2"> </tspan><tspan style="fill: rgb(110,118,129)" x="1.8">│</tspan><tspan x="2.4 3 3.6 4.2 4.8 5.4 6 6.6 7.2"> Lay out </tspan><tspan style="fill: rgb(110,118,129)" x="7.8">│</tspan><tspan x="8.4 9 9.6">   </tspan><tspan style="fill: rgb(110,118,129)" x="10.2">│</tspan><tspan x="10.8 11.4 12 12.6 13.2 13.8 14.4 15 15.6 16.2 16.8 17.4 18 18.6 19.2"> Framed source </tspan><tspan style="fill: rgb(110,118,129)" x="19.8">│</tspan></text>
+<text y="8.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2"> </tspan><tspan style="fill: rgb(110,118,129)" x="1.8 2.4 3 3.6 4.2 4.8 5.4 6 6.6 7.2 7.8">└────┬────┘</tspan><tspan x="8.4 9 9.6">   </tspan><tspan style="fill: rgb(110,118,129)" x="10.2 10.8 11.4 12 12.6 13.2 13.8 14.4 15 15.6 16.2 16.8 17.4 18 18.6 19.2 19.8">└───────┬───────┘</tspan></text>
+<text y="9.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(57,197,207)" x="4.8 5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8 14.4 15">└───────┬────────┘</tspan></text>
+<text y="10.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2 4.8 5.4 6 6.6 7.2 7.8 8.4 9">              </tspan><tspan style="fill: rgb(57,197,207)" x="9.6">▼</tspan></text>
+<text y="11.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2 4.8">       </tspan><tspan style="fill: rgb(110,118,129)" x="5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8">┌─────────────┐</tspan></text>
+<text y="12.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2 4.8">       </tspan><tspan style="fill: rgb(110,118,129)" x="5.4">│</tspan><tspan x="6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2"> Unicode art </tspan><tspan style="fill: rgb(110,118,129)" x="13.8">│</tspan></text>
+<text y="13.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2 4.8">       </tspan><tspan style="fill: rgb(110,118,129)" x="5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8">└─────────────┘</tspan></text>
 </svg>
