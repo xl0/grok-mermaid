@@ -196,13 +196,20 @@
 		return p.length ? p.join(';') : null;
 	}
 
-	// Swatch colors for the picker: the component's default 16-color palette,
-	// then the xterm 6x6x6 cube and grayscale ramp.
+	// The 16-color ANSI palette: fed to AsciiArt as its Theme and used for the
+	// picker swatches, followed by the xterm 6x6x6 cube and grayscale ramp.
 	// prettier-ignore
 	const BASE16 = [
 		'#000000', '#cd3131', '#00a600', '#b58900', '#0451a5', '#bc05bc', '#0598bc', '#a5a5a5',
 		'#666666', '#f14c4c', '#23d18b', '#f5f543', '#3b8eea', '#d670d6', '#29b8db', '#ffffff'
 	];
+	// Keep in sync with --term-bg/--term-fg in the styles below: the component
+	// resolves colors at parse time now, so dim must mix toward the actual
+	// panel background rather than a CSS var.
+	const TERM = {
+		dark: { bg: '#101014', fg: '#d4d4d4' },
+		light: { bg: '#f6f8fa', fg: '#24292f' }
+	};
 	function swatch(n: number): string {
 		if (n < 16) return BASE16[n];
 		const hex = (c: number) => c.toString(16).padStart(2, '0');
@@ -236,6 +243,12 @@
 		ROLE_KEYS.map((c) => [c, sgrOf(theme[c])] as const).filter(([, v]) => v !== null)
 	);
 	const ansiTheme = $derived(Object.fromEntries(themeEntries) as AnsiTheme);
+	// The component-side theme: palette plus the terminal panel's actual colors.
+	const asciiTheme = $derived({
+		palette: BASE16,
+		foreground: TERM[dark ? 'dark' : 'light'].fg,
+		background: TERM[dark ? 'dark' : 'light'].bg
+	});
 	const themeCode = $derived.by(() => {
 		if (themeEntries.length === 0) return 'const theme: AnsiTheme = {};';
 		const body = themeEntries.map(([c, v]) => `\t${c}: '${v}',`).join('\n');
@@ -478,6 +491,7 @@
 			<div class="art">
 				<AsciiArt
 					text={ansi}
+					theme={asciiTheme}
 					cols={Math.max(cols, shown.width)}
 					frame="term"
 					margin={1}
@@ -770,12 +784,10 @@
 	.art {
 		overflow-x: auto;
 		overflow-y: hidden;
-		/* the art sits on its own panel, like a terminal on the page; unstyled
-		   spans get the terminal's default fg, not the page's */
+		/* the art sits on its own panel, like a terminal on the page; the
+		   matching fg/bg go to AsciiArt via the theme prop (TERM above) */
 		background: var(--term-bg);
 		color: var(--term-fg);
-		/* dim (SGR 2) mixes toward this, so it must match the panel */
-		--ansi-default-bg: var(--term-bg);
 		border-radius: 4px;
 		padding: 0.4rem 0.6rem;
 		width: fit-content;
