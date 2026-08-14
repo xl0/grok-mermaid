@@ -10,16 +10,19 @@
 import { Canvas, D, drawTextOverEdges, L, R, STY_THICK, U } from './canvas.ts'
 import type { NoteAnchor, SeqItem, Sequence } from './diagrams/sequence.ts'
 import { fitLabel, WRAP_WIDTH } from './labels.ts'
-import { type CanvasResult, drawBox, type Placed } from './layout.ts'
+import {
+  type CanvasResult,
+  drawBox,
+  half,
+  MAX_CANVAS_CELLS,
+  PAD,
+  type Placed,
+  sat,
+} from './layout.ts'
 import { stringWidth } from './width.ts'
 
-const PAD = 1
 /** Minimum columns between adjacent lifelines. */
 const SEQ_GAP = 5
-const MAX_CANVAS_CELLS = 1 << 21
-
-const sat = (a: number, b: number): number => Math.max(0, a - b)
-const half = (n: number): number => Math.floor(n / 2)
 
 /** Where a note box sits, given the lifeline positions. */
 function noteGeometry(xs: number[], anchor: NoteAnchor, textW: number): { x: number; w: number } {
@@ -82,6 +85,17 @@ export function layoutSequence(seq: Sequence): CanvasResult {
   const xs = new Array<number>(n)
   xs[0] = half(boxW[0])
   for (let i = 1; i < n; i++) xs[i] = xs[i - 1] + gaps[i - 1]
+
+  // A note left of the first participant has no gap to grow; shift the whole
+  // diagram right instead so the note box lands beside the lifeline, not on it.
+  let leftPad = 0
+  for (const item of seq.items) {
+    if (item.kind === 'note' && item.anchor.kind === 'left' && item.anchor.at === 0) {
+      const w = stringWidth(item.text) + 2 * PAD + 2
+      leftPad = Math.max(leftPad, sat(w + 1, xs[0]))
+    }
+  }
+  if (leftPad > 0) for (let i = 0; i < n; i++) xs[i] += leftPad
 
   let canvasW = xs[n - 1] + Math.ceil(boxW[n - 1] / 2) + 1
   for (const item of seq.items) {

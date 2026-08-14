@@ -275,3 +275,50 @@ test('a control character in a label does not shrink its box', () => {
 test('a source of only control characters is blank', () => {
   expect(render(`${CONT}${ESC}`)).toBeNull()
 })
+
+test('a reparented region keeps its subtree', () => {
+  const out = render(
+    'stateDiagram-v2\n state Outer {\n  state Inner {\n   A --> B\n  }\n  --\n  C\n }',
+  )
+  if (out === null) throw new Error('render returned null')
+  const art = out.plain.join('\n')
+  for (const piece of ['Inner', 'A', 'B', 'C']) expect(art).toContain(piece)
+})
+
+test('diagramKind strips control characters the way render does', () => {
+  const src = '\x01flowchart TD\n A --> B'
+  expect(render(src)).not.toBeNull()
+  expect(diagramKind(src)).toBe('flowchart')
+})
+
+test('a note left of the first participant sits beside the lifeline', () => {
+  const out = render('sequenceDiagram\n Note left of A: hello there\n A->>B: hi')
+  if (out === null) throw new Error('render returned null')
+  // The note's right border must end before the first lifeline column.
+  const noteRow = out.plain.findIndex((l) => l.includes('hello there'))
+  const lifelineX = out.plain[out.plain.length - 2].indexOf('│')
+  expect(noteRow).toBeGreaterThan(-1)
+  expect(out.plain[noteRow].indexOf('hello there')).toBeLessThan(lifelineX)
+})
+
+test('tabs in the source box expand to spaces', () => {
+  const box = sourceBox('flowchart TD\n\tA --> B')
+  for (const row of box.plain) expect(row).not.toContain('\t')
+  expect(new Set(box.plain.slice(1, -1).map((r) => r.length)).size).toBe(1)
+})
+
+test('a frontmatter title is centred above the art in the title role', () => {
+  const out = render('---\ntitle: Order flow\n---\nflowchart TD\n A --> B')
+  if (out === null) throw new Error('render returned null')
+  expect(out.plain[0].trim()).toBe('Order flow')
+  expect(out.plain[1]).toBe('')
+  expect(out.styled[0].at(-1)).toEqual({ text: 'Order flow', role: 'title' })
+  expect(out.width).toBeGreaterThanOrEqual(10)
+})
+
+test('a back edge routes around its rank, not through a sibling box', () => {
+  const out = render('flowchart TD\n A --> C\n A --> B\n C --> A')
+  if (out === null) throw new Error('render returned null')
+  // The lane endpoint orders rightmost, so the run to the lane is clear.
+  expect(out.plain.join('\n')).toMatch(/│ B │\s+│ C ├─/)
+})

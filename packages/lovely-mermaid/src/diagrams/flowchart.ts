@@ -23,8 +23,10 @@ import {
   firstWord,
   headerKind,
   nonEmpty,
+  parseClassAssign,
   parseClassDef,
   splitOnce,
+  splitTop,
   statementsOf,
   words,
 } from '../statements.ts'
@@ -75,10 +77,8 @@ export function parseGraph(src: string): Graph | null {
         continue
       }
       case 'class': {
-        const rest = st.slice(firstWord(st).length).trim()
-        const ids = firstWord(rest).split(',')
-        const names = rest.slice(firstWord(rest).length).trim().split(',')
-        classAssignments.push([ids, names])
+        const assign = parseClassAssign(st.slice(firstWord(st).length))
+        if (assign) classAssignments.push(assign)
         continue
       }
       case 'style':
@@ -93,15 +93,7 @@ export function parseGraph(src: string): Graph | null {
     if (graph.truncated !== null) break
   }
 
-  for (const [ids, names] of classAssignments) {
-    for (const id of ids) {
-      const idx = graph.index.get(id.trim())
-      if (idx === undefined) continue
-      for (const name of names) {
-        if (name.trim() !== '') graph.addClass(idx, name.trim())
-      }
-    }
-  }
+  graph.applyClasses(classAssignments)
 
   if (graph.truncated !== null) graph.warnings.push(`diagram truncated: ${graph.truncated}`)
   return graph.nodes.length === 0 ? null : graph
@@ -377,7 +369,7 @@ function readAtShape(chars: string[], start: number): Shaped {
 
   let shape: Shape = 'rect'
   let label: string | null = null
-  for (const pair of splitTopLevel(body)) {
+  for (const pair of splitTop(body, (c) => c === ',')) {
     const kv = splitOnce(pair, ':')
     if (kv === null) continue
     const key = asciiLower(kv[0].trim())
@@ -387,24 +379,6 @@ function readAtShape(chars: string[], start: number): Shaped {
   return closed
     ? { shape, label, after: i + 1 }
     : { shape, label, after: chars.length, unclosed: '}' }
-}
-
-/** Split on commas outside double quotes. */
-function splitTopLevel(s: string): string[] {
-  const out: string[] = []
-  let cur = ''
-  let inQuotes = false
-  for (const c of s) {
-    if (c === '"') inQuotes = !inQuotes
-    if (c === ',' && !inQuotes) {
-      out.push(cur)
-      cur = ''
-    } else {
-      cur += c
-    }
-  }
-  out.push(cur)
-  return out
 }
 
 const isLinkChar = (c: string): boolean =>

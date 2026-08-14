@@ -20,6 +20,7 @@ tools/                    repo-level dev tooling, not shipped
 packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sibling)
   scripts/
     gen-width-data.ts     regenerates src/width-data.ts from the oracle
+    gen-css-colors.ts     regenerates src/css-colors.ts from the CSS Color 4 spec
     gen-demo-svg.ts       regenerates docs/demo.svg, the README's colour example
     release.ts            rolls the changelog, bumps, verifies, commits, tags, pushes
   src/
@@ -27,10 +28,11 @@ packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sib
     types.ts              Role / Span / MermaidArt
     ansi.ts               toAnsi(): role theme + classDef styles as SGR
     class-style.ts        classDef interpretation: resolveClassStyle, contrastOn
+    css-colors.ts         CSS named-color table; generated, do not edit
     width.ts              display widths; width-data.ts is generated, do not edit
     canvas.ts             cell grid, direction-bit glyphs, flips, span runs, class tags
     labels.ts             entity decoding, tag/markdown stripping, wrapping, fitting
-    statements.ts         source -> statements, shared string helpers, classDef parsing
+    statements.ts         source -> statements, shared scan/split helpers, classDef parsing
     graph.ts              shared model: Node/Edge/Group/Graph + caps + truncation
     registry.ts           the diagram table; diagramKind and render dispatch through it
     diagrams/             one module per diagram type: parse + layout glue
@@ -114,10 +116,22 @@ with the theme SGR instead of replacing it. Consumers with their own
 styling model use the same resolver against `styled` + `classDefs`; the
 demo just calls `toAnsi`.
 Class assignment is parsed in every grammar that has it:
-flowchart `:::` at the node cursor, state/class `:::` via `captureStyleTags`
-(the tag names the id token before it; applied post-walk), and `class A,B
-name` statements in flowchart/state. classDefs parse in flowchart/state/class
-diagrams.
+flowchart `:::` at the node cursor, state/class `:::` inline at each id token
+(`takeTags`; a tag inside a quoted label or description is text, not a tag),
+and `class A,B name` statements in flowchart/state (`parseClassAssign` +
+`Graph.applyClasses`, deferred so a statement may precede the nodes it
+names). classDefs parse in flowchart/state/class diagrams.
+
+**Shared scan helpers** (`statements.ts`) are the one place quote rules live:
+`splitTop` (split outside quotes and parens — classDef props, at-shape pairs,
+ER tokens), `quoteMask` (class-relation operator scan), `splitColon` (label
+colon that skips `:::` runs), `takeTags`. A grammar reinventing one of these
+is how the quoted-cardinality and `rgb()` bugs happened; don't.
+
+Mermaid YAML frontmatter (`---` … `---` before the header) is skipped by
+`statementsOf`; `frontmatterTitle` reads its `title:`, which `render` paints
+above the art. While unterminated, everything is frontmatter — a streamed
+diagram stays blank until the block closes.
 
 ## Syntax errors
 
@@ -235,6 +249,27 @@ title row centres, the rest left-align.
   the cell style to thick (`│`→`┃`, junctions `├`→`┣`) between the activating
   and deactivating rows; an unclosed span runs to the bottom. Upstream strips
   the markers. Differential class `activations` — 6 cases.
+- **Diamond nodes get double borders** (post-cutoff). `A{...}` and state
+  `<<choice>>` draw `╔═╗`; upstream draws them identically to `round`, an
+  inert distinction. Double lines carry no direction bits — the sides are
+  painted directly and `finalizeMask` resolves edge tees into the mixed
+  glyphs (`╤` `╧` `╟` `╢`). Differential class `diamond` — 20 cases.
+- **A frontmatter `title:` is drawn**, centred above the art in the `title`
+  role (post-cutoff). The only frontmatter key with terminal meaning;
+  `config` styles mermaid's own renderers and is ignored.
+- **Lane endpoints order last in their rank** (post-cutoff): a skip or back
+  edge exits toward the lane strip, so whatever the crossing-minimiser put
+  beyond its endpoints sat in the corridor and was cut through. Differential
+  class `laneOrder` — 0 corpus cases; pinned by a unit test.
+- **The source box expands tabs** to 4-column stops (post-cutoff): a literal
+  tab measures one cell here but jumps to the terminal's tab stop there, so
+  the frame misaligned. Differential class `tabs` — 509 cases.
+- **A note left of the first participant gets its own margin** (post-cutoff):
+  the diagram shifts right instead of the note painting over the lifelines.
+  Differential class `noteLeft` — 6 cases.
+- **YAML frontmatter is skipped**, not mistaken for a header (post-cutoff).
+  Upstream renders the source box for any frontmattered diagram (0 corpus
+  cases; pinned by a unit test).
 - **Cardinalities sit at their own edge ends.** ER and class relations carry
   `cardFrom`/`cardTo` beside `label`; forward routes paint each at its end
   with the verb between (TD rank gaps grow to 3 rows to make space), lanes
@@ -254,9 +289,9 @@ a case that diverges for a reason not on the deviations list above.
 since `render` no longer has one; that shim lives there rather than in `src`
 precisely because it is upstream's behaviour and not the port's.
 
-Current state: 4170 identical, 2377 expected (clustering), 135 lenient,
-7 composite, 0 v2shape, 6 activations, 68 cards, 0 header, 7 slack,
-410 trimmed, 0 regressions.
+Current state: 3823 identical, 2224 expected (clustering), 126 lenient,
+7 composite, 0 v2shape, 6 activations, 68 cards, 20 diamond, 509 tabs,
+6 noteLeft, 0 laneOrder, 0 header, 7 slack, 384 trimmed, 0 regressions.
 
 Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
 byte for byte on all 7180 cases. Divergence after it is deliberate and listed
@@ -313,7 +348,7 @@ notions is what the port dropped.
 
 ## Tests
 
-107 tests. The bulk of rendering behaviour is pinned by markdown golden files
+125 tests. The bulk of rendering behaviour is pinned by markdown golden files
 in `test/cases/<type>/<name>.md`, run by `test/cases.test.ts`: each file holds
 one or more ```mermaid fences, each followed by a ```text fence with the
 expected `plain` (or a bare `(null)` line for sources that must refuse) and an
@@ -339,7 +374,8 @@ bun (runtime + test runner + workspace), tsgo (typecheck + emit), biome
 (lint + format, configured at the repo root). No runtime dependencies.
 Root scripts: `test`, `test:update`, `check`, `fix`, `typecheck`,
 `differential`; package
-scripts: `build`, `gen:width`, `gen:demo`, `release`, `prepublishOnly`.
+scripts: `build`, `gen:width`, `gen:colors`, `gen:demo`, `release`,
+`prepublishOnly`.
 
 ## Releasing
 

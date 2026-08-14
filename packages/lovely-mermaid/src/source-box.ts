@@ -8,10 +8,9 @@
  */
 
 import { srcLines, stripControls } from './labels.ts'
+import { sat } from './layout.ts'
 import type { MermaidArt, Span } from './types.ts'
 import { measured, stringWidth } from './width.ts'
-
-const sat = (a: number, b: number): number => Math.max(0, a - b)
 
 /**
  * Frame `src` in a titled box, hard-wrapping its lines to `maxWidth` columns.
@@ -27,7 +26,7 @@ export function sourceBox(src: string, maxWidth?: number): MermaidArt {
   const limit = maxWidth === undefined ? undefined : Math.max(8, sat(maxWidth, 4))
 
   const body = srcLines(src)
-    .map((l) => l.replace(/\s+$/, ''))
+    .map((l) => expandTabs(l).replace(/\s+$/, ''))
     .reduce<{ started: boolean; lines: string[] }>(
       (acc, l) => {
         if (!acc.started && l === '') return acc
@@ -38,7 +37,9 @@ export function sourceBox(src: string, maxWidth?: number): MermaidArt {
       { started: false, lines: [] },
     ).lines
 
-  const contentW = Math.max(stringWidth(title), ...body.map(stringWidth), 0)
+  // reduce, not a spread: a spread of stringWidths overflows the arg limit
+  // on very large sources.
+  const contentW = body.reduce((w, l) => Math.max(w, stringWidth(l)), stringWidth(title))
   const inner = contentW + 2
 
   const plain: string[] = []
@@ -67,6 +68,27 @@ export function sourceBox(src: string, maxWidth?: number): MermaidArt {
   styled.push([{ text: bottom, role: 'border' }])
 
   return { plain, styled, width: inner + 2, classDefs: {}, warnings: [] }
+}
+
+/**
+ * Expand tabs to 4-column stops. A literal tab measures one column here but
+ * whatever the terminal's tab stops say there, so the frame would misalign.
+ */
+function expandTabs(line: string): string {
+  if (!line.includes('\t')) return line
+  let out = ''
+  let col = 0
+  for (const [c, cw] of measured(line)) {
+    if (c === '\t') {
+      const pad = 4 - (col % 4)
+      out += ' '.repeat(pad)
+      col += pad
+    } else {
+      out += c
+      col += cw
+    }
+  }
+  return out
 }
 
 /** Hard-break a line at `limit` columns, never splitting a wide glyph. */

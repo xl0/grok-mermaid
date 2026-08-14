@@ -56,11 +56,6 @@ export function clusterWidth(cluster: string): number {
   return vs16 || regional >= 2 ? 2 : w
 }
 
-/** Iterate grapheme clusters, so no loop can split one. */
-export function* clusters(s: string): Generator<string> {
-  for (const { segment } of segmenter.segment(s)) yield segment
-}
-
 /** Iterate clusters paired with their display width. */
 export function* measured(s: string): Generator<[string, number]> {
   for (const { segment } of segmenter.segment(s)) yield [segment, clusterWidth(segment)]

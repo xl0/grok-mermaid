@@ -154,6 +154,23 @@ export class Graph {
   }
 
   /**
+   * Apply collected `[ids, names]` class assignments. Run after the statement
+   * walk so a `class A,B name` (or `:::` tag) may precede the nodes it names;
+   * unknown ids are ignored.
+   */
+  applyClasses(assignments: [string[], string[]][]): void {
+    for (const [ids, names] of assignments) {
+      for (const id of ids) {
+        const idx = this.index.get(id.trim())
+        if (idx === undefined) continue
+        for (const name of names) {
+          if (name.trim() !== '') this.addClass(idx, name.trim())
+        }
+      }
+    }
+  }
+
+  /**
    * Record an unreadable statement; the diagram renders without it. Skipped
    * once truncated — a cap-caused parse failure is not the statement's fault.
    */

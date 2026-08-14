@@ -11,13 +11,15 @@ import { asciiLower, decodeHtmlEntities, displayGenerics, isIdChar } from '../la
 import { layoutClass } from '../layout.ts'
 import type { Diagram } from '../registry.ts'
 import {
-  captureStyleTags,
   firstWord,
   headerKind,
   nonEmpty,
   parseClassDef,
+  quoteMask,
+  splitColon,
   splitOnce,
   statementsOf,
+  takeTags,
   words,
 } from '../statements.ts'
 
@@ -59,26 +61,25 @@ export function parseClass(src: string): Graph | null {
   if (kind === null || !classDiagram.headers.includes(kind)) return null
 
   const graph = new Graph()
-  /** Declare a class: a rect node carrying compartment sections. */
-  const declare = (name: string): number | null => {
-    const idx = graph.nodeIndex(name, null, 'rect')
-    if (idx !== null) graph.nodes[idx].sections ??= [[displayGenerics(name)], [], []]
+  /** Declare a class from an id token, attaching any `:::` tags it carries. */
+  const declare = (token: string): number | null => {
+    const { id, classes } = takeTags(token)
+    const idx = graph.nodeIndex(id, null, 'rect')
+    if (idx !== null) {
+      graph.nodes[idx].sections ??= [[displayGenerics(id)], [], []]
+      for (const cls of classes) graph.addClass(idx, cls)
+    }
     return idx
   }
   /** The open `{` body: a class index, `'skip'` for a dropped class, or none. */
   let curClass: number | 'skip' | null = null
-  /** `:::name` tags, applied after the walk. */
-  const classAssignments: [string[], string[]][] = []
 
-  for (let st of statements.slice(1)) {
+  for (const st of statements.slice(1)) {
     if (curClass !== null) {
       if (st === '}') curClass = null
       else if (curClass !== 'skip') pushMember(graph.nodes[curClass], st)
       continue
     }
-    const captured = captureStyleTags(st)
-    st = captured.st
-    for (const [id, name] of captured.classes) classAssignments.push([[id], [name]])
 
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {
@@ -135,7 +136,7 @@ export function parseClass(src: string): Graph | null {
           })
         }
       } else {
-        const member = splitOnce(st, ':')
+        const member = splitColon(st)
         const id = member ? member[0].trim() : ''
         const text = member ? member[1].trim() : ''
         if (member === null || id === '' || /\s/.test(id) || text === '') {
@@ -149,16 +150,6 @@ export function parseClass(src: string): Graph | null {
     if (graph.truncated !== null) {
       graph.warnings.push(`diagram truncated: ${graph.truncated}`)
       break
-    }
-  }
-
-  for (const [ids, names] of classAssignments) {
-    for (const id of ids) {
-      const idx = graph.index.get(id.trim())
-      if (idx === undefined) continue
-      for (const name of names) {
-        if (name.trim() !== '') graph.addClass(idx, name.trim())
-      }
     }
   }
 
@@ -197,9 +188,13 @@ interface ClassRelation {
 
 function parseClassRelation(st: string): ClassRelation | null {
   const chars = [...st]
+  // Skip quoted spans, or the `..` inside a cardinality like `"0..*"` would
+  // match the dotted-link operator.
+  const quoted = quoteMask(chars)
   let found: { pos: number; op: string; headFrom: Head; headTo: Head; line: LineKind } | null = null
 
   outer: for (let pos = 0; pos < chars.length; pos++) {
+    if (quoted[pos]) continue
     const tail = chars.slice(pos, pos + MAX_CLASS_OP).join('')
     for (const [op, headFrom, headTo, line] of CLASS_OPS) {
       if (!tail.startsWith(op)) continue
@@ -222,7 +217,7 @@ function parseClassRelation(st: string): ClassRelation | null {
   const [lhs, cardFrom] = stripCardinalitySuffix(lhsRaw)
   const [rhs, cardTo] = stripCardinalityPrefix(rhsRaw)
 
-  const split = splitOnce(rhs, ':')
+  const split = splitColon(rhs)
   const toId = (split ? split[0] : rhs).trim()
   const relLabel = split ? nonEmpty(decodeHtmlEntities(split[1].trim())) : null
 

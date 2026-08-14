@@ -54,6 +54,9 @@ const { diagramKind, render, sourceBox } = await import(
   '../../packages/lovely-mermaid/src/index.ts'
 )
 const { measured, stringWidth } = await import('../../packages/lovely-mermaid/src/width.ts')
+const { parseGraph } = await import('../../packages/lovely-mermaid/src/diagrams/flowchart.ts')
+const { parseState } = await import('../../packages/lovely-mermaid/src/diagrams/state.ts')
+const { computeRanks } = await import('../../packages/lovely-mermaid/src/layout.ts')
 
 const TOO_WIDE_HINT =
   'This diagram is too wide to display here — open the image to view it in full.'
@@ -218,6 +221,49 @@ function cardsHere(src: string, got: string): boolean {
   return kind === 'class' && src.includes('"')
 }
 
+/**
+ * The port expands tabs in the source box (a literal tab misaligns the frame
+ * at the terminal's tab stops); upstream prints them raw. Both sides showing
+ * a box for a tab-carrying source = deliberate.
+ */
+function tabsHere(src: string, got: string): boolean {
+  return src.includes('\t') && got.includes('mermaid: ')
+}
+
+/**
+ * A note left of the first participant used to paint over the lifelines
+ * (upstream still does); the port shifts the diagram right to make room.
+ */
+function noteLeftHere(src: string, got: string): boolean {
+  return got !== '#NONE' && diagramKind(src) === 'sequence' && /note\s+left\s+of/i.test(src)
+}
+
+/**
+ * Upstream draws diamond nodes (`A{...}`, state `<<choice>>`) like round
+ * ones; the port draws them with double borders, so any diagram declaring
+ * one differs.
+ */
+function diamondHere(src: string, got: string): boolean {
+  if (got === '#NONE') return false
+  const kind = diagramKind(src)
+  if (kind === 'flowchart' && src.includes('{')) return true
+  return kind === 'state' && src.includes('<<choice>>')
+}
+
+/**
+ * The port orders lane-edge endpoints last within their rank so the corridor
+ * to the lane strip is clear (upstream lets the lane cut through whatever
+ * sits beyond them), so any diagram with a skip or back edge may differ.
+ */
+function laneOrderHere(src: string, got: string): boolean {
+  if (got === '#NONE') return false
+  const kind = diagramKind(src)
+  const g = kind === 'flowchart' ? parseGraph(src) : kind === 'state' ? parseState(src) : null
+  if (g === null) return false
+  const ranks = computeRanks(g)
+  return g.edges.some((e) => e.from !== e.to && ranks[e.to] !== ranks[e.from] + 1)
+}
+
 function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): boolean {
   // Upstream printed a source box; we drew art that fits. Matching on the box
   // title rather than the note, which wraps and so is not contiguous at small
@@ -247,6 +293,10 @@ const cards: number[] = []
 const header: number[] = []
 const slack: number[] = []
 const trimmed: number[] = []
+const diamond: number[] = []
+const tabs: number[] = []
+const noteLeft: number[] = []
+const laneOrder: number[] = []
 const regressions: { i: number; width: string; src: string; want: string; got: string }[] = []
 corpus.forEach((line, i) => {
   const tab = line.indexOf('\t')
@@ -257,12 +307,16 @@ corpus.forEach((line, i) => {
   const got = art === null ? '#NONE' : esc(art.plain.join('\n'))
   if (got === golden[i]) same++
   else if (trimmedOnlyHere(golden[i], got)) trimmed.push(i)
+  else if (tabsHere(src, got)) tabs.push(i)
   else if (expectedToDiffer(src)) expected.push(i)
   else if (lenientHere(src, golden[i])) lenient.push(i)
   else if (compositeHere(src, got)) composite.push(i)
   else if (v2ShapeHere(src, got)) v2shape.push(i)
   else if (activationsHere(src, got)) activations.push(i)
   else if (cardsHere(src, got)) cards.push(i)
+  else if (diamondHere(src, got)) diamond.push(i)
+  else if (noteLeftHere(src, got)) noteLeft.push(i)
+  else if (laneOrderHere(src, got)) laneOrder.push(i)
   else if (stricterHeaderHere(src, golden[i])) header.push(i)
   else if (fitsOnlyHere(src, maxWidth, golden[i])) slack.push(i)
   else regressions.push({ i, width, src, want: golden[i], got })
@@ -282,6 +336,12 @@ console.log(
   `activations: ${activations.length}  (sequence activations thicken lifelines — see CODE.md)`,
 )
 console.log(`cards:       ${cards.length}  (cardinalities at their own edge ends — see CODE.md)`)
+console.log(`diamond:     ${diamond.length}  (diamond nodes get double borders — see CODE.md)`)
+console.log(`tabs:        ${tabs.length}  (source box expands tabs — see CODE.md)`)
+console.log(`noteLeft:    ${noteLeft.length}  (left-edge notes get their own margin — see CODE.md)`)
+console.log(
+  `laneOrder:   ${laneOrder.length}  (lane endpoints order last in their rank — see CODE.md)`,
+)
 console.log(`header:      ${header.length}  (exact header match — see CODE.md)`)
 console.log(`slack:       ${slack.length}  (painted vs allocated width — see CODE.md)`)
 console.log(`trimmed:     ${trimmed.length}  (empty outer rows removed — see CODE.md)`)

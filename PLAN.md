@@ -59,12 +59,20 @@ enforced, parse warnings, control characters stripped, staged npm releases.
       color/bold, normalized colors) + contrast guard; `toAnsi` layers it
       over the role theme (bold-only merges rather than replaces), demo
       calls `toAnsi` (`/styles` preset).
+- [x] Whole-codebase review rework (2026-08-14, see `REWORK.md`): shared scan
+      helpers (quote rules live in `statements.ts` only), `:::` parsed inline
+      (captureStyleTags gone), `class A,B` unified, ten bug fixes (frontmatter
+      skipped + its title drawn, quoted cardinality, region subtree loss,
+      seq-cap throw, lane edges cutting through boxes, …), diamonds drawn as
+      double-bordered boxes, css-colors.ts generated from spec.
 - [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
       gitGraph (commit lanes). Registry makes each a one-file addition.
 - [x] Demo app in `demo/` (SvelteKit): light/dark page theme, class-styled
       `/styles` preset. lovely-mermaid by source alias;
-      svelte-asciiart via `bun link` until its 0.0.6 (with `cellSize`) is
-      published — Pages deploy waits on that.
+      svelte-asciiart via `bun link` until published — Pages deploy waits on
+      that. AsciiArt colors now resolve at parse time through its `theme`
+      prop (palette + panel fg/bg, keep in sync with `--term-bg`/`--term-fg`);
+      the old `--ansi-*` CSS-var hooks are gone.
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
 
 ## Open questions

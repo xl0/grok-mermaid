@@ -29,19 +29,19 @@ import { fitLabel, MAX_LABEL, MAX_LINES, WRAP_WIDTH, wrapLabel } from './labels.
 import { measured, stringWidth } from './width.ts'
 
 /** Cells of padding between a box border and its text. */
-const PAD = 1
+export const PAD = 1
 /** Minimum horizontal / vertical space between boxes. */
 const GAP_X = 3
 const GAP_Y = 2
 /** Refuse to allocate a canvas larger than this many cells. */
-const MAX_CANVAS_CELLS = 1 << 21
+export const MAX_CANVAS_CELLS = 1 << 21
 
 /** A laid-out canvas, or `null` when the diagram is empty or over the cell cap. */
 export type CanvasResult = Canvas | null
 
 /** Saturating subtraction; Rust's `usize` arithmetic never goes negative. */
-const sat = (a: number, b: number): number => Math.max(0, a - b)
-const half = (n: number): number => Math.floor(n / 2)
+export const sat = (a: number, b: number): number => Math.max(0, a - b)
+export const half = (n: number): number => Math.floor(n / 2)
 
 /**
  * Everything an edge says, joined — the fallback for routes that have no
@@ -318,8 +318,14 @@ function relaxRank(
 
 // ------------------------------------------------------------------- tracks
 
-/** A span competing for a track: `[start, end, from, to, edgeIndex]`. */
-type Span5 = [number, number, number, number, number]
+/** A span competing for a track: the covered coordinate range plus its edge. */
+interface TrackSpan {
+  start: number
+  end: number
+  from: number
+  to: number
+  edge: number
+}
 
 /**
  * Pack spans into as few parallel tracks as possible.
@@ -328,23 +334,29 @@ type Span5 = [number, number, number, number, number]
  * endpoint — edges fanning out of one node deliberately reuse a single row so
  * a merge draws one arrowhead rather than a stack of them.
  */
-export function assignTracks(spans: Span5[]): { assigned: [number, number][]; count: number } {
-  const sorted = [...spans].sort((a, b) => {
-    for (let i = 0; i < 5; i++) if (a[i] !== b[i]) return a[i] - b[i]
-    return 0
-  })
-  const tracks: [number, number, number, number][][] = []
+export function assignTracks(spans: TrackSpan[]): { assigned: [number, number][]; count: number } {
+  const sorted = [...spans].sort(
+    (a, b) =>
+      a.start - b.start || a.end - b.end || a.from - b.from || a.to - b.to || a.edge - b.edge,
+  )
+  const tracks: TrackSpan[][] = []
   const assigned: [number, number][] = []
-  for (const [s, e, f, t, idx] of sorted) {
+  for (const span of sorted) {
     let slot = tracks.findIndex((members) =>
-      members.every(([s2, e2, f2, t2]) => e2 + 2 <= s || e + 2 <= s2 || f2 === f || t2 === t),
+      members.every(
+        (m) =>
+          m.end + 2 <= span.start ||
+          span.end + 2 <= m.start ||
+          m.from === span.from ||
+          m.to === span.to,
+      ),
     )
     if (slot === -1) {
       tracks.push([])
       slot = tracks.length - 1
     }
-    tracks[slot].push([s, e, f, t])
-    assigned.push([idx, slot])
+    tracks[slot].push(span)
+    assigned.push([span.edge, slot])
   }
   return { assigned, count: tracks.length }
 }
@@ -356,35 +368,40 @@ function busSpans(
   centers: number[],
   r: number,
   exact: boolean,
-): Span5[] {
-  const out: Span5[] = []
+): TrackSpan[] {
+  const out: TrackSpan[] = []
   graph.edges.forEach((e, i) => {
     const jogs = exact
       ? centers[e.from] !== centers[e.to]
       : Math.abs(centers[e.from] - centers[e.to]) > 1
     if (e.from !== e.to && ranks[e.from] === r && ranks[e.to] === r + 1 && jogs) {
-      out.push([
-        Math.min(centers[e.from], centers[e.to]),
-        Math.max(centers[e.from], centers[e.to]),
-        e.from,
-        e.to,
-        i,
-      ])
+      out.push({
+        start: Math.min(centers[e.from], centers[e.to]),
+        end: Math.max(centers[e.from], centers[e.to]),
+        from: e.from,
+        to: e.to,
+        edge: i,
+      })
     }
   })
   return out
 }
 
 /** Edges skipping a rank or running backwards; these go around in a lane. */
-function laneSpans(graph: Graph, ranks: number[], placed: Placed[], vertical: boolean): Span5[] {
-  const out: Span5[] = []
+function laneSpans(
+  graph: Graph,
+  ranks: number[],
+  placed: Placed[],
+  vertical: boolean,
+): TrackSpan[] {
+  const out: TrackSpan[] = []
   graph.edges.forEach((e, i) => {
     if (e.from === e.to || ranks[e.to] === ranks[e.from] + 1) return
     const pf = placed[e.from]
     const pt = placed[e.to]
     const a = vertical ? Math.min(pf.cy, pt.cy) : Math.min(pf.cx, pt.cx)
     const b = vertical ? Math.max(pf.cy, pt.cy) : Math.max(pf.cx, pt.cx)
-    out.push([a, b, e.from, e.to, i])
+    out.push({ start: a, end: b, from: e.from, to: e.to, edge: i })
   })
   return out
 }
@@ -566,6 +583,18 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   for (let idx = 0; idx < ranks.length; idx++) byRank[ranks[idx]].push(idx)
   orderRanks(byRank, graph.edges, ranks)
 
+  // Lane edges exit through the rank's trailing side toward the lane strip;
+  // their endpoints go last within the rank, or whatever the ordering put
+  // beyond them would sit in that corridor and be cut through.
+  const inLane = new Array<boolean>(graph.nodes.length).fill(false)
+  for (const e of graph.edges) {
+    if (e.from !== e.to && ranks[e.to] !== ranks[e.from] + 1) {
+      inLane[e.from] = true
+      inLane[e.to] = true
+    }
+  }
+  for (const row of byRank) row.sort((a, b) => Number(inLane[a]) - Number(inLane[b]))
+
   const wrapped = graph.nodes.map((node) => wrapLabel(node.label, WRAP_WIDTH, MAX_LINES))
   const widest = (lines: string[]): number =>
     Math.max(1, lines.length === 0 ? 1 : Math.max(...lines.map(stringWidth)))
@@ -687,9 +716,11 @@ export function layoutClass(graph: Graph): CanvasResult {
 
 // -------------------------------------------------------------------- groups
 
-type ItemKey = string
-const nodeKey = (i: number): ItemKey => `n${i}`
-const groupKey = (i: number): ItemKey => `g${i}`
+/** An endpoint inside a scope: a plain node or a (proxied) subgraph. */
+interface ScopeItem {
+  group: boolean
+  i: number
+}
 
 /**
  * Lay out a flowchart that uses `subgraph`.
@@ -715,15 +746,15 @@ export function layoutGrouped(graph: Graph): CanvasResult {
     }
     return chain.reverse()
   }
-  const endpoint = (n: number): { key: ItemKey; chain: number[] } => {
+  const endpoint = (n: number): { item: ScopeItem; chain: number[] } => {
     const gi = proxy.get(n)
     return gi === undefined
-      ? { key: nodeKey(n), chain: groupChain(graph.nodeGroup[n]) }
-      : { key: groupKey(gi), chain: groupChain(graph.groups[gi].parent) }
+      ? { item: { group: false, i: n }, chain: groupChain(graph.nodeGroup[n]) }
+      : { item: { group: true, i: gi }, chain: groupChain(graph.groups[gi].parent) }
   }
 
   /** Edges bucketed by the scope that draws them; `null` is the top level. */
-  const scopeEdges = new Map<number | null, [ItemKey, ItemKey, number][]>()
+  const scopeEdges = new Map<number | null, [ScopeItem, ScopeItem, number][]>()
   const referenced = new Array<boolean>(graph.groups.length).fill(false)
   graph.edges.forEach((e, ei) => {
     const f = endpoint(e.from)
@@ -731,14 +762,14 @@ export function layoutGrouped(graph: Graph): CanvasResult {
     let k = 0
     while (k < f.chain.length && k < t.chain.length && f.chain[k] === t.chain[k]) k++
     const scope = k === 0 ? null : f.chain[k - 1]
-    const fKey = f.chain.length > k ? groupKey(f.chain[k]) : f.key
-    const tKey = t.chain.length > k ? groupKey(t.chain[k]) : t.key
-    for (const key of [fKey, tKey]) {
-      if (key.startsWith('g')) referenced[Number(key.slice(1))] = true
+    const fItem = f.chain.length > k ? { group: true, i: f.chain[k] } : f.item
+    const tItem = t.chain.length > k ? { group: true, i: t.chain[k] } : t.item
+    for (const item of [fItem, tItem]) {
+      if (item.group) referenced[item.i] = true
     }
     const list = scopeEdges.get(scope)
-    if (list) list.push([fKey, tKey, ei])
-    else scopeEdges.set(scope, [[fKey, tKey, ei]])
+    if (list) list.push([fItem, tItem, ei])
+    else scopeEdges.set(scope, [[fItem, tItem, ei]])
   })
 
   const directNodes = new Map<number | null, number[]>()
@@ -749,13 +780,23 @@ export function layoutGrouped(graph: Graph): CanvasResult {
     else directNodes.set(g, [ni])
   })
 
-  // Drop empty subgraphs, but keep any that an edge attaches to.
+  // Drop empty subgraphs, but keep any that an edge attaches to. Walked by
+  // the actual child relation: state `--` regions reparent earlier groups
+  // under later ones, so index order says nothing about depth.
+  const childGroups: number[][] = graph.groups.map(() => [])
+  graph.groups.forEach((g, gi) => {
+    if (g.parent !== null) childGroups[g.parent].push(gi)
+  })
   const keep = new Array<boolean>(graph.groups.length).fill(false)
-  for (let gi = graph.groups.length - 1; gi >= 0; gi--) {
-    const hasNodes = (directNodes.get(gi) ?? []).length > 0
-    const hasChildren = graph.groups.some((g, c) => g.parent === gi && keep[c])
-    keep[gi] = hasNodes || hasChildren || referenced[gi]
+  const visit = (gi: number): boolean => {
+    let kept = referenced[gi] || (directNodes.get(gi) ?? []).length > 0
+    for (const c of childGroups[gi]) if (visit(c)) kept = true
+    keep[gi] = kept
+    return kept
   }
+  graph.groups.forEach((g, gi) => {
+    if (g.parent === null) visit(gi)
+  })
 
   const canvas = buildScope(graph, null, scopeEdges, directNodes, keep)
   return canvas && orient(canvas, graph)
@@ -764,43 +805,43 @@ export function layoutGrouped(graph: Graph): CanvasResult {
 function buildScope(
   graph: Graph,
   scope: number | null,
-  scopeEdges: Map<number | null, [ItemKey, ItemKey, number][]>,
+  scopeEdges: Map<number | null, [ScopeItem, ScopeItem, number][]>,
   directNodes: Map<number | null, number[]>,
   keep: boolean[],
 ): CanvasResult {
-  const items: ItemKey[] = (directNodes.get(scope) ?? []).map(nodeKey)
+  const items: ScopeItem[] = (directNodes.get(scope) ?? []).map((i) => ({ group: false, i }))
   const childGroups = graph.groups
     .map((_, gi) => gi)
     .filter((gi) => graph.groups[gi].parent === scope && keep[gi])
-  items.push(...childGroups.map(groupKey))
+  items.push(...childGroups.map((i) => ({ group: true, i })))
 
   if (items.length === 0) return new Canvas(1, 1)
 
-  const indexOf = new Map<ItemKey, number>()
+  const nodeAt = new Map<number, number>()
+  const groupAt = new Map<number, number>()
   const nodes: Node[] = []
   const extras: NodeExtra[] = []
   for (const item of items) {
-    indexOf.set(item, nodes.length)
-    const i = Number(item.slice(1))
-    if (item.startsWith('n')) {
+    ;(item.group ? groupAt : nodeAt).set(item.i, nodes.length)
+    if (!item.group) {
       nodes.push({
-        label: graph.nodes[i].label,
-        shape: graph.nodes[i].shape,
-        classes: graph.nodes[i].classes,
+        label: graph.nodes[item.i].label,
+        shape: graph.nodes[item.i].shape,
+        classes: graph.nodes[item.i].classes,
       })
       extras.push({ kind: 'plain' })
     } else {
-      const sub = buildScope(graph, i, scopeEdges, directNodes, keep)
+      const sub = buildScope(graph, item.i, scopeEdges, directNodes, keep)
       if (sub === null) return null
-      nodes.push({ label: graph.groups[i].label, shape: 'rect' })
+      nodes.push({ label: graph.groups[item.i].label, shape: 'rect' })
       extras.push({ kind: 'frame', sub })
     }
   }
 
   const edges: Edge[] = []
   for (const [f, t, ei] of scopeEdges.get(scope) ?? []) {
-    const fi = indexOf.get(f)
-    const ti = indexOf.get(t)
+    const fi = (f.group ? groupAt : nodeAt).get(f.i)
+    const ti = (t.group ? groupAt : nodeAt).get(t.i)
     if (fi === undefined || ti === undefined) continue
     const e = graph.edges[ei]
     edges.push({
@@ -827,21 +868,40 @@ export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape
   const right = x + w - 1
   const bottom = y + h - 1
 
-  const rounded = shape === 'round' || shape === 'diamond'
-  canvas.set(x, y, rounded ? '╭' : '┌', 'border')
-  canvas.set(right, y, rounded ? '╮' : '┐', 'border')
-  canvas.set(x, bottom, rounded ? '╰' : '└', 'border')
-  canvas.set(right, bottom, rounded ? '╯' : '┘', 'border')
+  // A diamond is a double-line box — the terminal's nod to `A{...}`.
+  const [tl, tr, bl, br] =
+    shape === 'diamond'
+      ? ['╔', '╗', '╚', '╝']
+      : shape === 'round'
+        ? ['╭', '╮', '╰', '╯']
+        : ['┌', '┐', '└', '┘']
+  canvas.set(x, y, tl, 'border')
+  canvas.set(right, y, tr, 'border')
+  canvas.set(x, bottom, bl, 'border')
+  canvas.set(right, bottom, br, 'border')
 
-  // The perimeter is drawn as bits so edges can tee into it, but it is the box
-  // outline, so it claims `border` rather than `edge`.
-  for (let cx = x + 1; cx < right; cx++) {
-    canvas.addBits(cx, y, L | R, 'border')
-    canvas.addBits(cx, bottom, L | R, 'border')
-  }
-  for (let cy = y + 1; cy < bottom; cy++) {
-    canvas.addBits(x, cy, U | D, 'border')
-    canvas.addBits(right, cy, U | D, 'border')
+  if (shape === 'diamond') {
+    // Double lines have no direction bits; edges tee into them through the
+    // mixed junctions (`╤` `╧` `╟` `╢`) that `finalizeMask` resolves.
+    for (let cx = x + 1; cx < right; cx++) {
+      canvas.set(cx, y, '═', 'border')
+      canvas.set(cx, bottom, '═', 'border')
+    }
+    for (let cy = y + 1; cy < bottom; cy++) {
+      canvas.set(x, cy, '║', 'border')
+      canvas.set(right, cy, '║', 'border')
+    }
+  } else {
+    // The perimeter is drawn as bits so edges can tee into it, but it is the
+    // box outline, so it claims `border` rather than `edge`.
+    for (let cx = x + 1; cx < right; cx++) {
+      canvas.addBits(cx, y, L | R, 'border')
+      canvas.addBits(cx, bottom, L | R, 'border')
+    }
+    for (let cy = y + 1; cy < bottom; cy++) {
+      canvas.addBits(x, cy, U | D, 'border')
+      canvas.addBits(right, cy, U | D, 'border')
+    }
   }
 
   for (let cy = y; cy <= bottom; cy++) {

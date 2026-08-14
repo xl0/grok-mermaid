@@ -12,13 +12,26 @@
 
 - Author classes are surfaced: `A:::name` and `class A,B name` land on the spans of the cells that node paints (`span.classes`), and `classDef` declarations are parsed into `art.classDefs` (`{ name: { fill: '#f96', … } }`). The renderer never interprets either.
 - `toAnsi` applies classDef styles best-effort on top of the role theme: `fill` backs the node's cells, `stroke` colors its border, `color` its text, `font-weight:bold` bolds (merging with the role theme rather than replacing it) — as truecolor SGR, with a black/white foreground picked by luminance when a fill declares no color. The interpreter is exported (`resolveClassStyle`, `classSgr`, `contrastOn`) for consumers with their own styling model; every other property is ignored.
+- A frontmatter `title:` is rendered, centred above the art in the `title` role.
 
 ### Fixed
 
 - Flowchart inline edge labels containing `=`, `.` or `-` — quoted (`A --"a=b"--> B`) or not (`A -- a=b --> B`) — render their label instead of being dropped or mangled; the label now runs to the closing operator ([#2](https://github.com/xl0/lovely-mermaid/issues/2)).
+- A quoted class-diagram cardinality containing `..` (`Customer "0..*" --> Order`) no longer reads as a dotted-link operator; the relation renders with the cardinality at its end.
+- YAML frontmatter (`---` … `---`), part of the mermaid grammar since v10, is skipped instead of being mistaken for an unknown diagram header.
+- A `:::` tag inside a quoted label or a description is text again, not a class assignment; tags are read inline at each id token, including before a description colon (`S1:::hot : waiting`).
+- `class A, B warn` assigns both ids the class; a space after the comma no longer folds the rest of the id list into the class name.
+- `classDef c fill:rgb(255, 0, 0)` keeps the function value whole instead of shredding it at the commas, making `rgb()` colors reachable.
+- A sequence activation arriving exactly at the item cap no longer makes `render()` throw; the diagram truncates with a warning like any other capped input.
+- A state `--` region containing an earlier-declared composite no longer silently deletes that subtree.
+- `diagramKind` strips control characters the way `render` does, so the two agree on any input.
+- A note left of the first participant is drawn beside the diagram instead of on top of its lifelines.
+- The source box expands tabs to spaces (a literal tab misaligned the frame at the terminal's tab stops) and no longer overflows the argument limit on very large sources.
 
 ### Changed
 
+- Diamond nodes — flowchart `A{...}` and state `<<choice>>` — draw as double-bordered boxes (`╔═╗`) instead of being indistinguishable from rounded ones; edges tee into the double line through the mixed glyphs (`╤` `╧` `╟` `╢`).
+- Skip and back edges no longer cut through boxes ordered beyond their endpoints: nodes touching a lane edge order last within their rank, keeping the corridor to the lane clear.
 - Every grammar is now lenient. State, class, ER and sequence diagrams drop an unreadable statement with a warning and render the rest, instead of refusing the whole diagram; the one-final-line salvage retry is gone, subsumed by the general rule. A source in which nothing parses still returns `null`.
 - Size caps truncate instead of refusing: a diagram over 128 nodes / 512 edges renders its prefix with a `diagram truncated: …` warning. A streamed diagram that outgrows a cap keeps its stable render instead of flipping to the source box forever.
 - Diagram headers are matched exactly: `stateDiagramFoo` no longer parses as a state diagram, matching mermaid proper. `classDiagram-v2` is now recognised.

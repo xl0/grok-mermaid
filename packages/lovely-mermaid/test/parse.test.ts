@@ -157,3 +157,54 @@ test('an extra dash in a state arrow is tolerated', () => {
   expect(g.edges.length).toBe(1)
   expect(g.nodes.length).toBe(2)
 })
+
+test('a quoted cardinality on either side never reads as an operator', () => {
+  const g = parseClass('classDiagram\n Customer "0..*" --> Order')
+  if (g === null) throw new Error('parseClass returned null')
+  expect(g.edges[0].cardFrom).toBe('0..*')
+  expect(g.warnings).toEqual([])
+})
+
+test('classDef function-syntax values keep their commas', () => {
+  const g = parseGraph('graph TD\n A\n classDef c fill:rgb(255, 0, 0),stroke:#333')
+  if (g === null) throw new Error('parseGraph returned null')
+  expect(g.classDefs.c).toEqual({ fill: 'rgb(255, 0, 0)', stroke: '#333' })
+})
+
+test('class ids survive a space after the comma', () => {
+  const g = parseGraph('graph TD\n A --> B\n class A, B warn')
+  if (g === null) throw new Error('parseGraph returned null')
+  expect(g.nodes.map((n) => n.classes)).toEqual([['warn'], ['warn']])
+})
+
+test('`:::` inside a quoted label is text, not a tag', () => {
+  const g = parseState('stateDiagram-v2\n state "find a:::b thing" as S1')
+  if (g === null) throw new Error('parseState returned null')
+  expect(g.nodes[0].label).toBe('find a:::b thing')
+  expect(g.nodes[0].classes).toBeUndefined()
+})
+
+test('a `:::` tag before a description colon stays a tag', () => {
+  const g = parseState('stateDiagram-v2\n S1:::hot : waiting\n A --> B:::cold : go')
+  if (g === null) throw new Error('parseState returned null')
+  const s1 = g.nodes[g.index.get('S1') as number]
+  expect(s1.label).toBe('waiting')
+  expect(s1.classes).toEqual(['hot'])
+  const b = g.nodes[g.index.get('B') as number]
+  expect(b.classes).toEqual(['cold'])
+  expect(g.edges[0].label).toBe('go')
+})
+
+test('yaml frontmatter is skipped', () => {
+  const g = parseGraph('---\ntitle: Hi\nconfig:\n  theme: forest\n---\nflowchart TD\n A --> B')
+  if (g === null) throw new Error('parseGraph returned null')
+  expect(g.nodes.length).toBe(2)
+})
+
+test('an activation at the item cap is dropped with the item', () => {
+  const msgs = Array.from({ length: 512 }, () => 'A->>B: m').join('\n')
+  const seq = parseSequence(`sequenceDiagram\n${msgs}\nA->>+B: over`)
+  if (seq === null) throw new Error('parseSequence returned null')
+  expect(seq.activations).toEqual([])
+  expect(seq.warnings.at(-1)).toContain('truncated')
+})

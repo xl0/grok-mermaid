@@ -131,10 +131,13 @@ export class Canvas {
   /** Resolve accumulated direction bits into glyphs, honouring line style. */
   finalizeMask(): void {
     for (let i = 0; i < this.ch.length; i++) {
-      if (this.mask[i] !== 0 && this.ch[i] === ' ') {
+      if (this.mask[i] === 0) continue
+      if (this.ch[i] === ' ') {
         const c = maskChar(this.mask[i])
         this.ch[i] =
           this.style[i] === STY_DOT ? dottedChar(c) : this.style[i] === STY_THICK ? thickChar(c) : c
+      } else if (this.ch[i] === '═' || this.ch[i] === '║') {
+        this.ch[i] = doubleTee(this.ch[i], this.mask[i])
       }
     }
   }
@@ -320,6 +323,20 @@ export function maskChar(mask: number): string {
   }
 }
 
+/** An edge teeing into a double-line border: the mixed single/double glyphs. */
+function doubleTee(c: string, mask: number): string {
+  if (c === '═') {
+    if (mask & U && mask & D) return '╪'
+    if (mask & D) return '╤'
+    if (mask & U) return '╧'
+  } else {
+    if (mask & L && mask & R) return '╫'
+    if (mask & R) return '╟'
+    if (mask & L) return '╢'
+  }
+  return c
+}
+
 const DOTTED: Record<string, string> = { '─': '╌', '│': '╎' }
 
 const THICK: Record<string, string> = {
@@ -337,6 +354,12 @@ const THICK: Record<string, string> = {
 }
 
 const FLIP_V: Record<string, string> = {
+  '╔': '╚',
+  '╚': '╔',
+  '╗': '╝',
+  '╝': '╗',
+  '╤': '╧',
+  '╧': '╤',
   '┌': '└',
   '└': '┌',
   '┐': '┘',
@@ -360,6 +383,12 @@ const FLIP_V: Record<string, string> = {
 }
 
 const FLIP_H: Record<string, string> = {
+  '╔': '╗',
+  '╗': '╔',
+  '╚': '╝',
+  '╝': '╚',
+  '╟': '╢',
+  '╢': '╟',
   '┌': '┐',
   '┐': '┌',
   '└': '┘',
@@ -382,7 +411,7 @@ const FLIP_H: Record<string, string> = {
   '◁': '▷',
 }
 
-export const dottedChar = (c: string): string => DOTTED[c] ?? c
-export const thickChar = (c: string): string => THICK[c] ?? c
-export const flipGlyphV = (c: string): string => FLIP_V[c] ?? c
-export const flipGlyphH = (c: string): string => FLIP_H[c] ?? c
+const dottedChar = (c: string): string => DOTTED[c] ?? c
+const thickChar = (c: string): string => THICK[c] ?? c
+const flipGlyphV = (c: string): string => FLIP_V[c] ?? c
+const flipGlyphH = (c: string): string => FLIP_H[c] ?? c

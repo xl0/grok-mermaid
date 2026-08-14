@@ -14,13 +14,15 @@ import { asciiLower, decodeHtmlEntities } from '../labels.ts'
 import { layoutFlowchart, layoutGrouped } from '../layout.ts'
 import type { Diagram } from '../registry.ts'
 import {
-  captureStyleTags,
   firstWord,
   headerKind,
   nonEmpty,
+  parseClassAssign,
   parseClassDef,
+  splitColon,
   splitOnce,
   statementsOf,
+  takeTags,
   words,
 } from '../statements.ts'
 
@@ -62,14 +64,11 @@ export function parseState(src: string): Graph | null {
     return top === undefined ? null : (top.region ?? top.base)
   }
 
-  for (let st of statements.slice(1)) {
+  for (const st of statements.slice(1)) {
     if (inNote) {
       if (asciiLower(st) === 'end note') inNote = false
       continue
     }
-    const captured = captureStyleTags(st)
-    st = captured.st
-    for (const [id, name] of captured.classes) classAssignments.push([[id], [name]])
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {
       graph.dir = parseDir(words(st)[1] ?? '')
@@ -121,10 +120,8 @@ export function parseState(src: string): Graph | null {
       const def = parseClassDef(st.slice(firstWord(st).length))
       if (def) for (const name of def.names) graph.classDefs[name] = def.props
     } else if (first === 'class') {
-      const rest = st.slice(firstWord(st).length).trim()
-      const ids = firstWord(rest).split(',')
-      const names = rest.slice(firstWord(rest).length).trim().split(',')
-      classAssignments.push([ids, names])
+      const assign = parseClassAssign(st.slice(firstWord(st).length))
+      if (assign) classAssignments.push(assign)
     } else if (['hide', 'scale'].includes(first)) {
       // Styling directives carry no layout meaning.
     } else if (st.includes('-->')) {
@@ -138,15 +135,7 @@ export function parseState(src: string): Graph | null {
     }
   }
 
-  for (const [ids, names] of classAssignments) {
-    for (const id of ids) {
-      const idx = graph.index.get(id.trim())
-      if (idx === undefined) continue
-      for (const name of names) {
-        if (name.trim() !== '') graph.addClass(idx, name.trim())
-      }
-    }
-  }
+  graph.applyClasses(classAssignments)
 
   return graph.nodes.length === 0 ? null : graph
 }
@@ -158,11 +147,12 @@ function compositeName(body: string): { id: string; label: string } | null {
     if (close === -1) return null
     const label = decodeHtmlEntities(body.slice(1, close))
     const after = body.slice(close + 1).trim()
-    const id = after.startsWith('as') ? after.slice(2).trim() : label
+    // A `:::` tag on a composite is dropped: groups paint no classed cells.
+    const id = takeTags(after.startsWith('as') ? after.slice(2).trim() : label).id
     return id === '' ? null : { id, label }
   }
   // A stereotype on a composite carries no drawing of its own; keep the name.
-  const id = body.split('<<')[0].trim()
+  const id = takeTags(body.split('<<')[0].trim()).id
   return id === '' || /\s/.test(id) ? null : { id, label: id }
 }
 
@@ -175,12 +165,15 @@ function parseStateDecl(rest: string, graph: Graph): true | null {
     if (close === -1) return null
     const label = rest.slice(1, close)
     const after = rest.slice(close + 1).trim()
-    const id = after.startsWith('as') ? after.slice(2).trim() : label
-    return graph.nodeLabel(id, decodeHtmlEntities(label)) === null ? null : true
+    const { id, classes } = takeTags(after.startsWith('as') ? after.slice(2).trim() : label)
+    const idx = graph.nodeLabel(id, decodeHtmlEntities(label))
+    if (idx === null) return null
+    for (const cls of classes) graph.addClass(idx, cls)
+    return true
   }
 
   let shape: Shape = 'round'
-  let id = rest
+  let token = rest
   let stereotyped = false
   const pos = rest.indexOf('<<')
   if (pos !== -1) {
@@ -189,11 +182,15 @@ function parseStateDecl(rest: string, graph: Graph): true | null {
       .replace(/>>$/, '')
       .trim()
     if (stereo === 'choice') shape = 'diamond'
-    id = rest.slice(0, pos).trim()
+    token = rest.slice(0, pos).trim()
     stereotyped = true
   }
+  const { id, classes } = takeTags(token)
   if (id === '' || /\s/.test(id)) return null
-  return graph.nodeIndex(id, stereotyped ? id : null, shape) === null ? null : true
+  const idx = graph.nodeIndex(id, stereotyped ? id : null, shape)
+  if (idx === null) return null
+  for (const cls of classes) graph.addClass(idx, cls)
+  return true
 }
 
 /** `A --> B: label`, including chains `A --> B --> C`. */
@@ -206,16 +203,17 @@ function parseTransition(st: string, graph: Graph): true | null {
     if (!split) break
     const [lhs, rhs] = split
 
-    const fromId = lhs.trimEnd().replace(/-+$/, '').trim()
+    const fromTok = takeTags(lhs.trimEnd().replace(/-+$/, '').trim())
     let from: number
     if (prev !== null) {
       // Mid-chain: the source is the previous target, so nothing may precede.
-      if (fromId !== '') return null
+      if (fromTok.id !== '') return null
       from = prev
     } else {
-      if (fromId === '') return null
-      const f = stateEndpoint(graph, fromId, true)
+      if (fromTok.id === '') return null
+      const f = stateEndpoint(graph, fromTok.id, true)
       if (f === null) return null
+      for (const cls of fromTok.classes) graph.addClass(f, cls)
       from = f
     }
 
@@ -223,14 +221,17 @@ function parseTransition(st: string, graph: Graph): true | null {
     const toPartRaw = nextArrow === -1 ? rhs : rhs.slice(0, nextArrow)
     const tail = nextArrow === -1 ? '' : rhs.slice(nextArrow)
 
-    const colon = splitOnce(toPartRaw, ':')
+    const colon = splitColon(toPartRaw)
     const toPart = colon ? colon[0] : toPartRaw
     const label = colon ? nonEmpty(decodeHtmlEntities(colon[1].trim())) : null
 
-    const toId = toPart.trimStart().replace(/^>+/, '').trimEnd().replace(/-+$/, '').trim()
-    if (toId === '') return null
-    const to = stateEndpoint(graph, toId, false)
+    const toTok = takeTags(
+      toPart.trimStart().replace(/^>+/, '').trimEnd().replace(/-+$/, '').trim(),
+    )
+    if (toTok.id === '') return null
+    const to = stateEndpoint(graph, toTok.id, false)
     if (to === null) return null
+    for (const cls of toTok.classes) graph.addClass(to, cls)
 
     if (!graph.pushEdge({ from, to, label, headTo: 'arrow', headFrom: 'none', line: 'solid' })) {
       return true
@@ -253,15 +254,20 @@ function stateEndpoint(graph: Graph, id: string, isSource: boolean): number | nu
   return graph.nodeIndex(id, null, 'round')
 }
 
-/** `id: description`, or a bare state name. */
+/** `id: description`, or a bare state name; either may carry `:::` tags. */
 function parseStateDesc(st: string, graph: Graph): true | null {
-  const split = splitOnce(st, ':')
+  const split = splitColon(st)
+  const { id, classes } = takeTags((split ? split[0] : st).trim())
+  let idx: number | null
   if (split) {
-    const id = split[0].trim()
     const desc = split[1].trim()
     if (id === '' || /\s/.test(id) || desc === '') return null
-    return graph.nodeLabel(id, decodeHtmlEntities(desc)) === null ? null : true
+    idx = graph.nodeLabel(id, decodeHtmlEntities(desc))
+  } else {
+    if (id === '' || /\s/.test(id)) return null
+    idx = graph.nodeIndex(id, null, 'round')
   }
-  if (/\s/.test(st)) return null
-  return graph.nodeIndex(st, null, 'round') === null ? null : true
+  if (idx === null) return null
+  for (const cls of classes) graph.addClass(idx, cls)
+  return true
 }

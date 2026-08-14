@@ -13,6 +13,7 @@ import { er } from './diagrams/er.ts'
 import { flowchart } from './diagrams/flowchart.ts'
 import { sequence } from './diagrams/sequence.ts'
 import { state } from './diagrams/state.ts'
+import { stripControls } from './labels.ts'
 import { headerKind, statementsOf } from './statements.ts'
 
 /** A diagram type this renderer draws. */
@@ -56,5 +57,6 @@ export function diagramFor(src: string): Diagram | null {
  * ```
  */
 export function diagramKind(src: string): DiagramKind | null {
-  return diagramFor(src)?.kind ?? null
+  // The same strip `render` applies, so the two entry points agree on any src.
+  return diagramFor(stripControls(src))?.kind ?? null
 }

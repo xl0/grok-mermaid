@@ -190,11 +190,6 @@ export function parseSequence(src: string): Sequence | null {
           text = text === null ? `${msgCount}.` : `${msgCount}. ${text}`
         }
         const item = seq.items.length
-        // `+` activates the receiver on this row; `-` deactivates the sender.
-        if (seq.truncated === null) {
-          if (msg.marks.includes('+')) seq.activate(msg.to, item)
-          if (msg.marks.includes('-')) seq.deactivate(msg.from, item)
-        }
         seq.pushItem({
           kind: 'message',
           from: msg.from,
@@ -203,6 +198,13 @@ export function parseSequence(src: string): Sequence | null {
           dashed: msg.dashed,
           head: msg.head,
         })
+        // `+` activates the receiver on this row; `-` deactivates the sender.
+        // Only once the item was accepted — an activation pointing past the
+        // item cap would dereference a message that does not exist.
+        if (seq.items.length === item + 1) {
+          if (msg.marks.includes('+')) seq.activate(msg.to, item)
+          if (msg.marks.includes('-')) seq.deactivate(msg.from, item)
+        }
       }
     }
     if (seq.truncated !== null) {

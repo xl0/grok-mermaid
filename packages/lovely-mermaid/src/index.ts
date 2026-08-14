@@ -1,6 +1,8 @@
 import { stripControls } from './labels.ts'
 import { diagramFor } from './registry.ts'
+import { frontmatterTitle } from './statements.ts'
 import type { MermaidArt } from './types.ts'
+import { stringWidth } from './width.ts'
 
 export { type AnsiTheme, classSgr, DEFAULT_THEME, toAnsi } from './ansi.ts'
 export { type ClassStyle, contrastOn, resolveClassStyle } from './class-style.ts'
@@ -38,5 +40,24 @@ export function render(src: string): MermaidArt | null {
   if (src.trim() === '') return null
   const drawn = diagramFor(src)?.render(src) ?? null
   if (drawn === null) return null
-  return { ...drawn.canvas.toLines(), classDefs: drawn.classDefs, warnings: drawn.warnings }
+  const art = drawn.canvas.toLines()
+
+  // A frontmatter `title:` is centred above the art, in the `title` role.
+  const title = frontmatterTitle(src)
+  if (title !== null) {
+    const tw = stringWidth(title)
+    art.width = Math.max(art.width, tw)
+    const pad = ' '.repeat(Math.floor((art.width - tw) / 2))
+    art.plain.unshift(pad + title, '')
+    art.styled.unshift(
+      pad === ''
+        ? [{ text: title, role: 'title' }]
+        : [
+            { text: pad, role: 'none' },
+            { text: title, role: 'title' },
+          ],
+      [],
+    )
+  }
+  return { ...art, classDefs: drawn.classDefs, warnings: drawn.warnings }
 }
