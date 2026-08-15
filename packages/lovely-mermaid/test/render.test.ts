@@ -267,6 +267,21 @@ test('a control character in a label does not shrink its box', () => {
   expect(stringWidth(ls[1])).toBe(stringWidth(ls[0]))
 })
 
+// A tab survives stripControls (it is meaningful in mindmap indentation) but a
+// painted tab measures one cell and jumps to the terminal's tab stop, desyncing
+// every column after it. The canvas paints it as a space instead.
+test('a label tab paints as a space', () => {
+  for (const src of [
+    'pie\n"a\tb" : 1',
+    'timeline\n2020 : ev\tent',
+    'mindmap\nroot\n  a\tb',
+    'gitGraph\ncommit id: "a\tb"',
+    'flowchart LR\n A["a\tb"] --> B',
+  ]) {
+    expect(plain(src)).not.toContain('\t')
+  }
+})
+
 test('a source of only control characters is blank', () => {
   expect(render(`${CONT}${ESC}`)).toBeNull()
 })
