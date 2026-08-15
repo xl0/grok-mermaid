@@ -8,7 +8,7 @@
   "scripts": {
     "test": "bun test",
     "test:update": "UPDATE=1 bun test packages/lovely-mermaid/test/cases.test.ts",
-    "check": "biome check .",
+    "check": "biome check . && cd demo && bun run check",
     "fix": "biome check --write .",
     "typecheck": "tsgo --noEmit -p packages/lovely-mermaid",
     "build": "cd packages/lovely-mermaid && bun run build",
