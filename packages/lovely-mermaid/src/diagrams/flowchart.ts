@@ -143,9 +143,13 @@ function parseStatement(st: string, graph: Graph): void {
   const chars = [...st]
   let i = 0
 
+  // A parse failure after the cap hit is the cap's fault, not the
+  // statement's: the truncation warning already covers it (Graph.drop has
+  // the same rule).
   const head = parseNodeGroup(chars, i, graph)
   if (!head) {
-    graph.warnings.push(`dropped, does not start with a node: "${st}"`)
+    if (graph.truncated === null)
+      graph.warnings.push(`dropped, does not start with a node: "${st}"`)
     return
   }
   let prev = head.group
@@ -156,13 +160,15 @@ function parseStatement(st: string, graph: Graph): void {
     if (i >= chars.length) break
     const link = parseLink(chars, i)
     if (!link) {
-      graph.warnings.push(`dropped, expected a link: "${chars.slice(i).join('')}"`)
+      if (graph.truncated === null)
+        graph.warnings.push(`dropped, expected a link: "${chars.slice(i).join('')}"`)
       break
     }
     i = skipSpaces(chars, link.next)
     const target = parseNodeGroup(chars, i, graph)
     if (!target) {
-      graph.warnings.push(`dropped, link has no target: "${st}"`)
+      if (graph.truncated === null)
+        graph.warnings.push(`dropped, link has no target: "${st}"`)
       break
     }
     i = target.next

@@ -118,7 +118,7 @@ opportunistically when touching a scanner; don't campaign.
 - [ ] Repeated state descriptions overwrite (`s1 : a` then `s1 : b` → only
       `b`); mermaid stacks them. Needs multi-line labels in layout — if that's
       why it was skipped, document it as a deviation instead.
-- [ ] Cap-hit flowchart statements warn twice: three direct `warnings.push`
+- [x] Cap-hit flowchart statements warn twice: three direct `warnings.push`
       sites in `parseStatement` bypass `Graph.drop`'s post-truncation
       suppression, so `dropped, does not start with a node` appears alongside
       `diagram truncated`. Gate on `graph.truncated === null`.

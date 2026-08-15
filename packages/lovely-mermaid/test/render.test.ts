@@ -138,7 +138,9 @@ test('an adversarial chain renders truncated at the node cap', () => {
   const art = render(src)
   if (art === null) throw new Error('render drew nothing')
   expect(art.plain.join('\n')).toContain('N100')
-  expect(art.warnings.some((w) => w.startsWith('diagram truncated:'))).toBe(true)
+  // The one truncation warning covers the cap; a parse failure the cap
+  // itself caused is not the statement's fault and must not warn as one.
+  expect(art.warnings).toEqual([expect.stringMatching(/^diagram truncated:/)])
 })
 
 test('a single-statement chain renders truncated at the node cap', () => {
