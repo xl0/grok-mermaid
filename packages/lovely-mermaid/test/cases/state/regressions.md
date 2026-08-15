@@ -121,3 +121,29 @@ stateDiagram-v2
 │ first line second line │
 ╰────────────────────────╯
 ```
+
+An adjacent-rank back-edge label sets the canvas width from where it is
+actually painted (`tx + 1`, up to two right of centre). Previously the
+sizing claimed one column less and the last character was clipped —
+`retry` rendered `retr` inside its composite region.
+
+```mermaid
+stateDiagram-v2
+  state Active {
+    Fetching --> Rendering
+    Rendering --> Fetching: retry
+  }
+```
+
+```text
+ ┌ Active ───────┐
+ │ ╭──────────╮  │
+ │ │ Fetching │  │
+ │ ╰─────┬────╯  │
+ │       │ ▲retry│
+ │       ▼ │     │
+ │ ╭───────┴───╮ │
+ │ │ Rendering │ │
+ │ ╰───────────╯ │
+ └───────────────┘
+```

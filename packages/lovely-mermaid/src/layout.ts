@@ -674,7 +674,8 @@ function placeTd(
     } else if (isAdjacentBack(ranks, e)) {
       const text = edgeText(e)
       if (text !== null) {
-        contentW = Math.max(contentW, placed[e.to].cx + 2 + Math.min(stringWidth(text), MAX_LABEL))
+        // routeBackAdjacent starts the label at tx + 1 with tx up to cx + 2.
+        contentW = Math.max(contentW, placed[e.to].cx + 3 + Math.min(stringWidth(text), MAX_LABEL))
       }
     } else {
       const text = edgeText(e)

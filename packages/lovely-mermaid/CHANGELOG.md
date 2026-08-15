@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An adjacent-rank back-edge label no longer loses its last character when it sets the canvas width (`retry` rendered `retr` inside a composite region).
+
 ## [0.3.3] - 2026-08-15
 
 ### Changed
