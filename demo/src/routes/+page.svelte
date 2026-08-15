@@ -15,6 +15,8 @@
 	// no per-glyph fallback to a mismatched font can misalign the line art.
 	import jbmRegular from 'jetbrains-mono/fonts/webfonts/JetBrainsMono-Regular.woff2';
 	import jbmBold from 'jetbrains-mono/fonts/webfonts/JetBrainsMono-Bold.woff2';
+	// Bundled verbatim, so the overlay can never drift from the repo copy.
+	import skillMd from '../../../skills/lovely-mermaid/SKILL.md?raw';
 
 	const presets: { name: string; desc: string; src: string }[] = [
 		{
@@ -148,12 +150,71 @@ flowchart LR
   classDef cold fill:lightblue,color:#000000,font-weight:bold`
 		},
 		{
+			name: 'state-styles',
+			desc: ':::class + classDef in state diagrams',
+			src: `stateDiagram-v2
+  [*] --> Healthy
+  Healthy --> Degraded : probe fails
+  Degraded --> Healthy : recovers
+  Degraded --> Down:::alert : timeout
+  Down --> [*]
+  class Healthy ok
+  classDef ok stroke:#22a06b,color:#22a06b
+  classDef alert fill:#8b0000,color:#ffdddd,font-weight:bold`
+		},
+		{
 			name: 'er',
 			desc: 'cardinalities at edge ends, aliases',
 			src: `erDiagram
   CUSTOMER ||--o{ ORDER : places
   ORDER ||--|{ LINE_ITEM : contains
   c["Credit Card"] |o--|| CUSTOMER : pays with`
+		},
+		{
+			name: 'mindmap',
+			desc: 'indentation tree with TUI guides',
+			src: `mindmap
+  root((lovely-mermaid))
+    Parsing
+      Lenient
+      Streaming
+    Layout
+      Sugiyama
+      Lanes
+    Output
+      Roles
+      Classes`
+		},
+		{
+			name: 'timeline',
+			desc: 'periods and events, sections',
+			src: `timeline
+  title Project history
+  section Port
+  2026-07 : Byte-faithful port : Differential harness
+  section Redesign
+  2026-08 : Lenient parsing : Semantic spans
+          : New diagram types`
+		},
+		{
+			name: 'pie',
+			desc: 'proportions as a bar list',
+			src: `pie showData title Render targets
+  "Terminals" : 62
+  "TUIs" : 25
+  "CI logs" : 13`
+		},
+		{
+			name: 'gitgraph',
+			desc: 'commit lanes, git log --graph style',
+			src: `gitGraph
+  commit id: "scaffold"
+  branch feature
+  commit id: "parse"
+  checkout main
+  commit id: "docs"
+  merge feature tag: "v1.0"
+  commit id: "polish"`
 		},
 		{
 			name: 'cjk',
@@ -363,12 +424,29 @@ flowchart LR
 		copied = true;
 		setTimeout(() => (copied = false), 1200);
 	}
+
+	// The agent skill, shown in an overlay and copyable as a file.
+	let skillOpen = $state(false);
+	let copiedSkill = $state(false);
+	// The page must not scroll behind the open overlay. The scroller is the
+	// root element, not body, so the lock goes there.
+	$effect(() => {
+		document.documentElement.style.overflow = skillOpen ? 'hidden' : '';
+	});
+	async function copySkill() {
+		await navigator.clipboard.writeText(skillMd);
+		copiedSkill = true;
+		setTimeout(() => (copiedSkill = false), 1200);
+	}
 </script>
 
 <svelte:window
 	onclick={() => (paletteFor = null)}
 	onkeydown={(e) => {
-		if (e.key === 'Escape') paletteFor = null;
+		if (e.key === 'Escape') {
+			paletteFor = null;
+			skillOpen = false;
+		}
 	}}
 />
 
@@ -401,6 +479,7 @@ flowchart LR
 			<span class="md-h"># lovely-mermaid</span>
 			<span class="spacer"></span>
 			<button class="ghost" onclick={() => setMode(!dark)}>[{dark ? 'light' : 'dark'}]</button>
+			<button class="ghost" onclick={(e) => { e.stopPropagation(); skillOpen = true; }}>skill</button>
 			<a href="https://github.com/xl0/lovely-mermaid">GitHub</a>
 			<a href="https://www.npmjs.com/package/lovely-mermaid">npm</a>
 		</div>
@@ -515,7 +594,6 @@ flowchart LR
 					text={ansi}
 					theme={asciiTheme}
 					cols={Math.max(cols, shown.width)}
-					frame="term"
 					margin={1}
 					cellSize={CELL}
 					style="width: auto; height: auto;"
@@ -574,6 +652,35 @@ flowchart LR
 		<span class="dim">100% text</span>
 	</div>
 </main>
+
+{#if skillOpen}
+	<!-- Escape is handled on svelte:window; clicking the backdrop (and only
+	     the backdrop) closes, so the box itself needs no click handler. -->
+	<div
+		class="overlay"
+		role="presentation"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) skillOpen = false;
+		}}
+	>
+		<div
+			class="skill-box"
+			role="dialog"
+			aria-modal="true"
+			aria-label="The lovely-mermaid agent skill"
+		>
+			<div class="skill-title">
+				<a href="https://github.com/xl0/lovely-mermaid/blob/master/skills/lovely-mermaid/SKILL.md">
+					skills/lovely-mermaid/SKILL.md
+				</a>
+				<span class="spacer"></span>
+				<button class="ghost" onclick={copySkill}>{copiedSkill ? 'copied' : '[copy]'}</button>
+				<button class="ghost" onclick={() => (skillOpen = false)}>[esc]</button>
+			</div>
+			<pre>{skillMd}</pre>
+		</div>
+	</div>
+{/if}
 
 <style>
 	/* reserve the scrollbar gutter so pages shorter than the viewport don't
@@ -991,5 +1098,45 @@ flowchart LR
 		gap: 1rem;
 		flex-wrap: wrap;
 		color: var(--ghost);
+	}
+
+	/* The skill overlay: a framed file view over a dimmed page. */
+	.overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.55);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		z-index: 10;
+	}
+	.skill-box {
+		background: var(--bg);
+		border: 1px solid var(--panel-border, var(--ghost));
+		border-radius: 4px;
+		max-width: 46rem;
+		max-height: 85vh;
+		display: flex;
+		flex-direction: column;
+	}
+	.skill-title {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 1rem;
+		border-bottom: 1px solid var(--panel-border, var(--ghost));
+		color: #5f87ff;
+	}
+	.skill-title a {
+		color: inherit;
+	}
+	.skill-box pre {
+		margin: 0;
+		padding: 0.75rem 1rem;
+		overflow: auto;
+		font-size: 0.85rem;
+		line-height: 1.45;
+		white-space: pre-wrap;
 	}
 </style>
