@@ -3,11 +3,8 @@ dist/
 .claude/sandbox/
 *.tsbuildinfo
 
-# Differential harness: upstream source is copied in at run time, never
-# vendored; the corpus and Rust build products are regenerated on demand.
+# Rust build products in tools/.
 tools/**/target/
-tools/differential/src/mermaid.rs
-tools/differential/corpus.txt
 
 # The root README is canonical; the build copies it into the package for npm.
 packages/lovely-mermaid/README.md

@@ -18,7 +18,6 @@ CHANGELOG.md              (in the package) release notes; current changes under 
 skills/lovely-mermaid/    copyable agent skill: what renders, in few words
 tools/                    repo-level dev tooling, not shipped
   width-oracle/           emits per-code-point widths from the unicode-width crate
-  differential/           renders a corpus through Rust and TS, diffs the output
 packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sibling)
   scripts/
     gen-width-data.ts     regenerates src/width-data.ts from the oracle
@@ -219,18 +218,15 @@ title row centres, the rest left-align.
 ## Deliberate deviations from upstream
 
 - **`maxWidth` is gone; `width` is reported instead** (post-cutoff). Upstream
-  folds the viewport decision into `render`; see *Public API*. Upstream's gate
-  is reproduced in `tools/differential/run.ts`, the only place that needs it.
+  folds the viewport decision into `render`; see *Public API*.
 - **Every grammar is lenient and caps truncate** (post-cutoff, supersedes the
   salvage retry). Upstream refuses a strict-grammar diagram on one unreadable
-  statement and any diagram over a cap. See *Syntax errors*. The differential
-  reports these as `lenient` — 135 cases.
+  statement and any diagram over a cap. See *Syntax errors*.
 - **Headers match exactly.** Upstream's prefix test accepts junk like
-  `stateDiagramFoo`; mermaid proper does not. Differential class `header`
-  (0 cases in the corpus; pinned by a unit test).
+  `stateDiagramFoo`; mermaid proper does not.
 - **Width is measured in painted cells, not allocated ones.** Some upstream
   layouts leave the rightmost column blank, so a diagram that fits was
-  declared too wide. Differential class `slack` — 8 cases.
+  declared too wide.
 - **Grapheme clusters measure and paint as one unit** (post-cutoff). Fixes
   emoji and combining sequences overflowing their boxes; `Intl.Segmenter`
   replaced ~60 lines of hand-written clustering. Standalone zero-width
@@ -239,7 +235,7 @@ title row centres, the rest left-align.
   border and the sides as edge, which renders every box two-tone under any
   theme where the two differ.
 - **Empty outer canvas rows are omitted.** Interior empty rows remain and emit
-  no spans. Differential class `trimmed` — 410 cases.
+  no spans.
 - **Literal control characters are stripped at both entry points.** They
   measure one column and paint none; NUL collides with the `CONT` sentinel;
   ESC injects ANSI into scrollback.
@@ -248,77 +244,66 @@ title row centres, the rest left-align.
   Upstream corrupts the parse everywhere `:::` can appear (drops the edge in
   `A:::x --> B`, leaks the tag into state names, declares `Animal:::hot`);
   the port attaches the class to its node in every grammar and surfaces
-  `classDef`s. No differential case exercises `:::`.
+  `classDef`s.
 - **Composite states are framed, not flattened.** `state X { ... }` becomes a
   `Group` drawn by the subgraph frame machinery; `--` splits a composite into
   unlabelled sibling regions; `[*]` is scoped per group. Upstream hoists the
-  contents to the top level, which is structurally wrong. Differential class
-  `composite` — 7 cases.
+  contents to the top level, which is structurally wrong.
 - **Flowchart v2 `@{shape: ..., label: ...}` nodes parse.** Upstream keeps a
   bare-id node and drops the rest of the statement. Shape names fold onto the
-  three silhouettes (`AT_SHAPES`; unknown means rect). Differential class
-  `v2shape` (0 corpus cases; pinned by unit tests).
+  three silhouettes (`AT_SHAPES`; unknown means rect).
 - **Sequence activations double the lifeline.** `->>+` / `-->>-` and
   `activate`/`deactivate` drive per-participant spans, drawn as `║` (message
   junctions `╟` `╢` `╫` via the double-tee pass) between the activating and
   deactivating rows — two rails, echoing mermaid's slim activation rectangle;
   an unclosed span runs to the bottom. Upstream strips the markers.
-  Differential class `activations` — 6 cases.
 - **Diamond nodes get double borders** (post-cutoff). `A{...}` and state
   `<<choice>>` draw `╔═╗`; upstream draws them identically to `round`, an
   inert distinction. Double lines carry no direction bits — the sides are
   painted directly and `finalizeMask` resolves edge tees into the mixed
-  glyphs (`╤` `╧` `╟` `╢`). Differential class `diamond` — 20 cases.
+  glyphs (`╤` `╧` `╟` `╢`).
 - **A frontmatter `title:` is drawn**, centred above the art in the `title`
   role (post-cutoff). The only frontmatter key with terminal meaning;
   `config` styles mermaid's own renderers and is ignored.
 - **Lane endpoints order last in their rank** (post-cutoff): a skip or back
   edge exits toward the lane strip, so whatever the crossing-minimiser put
-  beyond its endpoints sat in the corridor and was cut through. Differential
-  class `laneOrder` — 0 corpus cases; pinned by a unit test.
+  beyond its endpoints sat in the corridor and was cut through.
 - **The source box expands tabs** to 4-column stops (post-cutoff): a literal
   tab measures one cell here but jumps to the terminal's tab stop there, so
-  the frame misaligned. Differential class `tabs` — 509 cases.
+  the frame misaligned.
 - **A note left of the first participant gets its own margin** (post-cutoff):
   the diagram shifts right instead of the note painting over the lifelines.
-  Differential class `noteLeft` — 6 cases.
-- **YAML frontmatter is skipped**, not mistaken for a header (post-cutoff).
-  Upstream renders the source box for any frontmattered diagram (0 corpus
-  cases; pinned by a unit test).
+- **YAML frontmatter is skipped**, not mistaken for a header (post-cutoff);
+  upstream renders the source box for any frontmattered diagram.
 - **Four diagram types upstream never had** (post-cutoff): `pie` (labelled
   bar list with eighth-block precision), `mindmap` (TUI tree guides; parses
   raw lines since indentation is the grammar), `timeline` (vertical
   period/event list, sections as headers), `gitGraph` (`git log --graph`
   lanes, newest on top; connector rows go through the direction bits so
   merges crossing a lane draw `┼`). They draw rows straight onto a Canvas —
-  no Sugiyama involved. Differential class `newTypes` — 30 cases.
+  no Sugiyama involved.
 - **Cardinalities sit at their own edge ends.** ER and class relations carry
   `cardFrom`/`cardTo` beside `label`; forward routes paint each at its end
   with the verb between (TD rank gaps grow to 3 rows to make space), lanes
   and self-loops fall back to the joined string. `0..*` shortens to `*`.
   Upstream folds everything into one mid-edge string, so nothing says which
   end a number belongs to. ER aliases are also parsed quote-aware, so
-  `a["Bank Account"]` renders instead of failing. Differential class `cards`
-  — 68 cases (all ER art plus quoted-cardinality class diagrams).
+  `a["Bank Account"]` renders instead of failing.
 
 ## Verification
 
-`bun run differential` renders ~7180 cases through both the Rust original and
-this port. It classifies each difference and **fails only on a regression** —
-a case that diverges for a reason not on the deviations list above.
+The port began byte-identical to upstream: a differential harness rendered
+~7180 cases through both the Rust original and this code, and commit
+`617cbf3` was the fidelity cutoff — up to there, all cases matched byte for
+byte. Divergence after it is deliberate and listed above. The harness itself
+is retired: once improving on upstream became the point, every improvement
+paid a divergence-classifier tax there, so the deviations list above is the
+record and the golden files are the gate.
 
-`run.ts` holds a `renderBounded` that reapplies upstream's `max_width` gate,
-since `render` no longer has one; that shim lives there rather than in `src`
-precisely because it is upstream's behaviour and not the port's.
-
-Current state: 3793 identical, 2224 expected (clustering), 126 lenient,
-7 composite, 0 v2shape, 6 activations, 68 cards, 20 diamond, 509 tabs,
-6 noteLeft, 0 laneOrder, 30 newTypes, 0 header, 7 slack, 384 trimmed,
-0 regressions.
-
-Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
-byte for byte on all 7180 cases. Divergence after it is deliberate and listed
-above. See `tools/README.md` for how to run it.
+Its corpus survives as `test/corpus.ts` — the hand-written sources, width
+and emoji edge cases, and deterministic fuzz — swept by `test/corpus.test.ts`
+for what golden files cannot cover at scale: `render` never throws, `styled`
+reconstructs `plain`, `width` is the widest row, `sourceBox` frames anything.
 
 ## Width handling
 
@@ -371,7 +356,8 @@ notions is what the port dropped.
 
 ## Tests
 
-119 tests. The bulk of rendering behaviour is pinned by markdown golden files
+123 tests. `corpus.test.ts` sweeps the retired harness’s corpus for
+crash-safety and the span/width invariants. The bulk of rendering behaviour is pinned by markdown golden files
 in `test/cases/<type>/<name>.md`, run by `test/cases.test.ts`: each file holds
 one or more ```mermaid fences, each followed by a ```text fence with the
 expected `plain` (or a bare `(null)` line for sources that must refuse) and an
@@ -391,19 +377,14 @@ characters).
 **Every discovered bug gets a regression test in the same change that fixes
 it** — a golden case (`test/cases/<type>/regressions.md`) whenever the
 failure shows in `plain` or `warnings`, a unit test only for what they cannot
-carry (span classes, classDefs, the model, throws, widths). The differential
-only guards against upstream divergence; bugs shared with upstream (or in
-post-cutoff features) are invisible to it.
-
-The unit suite alone is not sufficient: it passed while four width bugs were
-live. `bun run differential` is what actually pins fidelity.
+carry (span classes, classDefs, the model, throws, widths).
 
 ## Tooling
 
 bun (runtime + test runner + workspace), tsgo (typecheck + emit), biome
 (lint + format, configured at the repo root). No runtime dependencies.
 Root scripts: `test`, `test:update`, `check`, `fix`, `typecheck`,
-`differential`, `build`, `dev` (demo), `release` (both forward to the package); package
+`build`, `dev` (demo), `release` (both forward to the package); package
 scripts: `build`, `gen:width`, `gen:colors`, `gen:demo`, `release`,
 `prepublishOnly`.
 

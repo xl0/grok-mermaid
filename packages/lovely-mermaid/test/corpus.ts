@@ -1,7 +1,11 @@
-// Emits the differential corpus consumed by `bun run differential`.
-//
-// Every hand-written test source, plus width and emoji edge cases, plus
-// deterministic pseudo-random fuzz, each rendered at a spread of widths.
+/**
+ * The fuzz-and-edge-case corpus, inherited from the retired differential
+ * harness (its Rust half pinned fidelity up to the cutoff; see CODE.md).
+ * What remains is the part that needs no upstream: deterministic inputs that
+ * exercise crash-safety and the span/width invariants at a scale golden
+ * files cannot. `corpus.test.ts` sweeps it.
+ */
+
 const HAND: string[] = [
   'graph TD\n A[Start] --> B[End]',
   'graph TD\n A-->|yes| B',
@@ -280,18 +284,14 @@ for (const e of EMO) {
 }
 TOKENS.push(...EMO)
 
-const WIDTHS = ['none', '1', '3', '8', '12', '20', '40', '80', '120', '200']
-const out: string[] = []
-const esc = (s: string) =>
-  s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-const add = (w: string, src: string) => out.push(`${w}\t${esc(src)}`)
-
-for (const src of HAND) for (const w of WIDTHS) add(w, src)
-for (let i = 0; i < 4000; i++) {
-  const n = 1 + Math.floor(rnd() * 20)
-  let src = `${pick(HEADERS)}\n`
-  for (let k = 0; k < n; k++) src += pick(TOKENS) + (rnd() < 0.3 ? '\n' : ' ')
-  add(pick(WIDTHS), src)
+/** Every corpus source: the hand-written cases plus deterministic fuzz. */
+export function corpusSources(): string[] {
+  const out = [...HAND]
+  for (let i = 0; i < 4000; i++) {
+    const n = 1 + Math.floor(rnd() * 20)
+    let src = `${pick(HEADERS)}\n`
+    for (let k = 0; k < n; k++) src += pick(TOKENS) + (rnd() < 0.3 ? '\n' : ' ')
+    out.push(src)
+  }
+  return out
 }
-await Bun.write(new URL('corpus.txt', import.meta.url), `${out.join('\n')}\n`)
-console.log(`${out.length} cases`)

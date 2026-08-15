@@ -2,9 +2,9 @@
 
 `lovely-mermaid`: render Mermaid as Unicode box-drawing art for terminals.
 Born as a byte-faithful port of the Rust renderer in `xai-org/grok-build`;
-that bar has been met and retired. The bar now is good terminal output — the
-differential harness gates on regressions only, and every deliberate
-divergence is listed in `CODE.md`. `REDESIGN.md` holds the design review that
+that bar has been met and retired. The bar now is good terminal output —
+every deliberate divergence is listed in `CODE.md`, and the old differential
+harness is gone with it (its fuzz corpus lives on in the test suite). `REDESIGN.md` holds the design review that
 set the current direction.
 
 **Intent:** best-effort rendering everywhere (draw as much as possible, warn
