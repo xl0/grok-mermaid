@@ -104,7 +104,8 @@ opportunistically when touching a scanner; don't campaign.
       expands tabs for exactly this reason; flowchart labels are immune via
       wrap-collapse. Fix: normalize `\t` → space on the raw-line label path
       (`cleanLabel`/`fitLabel`).
-- [ ] **Multi-edges between one pair collapse to one.** Endpoint-sharing track
+- [x] **Multi-edges between one pair collapse to one** — labels now join
+      (`one / two`); distinct parallel tracks judged not worth the geometry. Endpoint-sharing track
       packing puts identical routes on the same cells; `placeLabel` blocks on
       the first label — `A -->|one| B` ×3 renders one edge labelled `one`,
       `two`/`three` gone, no warning. Minimum: warn or join labels

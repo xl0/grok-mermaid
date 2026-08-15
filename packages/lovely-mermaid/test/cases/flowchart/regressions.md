@@ -132,3 +132,18 @@ flowchart BT
  │   label that wraps    │
  └───────────────────────┘
 ```
+
+Parallel edges ride the same cells; their labels join instead of being
+silently dropped.
+
+```mermaid
+flowchart LR
+  A -->|one| B
+  A -->|two| B
+```
+
+```text
+┌───┐ one / two  ┌───┐
+│ A ├───────────▶│ B │
+└───┘            └───┘
+```

@@ -576,6 +576,25 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   const n = graph.nodes.length
   if (n === 0) return null
 
+  // Parallel edges ride the same cells, so all labels after the first were
+  // silently lost — join them onto the first instead. Done before sizing so
+  // the joined label gets its room.
+  const firstOf = new Map<string, number>()
+  graph.edges.forEach((e, i) => {
+    if (e.from === e.to) return
+    const key = `${e.from}>${e.to}`
+    const first = firstOf.get(key)
+    if (first === undefined) {
+      firstOf.set(key, i)
+      return
+    }
+    if (e.label !== null) {
+      const head = graph.edges[first].label
+      graph.edges[first].label = head === null ? e.label : `${head} / ${e.label}`
+      e.label = null
+    }
+  })
+
   const ranks = computeRanks(graph)
   const maxRank = Math.max(...ranks, 0)
 
