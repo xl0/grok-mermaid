@@ -129,7 +129,7 @@ opportunistically when touching a scanner; don't campaign.
 - [ ] pie: `"a" :` parses as 0% (`Number('')` = 0); `0x10` also slips
       through. Defensible for streaming — tighten only if mermaid parity
       matters.
-- [ ] Flowchart `|`-labels aren't quote-aware: `A -->|"a|b"| B` → label `"a`
+- [x] Flowchart `|`-labels aren't quote-aware: `A -->|"a|b"| B` → label `"a`
       plus node `b`. At least it warns; recording as shared-helper drift.
 - [ ] BT self-loop: return `▼` sits on a border cell with no tee, `┴┴`
       adjacency. Cosmetic.
