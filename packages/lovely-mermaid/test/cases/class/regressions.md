@@ -71,3 +71,31 @@ classDiagram
         │ Zoo │
         └─────┘
 ```
+
+`direction BT` keeps compartments in order: title on top, attributes above
+methods, separators between.
+
+```mermaid
+classDiagram
+  direction BT
+  class Animal {
+    +int age
+    +eat()
+  }
+  Animal --> Zoo
+```
+
+```text
+   ┌─────┐
+   │ Zoo │
+   └─────┘
+      ▲
+      │
+┌─────┴────┐
+│  Animal  │
+├──────────┤
+│ +int age │
+├──────────┤
+│ +eat()   │
+└──────────┘
+```

@@ -659,9 +659,14 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
     const extra = extras[idx]
     canvas.curTag = graph.nodes[idx].classes?.join(' ')
     canvas.curHref = graph.nodes[idx].href
-    if (extra.kind === 'frame') drawFrame(canvas, placed[idx], graph.nodes[idx].label, extra.sub)
-    else if (extra.kind === 'compartments') drawClassBox(canvas, placed[idx], extra.sections)
-    else drawBox(canvas, placed[idx], wrapped[idx], graph.nodes[idx].shape)
+    // `BT` mirrors the finished canvas; multi-row content draws upside down so
+    // the flip restores reading order (flipHorizontal's text runs, vertically).
+    const mirrored = graph.dir === 'up'
+    if (extra.kind === 'frame')
+      drawFrame(canvas, placed[idx], graph.nodes[idx].label, extra.sub, mirrored)
+    else if (extra.kind === 'compartments')
+      drawClassBox(canvas, placed[idx], extra.sections, mirrored)
+    else drawBox(canvas, placed[idx], wrapped[idx], graph.nodes[idx].shape, mirrored)
   }
   canvas.curTag = undefined
   canvas.curHref = undefined
@@ -866,7 +871,13 @@ function buildScope(
 
 // ------------------------------------------------------------------- drawing
 
-export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape): void {
+export function drawBox(
+  canvas: Canvas,
+  p: Placed,
+  lines: string[],
+  shape: Shape,
+  mirrored = false,
+): void {
   const { x, y, w, h } = p
   const right = x + w - 1
   const bottom = y + h - 1
@@ -917,7 +928,8 @@ export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape
   }
 
   const inner = Math.max(1, sat(w, 2 * PAD + 2))
-  lines.forEach((line, li) => {
+  const ordered = mirrored ? [...lines].reverse() : lines
+  ordered.forEach((line, li) => {
     const text = fitLabel(line, inner)
     const textX = x + 1 + PAD + half(sat(inner, stringWidth(text)))
     drawText(canvas, text, textX, y + 1 + li, 'text')
@@ -925,36 +937,37 @@ export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape
 }
 
 /** A class or ER box: sections separated by horizontal rules, title centred. */
-function drawClassBox(canvas: Canvas, p: Placed, sections: string[][]): void {
+function drawClassBox(canvas: Canvas, p: Placed, sections: string[][], mirrored = false): void {
   drawBox(canvas, p, [], 'rect')
   const inner = Math.max(1, sat(p.w, 2 * PAD + 2))
-  let row = p.y + 1
-  let first = true
+  const rows: ({ sep: true } | { sep?: undefined; text: string; center: boolean })[] = []
   sections.forEach((section, si) => {
     if (section.length === 0) return
-    if (!first) {
+    if (rows.length > 0) rows.push({ sep: true })
+    for (const line of section) rows.push({ text: fitLabel(line, inner), center: si === 0 })
+  })
+  if (mirrored) rows.reverse()
+  rows.forEach((r, ri) => {
+    const row = p.y + 1 + ri
+    if (r.sep) {
       canvas.set(p.x, row, '├', 'border')
       for (let x = p.x + 1; x < p.x + p.w - 1; x++) canvas.set(x, row, '─', 'border')
       canvas.set(p.x + p.w - 1, row, '┤', 'border')
-      row++
-    }
-    first = false
-    for (const line of section) {
-      const text = fitLabel(line, inner)
-      const tx = si === 0 ? p.x + 1 + PAD + half(sat(inner, stringWidth(text))) : p.x + 1 + PAD
-      drawTextOverEdges(canvas, text, tx, row, 'text')
-      row++
+    } else {
+      const tx = r.center ? p.x + 1 + PAD + half(sat(inner, stringWidth(r.text))) : p.x + 1 + PAD
+      drawTextOverEdges(canvas, r.text, tx, row, 'text')
     }
   })
 }
 
 /** A subgraph frame: a titled box with a finished sub-canvas centred inside. */
-function drawFrame(canvas: Canvas, p: Placed, title: string, sub: Canvas): void {
+function drawFrame(canvas: Canvas, p: Placed, title: string, sub: Canvas, mirrored = false): void {
   drawBox(canvas, p, [], 'rect')
   // An unlabelled frame (a state `--` region) keeps its border unbroken.
   if (title !== '') {
     const t = fitLabel(title, sat(p.w, 4))
-    drawTextOverEdges(canvas, ` ${t} `, p.x + 1, p.y, 'text')
+    // Mirrored: the bottom border becomes the top after the flip.
+    drawTextOverEdges(canvas, ` ${t} `, p.x + 1, mirrored ? p.y + p.h - 1 : p.y, 'text')
   }
   canvas.blit(sub, p.x + 1 + half(p.w - 2 - sub.w), p.y + 1 + half(p.h - 2 - sub.h))
 }

@@ -44,7 +44,7 @@ opportunistically when touching a scanner; don't campaign.
       `A`. Fix: peel a quote-aware `[...]` label off the name before the
       space test, route through `nodeLabel`.
 
-- [ ] **BT flip reverses multi-row box content.** `flipVertical` mirrors rows
+- [x] **BT flip reverses multi-row box content.** `flipVertical` mirrors rows
       wholesale: wrapped labels read bottom-up, class compartments invert
       (`+eat()` above `+int age`, title compartment at the bottom), composite
       frame titles land on the bottom border. `flipHorizontal` un-reverses

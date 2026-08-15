@@ -112,3 +112,23 @@ flowchart RL
 │ B │◄───────┤ go ◄ left │
 └───┘        └───────────┘
 ```
+
+BT restores reading order of multi-row content: wrapped labels read
+top-down, not bottom-up.
+
+```mermaid
+flowchart BT
+  A[this is a fairly long label that wraps] --> B
+```
+
+```text
+           ┌───┐
+           │ B │
+           └───┘
+             ▲
+             │
+ ┌───────────┴───────────┐
+ │ this is a fairly long │
+ │   label that wraps    │
+ └───────────────────────┘
+```
