@@ -1261,7 +1261,9 @@ function routeSkip(
   at: { laneX: number; entryX: number; departY: number; approachY: number },
 ): void {
   const { laneX, entryX, departY, approachY } = at
-  const bx = Math.min(from.x + from.w - 2, from.cx + 2)
+  // Depart from the centre like every other exit: the direction bits merge
+  // the shared vertical into one origin tree with the forward exits.
+  const bx = from.cx
   const bottom = from.y + from.h - 1
 
   canvas.junction(bx, bottom, D)
