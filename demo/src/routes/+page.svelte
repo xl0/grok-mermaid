@@ -133,9 +133,15 @@
 	// Presets differ in height, so switching reflows everything above the
 	// commands. Pegging the viewport to the page bottom keeps the input and
 	// the command grid (where the cursor is) exactly where they were.
+	// The viewport widens to the smallest setting the preset's art fits —
+	// a preset should always open showing art, not the source box.
 	async function pick(p: { src: string }) {
 		const fromBottom = document.documentElement.scrollHeight - window.scrollY;
 		src = p.src;
+		const a = render(p.src);
+		if (a !== null && a.width > cols) {
+			cols = [30, 60, 120].find((w) => a.width <= w) ?? Infinity;
+		}
 		await tick();
 		window.scrollTo({ top: document.documentElement.scrollHeight - fromBottom });
 	}
@@ -268,7 +274,8 @@
 	/>
 </svelte:head>
 
-<main>
+<!-- The unlimited viewport drops the page cap too: wide art gets the window. -->
+<main class:wide={cols === Infinity}>
 	<!-- assistant turn: the pitch -->
 	<div class="assistant">
 		<div class="header-row">
@@ -548,6 +555,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.9rem;
+	}
+	main.wide {
+		max-width: none;
 	}
 
 	.dim {
