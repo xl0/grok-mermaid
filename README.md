@@ -2,12 +2,9 @@
 
 Render Mermaid diagrams as Unicode box-drawing art, for terminals.
 
-Formerly published as `grok-mermaid`. Started as a TypeScript port of the
-terminal Mermaid renderer in
-[xai-org/grok-build](https://github.com/xai-org/grok-build)
-(`crates/codegen/xai-grok-markdown/src/mermaid.rs`); diverges deliberately
-where terminal output can be better. No browser, no headless Chrome, no SVG —
-a self-contained layout engine that emits text.
+No browser, no headless Chrome, no SVG — a self-contained layout engine that
+emits text. Streaming-friendly, colour-ready through semantic spans, zero
+dependencies.
 
 ```
       ┌──────────────┐
@@ -29,6 +26,9 @@ a self-contained layout engine that emits text.
        │ Unicode art │
        └─────────────┘
 ```
+
+Try it live: **[xl0.github.io/lovely-mermaid](https://xl0.github.io/lovely-mermaid/)** —
+paste a diagram, pick a theme, watch it stream.
 
 ## Install
 
@@ -178,31 +178,41 @@ art.classDefs               // { hot: { fill: '#f96' } }
 art.styled.flat().find((s) => s.text.includes('DB'))?.classes  // ['hot']
 ```
 
-The renderer never styles by class itself — map `classDefs` (or your own
-palette) onto the classed spans however your UI styles things. `toAnsi`
-ignores classes.
+`toAnsi` applies them best-effort on top of the role theme: `fill` backs the
+node's cells, `stroke` colours its border, `color` its text,
+`font-weight:bold` bolds — as truecolor SGR, with a readable black/white
+foreground picked when a fill declares no colour. Consumers with their own
+styling model use the exported `resolveClassStyle`/`contrastOn` against the
+classed spans instead.
 
 ## Supported diagrams
 
 | Type | Notes |
 | --- | --- |
-| `graph` / `flowchart` | `TD`/`TB`, `BT`, `LR`, `RL`; `subgraph` nesting; node shapes; solid/dotted/thick links; arrow, circle, cross heads; edge labels |
-| `stateDiagram` / `stateDiagram-v2` | states, transitions, `[*]` start/end, `<<choice>>`, descriptions, composite states flattened |
-| `classDiagram` | compartments, annotations, generics, cardinalities, inheritance/realization/composition/aggregation/dependency |
-| `erDiagram` | entities, attributes, crow's-foot cardinalities |
-| `sequenceDiagram` | participants, messages, self-messages, notes, `loop`/`alt`/`opt` dividers, `autonumber` |
+| `graph` / `flowchart` | `TD`/`TB`, `BT`, `LR`, `RL`; `subgraph` nesting; node shapes incl. v2 `A@{shape: cyl, label: …}`; solid/dotted/thick links; arrow, circle, cross heads; edge labels |
+| `stateDiagram` / `stateDiagram-v2` | states, transitions, `[*]` start/end, `<<choice>>`, descriptions, composite states as nested frames with `--` regions |
+| `classDiagram` | compartments, annotations, generics, per-end cardinalities, inheritance/realization/composition/aggregation/dependency |
+| `erDiagram` | entities, attributes, crow's-foot cardinalities at their own ends |
+| `sequenceDiagram` | participants, messages, self-messages, activations, notes, `loop`/`alt`/`opt` dividers, `autonumber` |
 
-## Credits
+YAML frontmatter is understood: its `title:` is drawn above the diagram, the
+rest is skipped. `:::class` tags and `classDef`s work in every grammar that
+has them.
 
-Inspired by Simon Willison's
+## Origin and credits
+
+lovely-mermaid began as a byte-faithful TypeScript port of the terminal
+Mermaid renderer inside the Grok CLI
+([xai-org/grok-build](https://github.com/xai-org/grok-build),
+`crates/codegen/xai-grok-markdown/src/mermaid.rs`), briefly published as
+`grok-mermaid`. It has since gone its own way — lenient parsing built for
+streaming, semantic colour spans, author classes, grapheme-correct width —
+but the Sugiyama layout bones trace back to that original.
+
+Also shout out to Simon Willison's
 [grok-mermaid.html](https://tools.simonwillison.net/grok-mermaid)
 ([source](https://github.com/simonw/tools/blob/main/grok-mermaid.html)), which
-compiles the original Rust renderer to WebAssembly so it runs in a browser.
-That demo is what made the renderer worth having outside the Grok CLI; this
-port takes the other route and reimplements it in TypeScript, so it needs no
-WASM and runs anywhere JS does.
-
-100% of the code written by Opus 5, with a healthy dose of feedback and direction from my side.
+compiles the Rust renderer to WebAssembly so it runs in a browser.
 
 ## License
 
