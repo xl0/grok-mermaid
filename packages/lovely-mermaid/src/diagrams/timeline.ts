@@ -49,6 +49,7 @@ export const timeline: Diagram = {
         return
       }
       drawText(canvas, row.period, 0, y, 'text')
+      if (row.event === '') return
       drawText(canvas, '─', periodW + 1, y, 'edge')
       drawText(canvas, row.event, periodW + 3, y, 'edgeLabel')
     })
@@ -92,7 +93,13 @@ function parseTimeline(
       for (const event of parts) rows.push({ period: '', event })
       continue
     }
-    if (period === '' || parts.length === 0 || parts.some((p) => p === '')) {
+    // A bare period renders event-less, as mermaid draws it.
+    if (period !== '' && parts.length === 0) {
+      rows.push({ period, event: '' })
+      lastPeriod = true
+      continue
+    }
+    if (period === '' || parts.some((p) => p === '')) {
       warnings.push(`dropped, unreadable statement: "${st}"`)
       continue
     }
