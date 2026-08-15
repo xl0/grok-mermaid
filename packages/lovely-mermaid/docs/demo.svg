@@ -1,5 +1,5 @@
 <svg role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 23.4 15" width="327.6" height="210" overflow="hidden" preserveAspectRatio="xMinYMin meet" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace" style="color: #e6edf3">
-<defs><style>rect:first-of-type { rx: 8px }</style></defs>
+<defs><style>rect:first-of-type { rx: 0.5px }</style></defs>
 <rect width="23.4" height="15" fill="#0d1117"/>
 <text y="1.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(110,118,129)" x="4.8 5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2 13.8">┌──────────────┐</tspan></text>
 <text y="2.8" font-size="1" fill="currentColor" xml:space="preserve"><tspan x="1.2 1.8 2.4 3 3.6 4.2">      </tspan><tspan style="fill: rgb(110,118,129)" x="4.8">│</tspan><tspan x="5.4 6 6.6 7.2 7.8 8.4 9 9.6 10.2 10.8 11.4 12 12.6 13.2"> Parse source </tspan><tspan style="fill: rgb(110,118,129)" x="13.8">│</tspan></text>

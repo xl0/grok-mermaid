@@ -48,7 +48,9 @@ const svg = exportSvg(toAnsi(art, THEME).join('\n'), {
   fontFamily: FONT,
   background: '#0d1117',
   theme: { ...defaultTheme, foreground: '#e6edf3' },
-  extraCss: 'rect:first-of-type { rx: 8px }',
+  // px here means SVG user units, and the viewBox is in cell units (~14 px
+  // each rendered) — 8px turned the panel into an ellipse on npm.
+  extraCss: 'rect:first-of-type { rx: 0.5px }',
 }).replace(
   '<svg ',
   '<svg role="img" aria-label="A flowchart rendered as Unicode box-drawing art, with box outlines, labels and connectors each in their own colour" ',
