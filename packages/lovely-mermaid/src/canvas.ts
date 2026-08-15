@@ -169,7 +169,9 @@ export class Canvas {
         ;[this.href[i], this.href[j]] = [this.href[j], this.href[i]]
       }
     }
-    for (let i = 0; i < this.ch.length; i++) this.ch[i] = flipGlyphV(this.ch[i])
+    for (let i = 0; i < this.ch.length; i++) {
+      if (!textRole(this.role[i])) this.ch[i] = flipGlyphV(this.ch[i])
+    }
   }
 
   /**
@@ -188,7 +190,9 @@ export class Canvas {
         ;[this.href[i], this.href[j]] = [this.href[j], this.href[i]]
       }
     }
-    for (let i = 0; i < this.ch.length; i++) this.ch[i] = flipGlyphH(this.ch[i])
+    for (let i = 0; i < this.ch.length; i++) {
+      if (!textRole(this.role[i])) this.ch[i] = flipGlyphH(this.ch[i])
+    }
     for (let y = 0; y < this.h; y++) {
       let x = 0
       while (x < this.w) {
@@ -436,3 +440,6 @@ const dottedChar = (c: string): string => DOTTED[c] ?? c
 const thickChar = (c: string): string => THICK[c] ?? c
 const flipGlyphV = (c: string): string => FLIP_V[c] ?? c
 const flipGlyphH = (c: string): string => FLIP_H[c] ?? c
+
+/** User-authored cells: flips reorder them but must not remap their glyphs. */
+const textRole = (r: Role): boolean => r === 'text' || r === 'edgeLabel' || r === 'title'
