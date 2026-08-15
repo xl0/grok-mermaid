@@ -41,8 +41,10 @@ jobs:
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./packages/lovely-mermaid/package.json').version")"
 
       # prepublishOnly's steps, run explicitly so a failure names itself and so
-      # the publish below can skip lifecycle scripts entirely.
-      - run: bun run check
+      # the publish below can skip lifecycle scripts entirely. check:pkg, not
+      # check: the full check chains the demo's svelte-check, and the demo is
+      # not a workspace member — its deps are absent here.
+      - run: bun run check:pkg
       - run: bun run typecheck
       - run: bun test
       - run: bun run build

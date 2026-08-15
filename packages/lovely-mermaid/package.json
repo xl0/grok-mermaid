@@ -41,7 +41,7 @@
     "gen:width": "bun run scripts/gen-width-data.ts",
     "gen:demo": "bun run scripts/gen-demo-svg.ts",
     "gen:colors": "bun run scripts/gen-css-colors.ts",
-    "prepublishOnly": "bun run check && bun run typecheck && bun test && bun run build",
+    "prepublishOnly": "bun run check:pkg && bun run typecheck && bun test && bun run build",
     "release": "bun run scripts/release.ts"
   }
 }
