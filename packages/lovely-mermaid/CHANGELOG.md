@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A back edge between adjacent ranks returns locally beside its forward siblings (as mermaid draws it) instead of around the diagram through the side lane, whose horizontal approach could cut through a sibling box and fabricate edges that were never written. Top-down/bottom-up layouts only; LR/RL keep the lane.
+- Labels of parallel edges (same source and target) join as `one / two` on the drawn edge; previously every label after the first silently vanished.
+- Repeated state descriptions (`s1 : a` then `s1 : b`) accumulate into one wrapped label instead of last-one-wins.
+- A bare timeline period line renders event-less instead of being dropped.
+
+### Fixed
+
+- Kebab-case flowchart ids parse as one id: `step-1-->step-2` no longer mangles into a self-loop on `step` plus a stray node.
+- `class Animal["Label"]` declares a class titled by its label; previously the spaced form silently refused the whole diagram and the compact form forked into two nodes.
+- A state transition label containing `-->` (e.g. `A --> B: go "x --> y"`) stays one label instead of inventing a phantom state.
+- A `-x`/`-)` sequence operator embedded in a hyphenated participant name (`pre-x->>B`) no longer invents a participant; hyphenated names work throughout.
+- Quoted ER entity names render without their quotes; an unterminated ER alias bracket now warns.
+- Quoted gitGraph branch names (`branch "feat x"`) work in `branch`/`checkout`/`merge`.
+- `BT` diagrams read correctly: wrapped labels top-down, class compartments in order with the title on top, frame titles on the top border; arrows and box-drawing characters inside labels survive `RL`/`BT` flips.
+- A literal tab in a label paints as a space, keeping columns aligned on the terminal and `width` accurate.
+- Flowchart `|labels|` are quote-aware: `A -->|"a|b"| B` keeps its pipe.
+- A flowchart that hits the node cap reports the one truncation warning, without a spurious per-statement drop warning beside it.
+
 ## [0.3.2] - 2026-08-15
 
 ### Added
