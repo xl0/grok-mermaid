@@ -337,6 +337,10 @@ interface TrackSpan {
   from: number
   to: number
   edge: number
+  /** A labelled lane refuses endpoint sharing: the label would appear to
+   * cover every edge merged onto the row. Bus spans never set this — their
+   * labels sit at the separate arrival ends, so fan merging stays safe. */
+  labeled?: boolean
 }
 
 /**
@@ -370,8 +374,7 @@ export function assignTracks(
         (m) =>
           m.end + 2 <= span.start ||
           span.end + 2 <= m.start ||
-          m.from === span.from ||
-          m.to === span.to,
+          ((m.from === span.from || m.to === span.to) && !m.labeled && !span.labeled),
       ),
     )
     if (slot === -1) {
@@ -441,7 +444,7 @@ function laneSpans(
     const pt = placed[e.to]
     const a = vertical ? Math.min(pf.cy, pt.cy) : Math.min(pf.cx, pt.cx)
     const b = vertical ? Math.max(pf.cy, pt.cy) : Math.max(pf.cx, pt.cx)
-    out.push({ start: a, end: b, from: e.from, to: e.to, edge: i })
+    out.push({ start: a, end: b, from: e.from, to: e.to, edge: i, labeled: edgeText(e) !== null })
   })
   return out
 }
@@ -728,16 +731,26 @@ function placeLr(
   // (No entry spreading or local returns here: LR boxes are three rows tall,
   // so the centre row is the only usable port on a side.)
   const isSkip = (e: Edge): boolean => e.from !== e.to && ranks[e.to] - ranks[e.from] > 1
+  // A back-edge target's bottom-entry `▲` stub sits one row below its box;
+  // a straight run through that cell would appear to carry the arrival.
+  const stubRows = new Set<number>()
+  for (const e of graph.edges) {
+    if (e.from === e.to || ranks[e.to] >= ranks[e.from]) continue
+    const t = e.to
+    stubRows.add(sat(centers[t], half(sizes.boxH[t] + sizes.extraH[t])) + sizes.boxH[t])
+  }
   const edgeStraight = new Array<boolean>(graph.edges.length).fill(false)
   graph.edges.forEach((e, i) => {
     if (!isSkip(e)) return
     const row = centers[e.to]
-    edgeStraight[i] = graph.nodes.every(
-      (_, j) =>
-        ranks[j] <= ranks[e.from] ||
-        ranks[j] >= ranks[e.to] ||
-        Math.abs(centers[j] - row) > half(sizes.boxH[j] + sizes.extraH[j]),
-    )
+    edgeStraight[i] =
+      !stubRows.has(row) &&
+      graph.nodes.every(
+        (_, j) =>
+          ranks[j] <= ranks[e.from] ||
+          ranks[j] >= ranks[e.to] ||
+          Math.abs(centers[j] - row) > half(sizes.boxH[j] + sizes.extraH[j]),
+      )
   })
 
   // Left-to-right edge labels sit in the gap between columns, so the gap has
@@ -1552,8 +1565,16 @@ function routeBackLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, laneY
   else canvas.set(tx, ty + 1, headGlyph(edge.headTo, '▲'), 'edge')
   if (edge.headFrom !== 'none') canvas.set(sx, sy, headGlyph(edge.headFrom, '▲'), 'edge')
 
+  // The label interrupts its own lane row, centred on the run — the row
+  // above belongs to the neighbouring lane once several stack.
   const backText = edgeText(edge)
-  if (backText !== null) placeLabel(canvas, backText, sat(laneY, 1), half(sx + tx))
+  if (backText !== null) {
+    const text = ` ${fitLabel(backText, MAX_LABEL)} `
+    const lo = Math.min(sx, tx)
+    const hi = Math.max(sx, tx)
+    const start = Math.max(lo + 1, half(lo + hi) - half(stringWidth(text)))
+    drawTextOverEdges(canvas, text, start, laneY, 'edgeLabel')
+  }
 }
 
 /** Write an edge label, stopping at the first cell already occupied. */

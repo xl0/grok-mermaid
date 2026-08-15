@@ -72,15 +72,20 @@ flowchart LR
 	},
 	{
 		name: 'pipeline-lr',
-		desc: 'sideways: skips run straight through clear rows',
+		desc: 'the full pipeline sideways: lanes, labels on their lines',
 		src: `flowchart LR
   push[Git push] --> ci{CI green?}
   ci -->|yes| build[Build image]
   ci -->|no| notify[Notify author]
   build --> stage[Deploy staging]
-  stage --> smoke{Smoke}
-  smoke -->|pass| prod[Ship]
-  smoke -->|fail| notify`
+  stage --> smoke{Smoke tests}
+  smoke -->|flaky| stage
+  smoke -->|pass| prod[Deploy prod]
+  smoke -->|fail| notify
+  prod --> monitor[Monitor SLOs]
+  monitor -->|regression| roll[Rollback]
+  roll --> stage
+  notify --> push`
 	},
 	{
 		name: 'sequence',
