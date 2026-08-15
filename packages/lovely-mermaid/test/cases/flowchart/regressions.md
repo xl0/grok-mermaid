@@ -69,3 +69,19 @@ flowchart TD
  │ B │   │ C ├─┘
  └───┘   └───┘
 ```
+
+Kebab-case ids parse as one id: `-` joins when an id char follows, while
+`-->`/`-.`/`==` still terminate. Previously `step-1-->step-2` self-looped
+on `step`.
+
+```mermaid
+flowchart LR
+  step-1-->step-2
+  my-node[Label] ==> step-1
+```
+
+```text
+┌───────┐    ┌────────┐    ┌────────┐
+│ Label ├━━━▶│ step-1 ├───▶│ step-2 │
+└───────┘    └────────┘    └────────┘
+```
