@@ -177,10 +177,16 @@
 	// When the art overflows the viewport, the smallest wider setting that
 	// would fit — the button the overlay arrow points at.
 	const fitTarget = $derived(
-		art !== null && !fits ? ([30, 60, 120].find((w) => w > cols && art.width <= w) ?? null) : null
+		art !== null && !fits
+			? ([30, 60, 120, Infinity].find((w) => w > cols && art.width <= w) ?? null)
+			: null
 	);
 	const shown: MermaidArt | null = $derived(
-		src.trim() === '' ? null : fits ? art : sourceBox(src, cols)
+		src.trim() === ''
+			? null
+			: fits
+				? art
+				: sourceBox(src, cols === Infinity ? undefined : cols)
 	);
 
 	// Fixed pixels per cell (the component's cellSize prop). 15 rather than 16:
@@ -194,7 +200,11 @@
 		shown === null ? 'idle' : art === null ? 'error' : fits ? 'ok' : 'pending'
 	);
 	const toolCall = $derived(
-		art === null || !fits ? `sourceBox(src, ${cols})` : 'render(src)'
+		art === null || !fits
+			? cols === Infinity
+				? 'sourceBox(src)'
+				: `sourceBox(src, ${cols})`
+			: 'render(src)'
 	);
 	// The selected example's description, shown beside the call while active.
 	const activeDesc = $derived(presets.find((p) => p.src === src)?.desc ?? null);
@@ -364,9 +374,10 @@
 			<span class="spacer"></span>
 			<span class="cols">
 				<span class="dim">viewport</span>
-				{#each [30, 60, 120] as w (w)}
+				{#each [30, 60, 120, Infinity] as w (w)}
 					<span class="vp"
-						><button class="ghost" class:active={cols === w} onclick={() => (cols = w)}>[{w}]</button
+						><button class="ghost" class:active={cols === w} onclick={() => (cols = w)}
+							>[{w === Infinity ? '∞' : w}]</button
 						>{#if fitTarget === w}<span class="fit-arrow">▲ fits</span>{/if}</span
 					>
 				{/each}
@@ -379,7 +390,7 @@
 				<AsciiArt
 					text={ansi}
 					theme={asciiTheme}
-					cols={Math.max(cols, shown.width)}
+					cols={cols === Infinity ? shown.width : Math.max(cols, shown.width)}
 					margin={1}
 					cellSize={CELL}
 					style="width: auto; height: auto;"
