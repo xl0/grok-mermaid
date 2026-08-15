@@ -90,6 +90,18 @@ flowchart LR
   notify --> push`
 		},
 		{
+			name: 'pipeline-lr',
+			desc: 'sideways: skips run straight through clear rows',
+			src: `flowchart LR
+  push[Git push] --> ci{CI green?}
+  ci -->|yes| build[Build image]
+  ci -->|no| notify[Notify author]
+  build --> stage[Deploy staging]
+  stage --> smoke{Smoke}
+  smoke -->|pass| prod[Ship]
+  smoke -->|fail| notify`
+		},
+		{
 			name: 'sequence',
 			desc: 'participants, messages, notes',
 			src: `sequenceDiagram
