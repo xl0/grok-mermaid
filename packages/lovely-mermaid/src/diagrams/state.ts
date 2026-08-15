@@ -263,7 +263,12 @@ function parseStateDesc(st: string, graph: Graph): true | null {
   if (split) {
     const desc = split[1].trim()
     if (id === '' || /\s/.test(id) || desc === '') return null
-    idx = graph.nodeLabel(id, decodeHtmlEntities(desc))
+    // Repeated descriptions accumulate (mermaid stacks them as lines; here
+    // they join and wrap). A bare node's label is its id — that one replaces.
+    const prev = graph.index.get(id)
+    const before = prev === undefined ? null : graph.nodes[prev].label
+    const text = decodeHtmlEntities(desc)
+    idx = graph.nodeLabel(id, before !== null && before !== id ? `${before} ${text}` : text)
   } else {
     if (id === '' || /\s/.test(id)) return null
     idx = graph.nodeIndex(id, null, 'round')

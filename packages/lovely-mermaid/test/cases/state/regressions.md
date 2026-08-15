@@ -106,3 +106,18 @@ stateDiagram-v2
  │ B │
  ╰───╯
 ```
+
+Repeated descriptions accumulate (mermaid stacks them as lines; here they
+join and wrap) instead of last-one-wins.
+
+```mermaid
+stateDiagram-v2
+  s1 : first line
+  s1 : second line
+```
+
+```text
+╭────────────────────────╮
+│ first line second line │
+╰────────────────────────╯
+```
