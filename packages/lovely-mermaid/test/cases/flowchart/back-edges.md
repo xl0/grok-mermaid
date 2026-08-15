@@ -136,3 +136,39 @@ flowchart LR
 └──────────┘       ╚═══════════╝└──────────────────────────────────────────────────────────────┴─────▶│ Notify author │
                                                                                                       └───────────────┘
 ```
+
+The full pipeline sideways: labelled lanes refuse to share a row (the
+label would claim every merged edge), so `flaky` and the rollback return
+ride separate rows and join only on the final ascent into their shared
+target; lane labels interrupt their own line.
+
+```mermaid
+flowchart LR
+  push[Git push] --> ci{CI green?}
+  ci -->|yes| build[Build image]
+  ci -->|no| notify[Notify author]
+  build --> stage[Deploy staging]
+  stage --> smoke{Smoke tests}
+  smoke -->|flaky| stage
+  smoke -->|pass| prod[Deploy prod]
+  smoke -->|fail| notify
+  prod --> monitor[Monitor SLOs]
+  monitor -->|regression| roll[Rollback]
+  roll --> stage
+  notify --> push
+```
+
+```text
+                                                                                                                              pass        ┌─────────────┐               ┌──────────────┐ regression  ┌──────────┐
+                                                                                                                             ┌───────────▶│ Deploy prod ├──────────────▶│ Monitor SLOs ├────────────▶│ Rollback │
+                                       yes         ┌─────────────┐             ┌────────────────┐             ╔═════════════╗│            └─────────────┘               └──────────────┘             └─────┬────┘
+┌──────────┐             ╔═══════════╗┌───────────▶│ Build image ├────────────▶│ Deploy staging ├────────────▶║ Smoke tests ╟┤                                                                             │
+│ Git push ├────────────▶║ CI green? ╟┘            └─────────────┘             └────────────────┘             ╚══════╤══════╝│fail        ┌───────────────┐                                                │
+└──────────┘             ╚═════╤═════╝                                                  ▲                            │       └───────────▶│ Notify author │                                                │
+      ▲                        │                                                        │                            │                    └───────┬───────┘                                                │
+      │                        │                                                        │                            │                            ▲                                                        │
+      │                        │                                                        ├────────── flaky ───────────┘                            │                                                        │
+      │                        └────────────────────────────────────────────────────── no ────────────────────────────────────────────────────────┤                                                        │
+      │                                                                                 └─────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┘
+      └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
