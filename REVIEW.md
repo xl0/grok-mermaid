@@ -37,7 +37,7 @@ opportunistically when touching a scanner; don't campaign.
       inconsistency. Fix: accept `-` when the next char is an id char, so
       `-->` / `-.` / `==` still terminate the id.
 
-- [ ] **`class Animal["Label"]` (mermaid ≥10.1) vanishes or forks.**
+- [x] **`class Animal["Label"]` (mermaid ≥10.1) vanishes or forks.**
       `class.ts` `class` branch. Label with spaces → the name fails the
       space test, routes into `parseClassAssign`, *whole diagram returns
       `null` with zero warnings*. No-space label → two boxes, `A["X"]` and

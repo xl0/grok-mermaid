@@ -7,7 +7,7 @@
  */
 
 import { Graph, type Head, type LineKind, MAX_MEMBERS, type Node, parseDir } from '../graph.ts'
-import { asciiLower, decodeHtmlEntities, displayGenerics, isIdChar } from '../labels.ts'
+import { asciiLower, cleanLabel, decodeHtmlEntities, displayGenerics, isIdChar } from '../labels.ts'
 import { layoutClass } from '../layout.ts'
 import type { Diagram } from '../registry.ts'
 import {
@@ -114,7 +114,15 @@ export function parseClass(src: string): Graph | null {
     if (first === 'class') {
       const rest = st.slice('class'.length).trim()
       const open = rest.endsWith('{')
-      const name = open ? rest.slice(0, -1).trim() : rest
+      let name = open ? rest.slice(0, -1).trim() : rest
+      // `class A["Label"]` (mermaid ≥10.1): the label titles the box, the id
+      // keys relations. Peel it before the space test — labels carry spaces.
+      let label: string | null = null
+      const labeled = /^(\S+?)\[(.+)\](:::\S+)?$/.exec(name)
+      if (labeled) {
+        name = labeled[1] + (labeled[3] ?? '')
+        label = nonEmpty(cleanLabel(labeled[2]))
+      }
       if (!open && /\s/.test(name)) {
         // Class names carry no spaces, so `class Agent focus` is the
         // assignment form, as in flowcharts.
@@ -128,6 +136,13 @@ export function parseClass(src: string): Graph | null {
         if (open) curClass = 'skip'
       } else {
         const idx = declare(name)
+        if (idx !== null && label !== null) {
+          const node = graph.nodes[idx]
+          node.label = label
+          // The name is the last title line (an annotation may precede it).
+          const title = node.sections?.[0]
+          if (title) title[title.length - 1] = label
+        }
         if (open) curClass = idx ?? 'skip'
       }
     } else if (st.startsWith('<<')) {

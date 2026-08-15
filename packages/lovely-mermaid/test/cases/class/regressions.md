@@ -46,3 +46,28 @@ classDiagram
   │ Order │
   └───────┘
 ```
+
+`class A["Label"]` (mermaid ≥10.1) titles the box with the label; the id
+keys relations. Previously the spaced form silently nulled the diagram and
+the compact form forked into two nodes.
+
+```mermaid
+classDiagram
+  class Animal["A labelled animal"] {
+    +int age
+  }
+  Animal --> Zoo
+```
+
+```text
+ ┌───────────────────┐
+ │ A labelled animal │
+ ├───────────────────┤
+ │ +int age          │
+ └─────────┬─────────┘
+           │
+           ▼
+        ┌─────┐
+        │ Zoo │
+        └─────┘
+```
