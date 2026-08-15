@@ -15,6 +15,7 @@ CHANGELOG.md              (in the package) release notes; current changes under 
 .github/workflows/
   publish.yml             tag-triggered npm staging via trusted publishing
   pages.yml               deploys demo/ to GitHub Pages on push to master
+skills/lovely-mermaid/    copyable agent skill: what renders, in few words
 tools/                    repo-level dev tooling, not shipped
   width-oracle/           emits per-code-point widths from the unicode-width crate
   differential/           renders a corpus through Rust and TS, diffs the output
@@ -39,6 +40,7 @@ packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sib
     registry.ts           the diagram table; diagramKind and render dispatch through it
     diagrams/             one module per diagram type: parse + layout glue
       flowchart.ts  state.ts  class.ts  er.ts  sequence.ts
+      pie.ts  mindmap.ts  timeline.ts  gitgraph.ts   (draw rows directly)
     layout.ts             rank, order, place, route, draw (flowchart/state/class/ER)
     layout-seq.ts         sequence diagrams (own model in diagrams/sequence.ts, own geometry)
     source-box.ts         the source framed in a titled box
@@ -276,6 +278,13 @@ title row centres, the rest left-align.
 - **YAML frontmatter is skipped**, not mistaken for a header (post-cutoff).
   Upstream renders the source box for any frontmattered diagram (0 corpus
   cases; pinned by a unit test).
+- **Four diagram types upstream never had** (post-cutoff): `pie` (labelled
+  bar list with eighth-block precision), `mindmap` (TUI tree guides; parses
+  raw lines since indentation is the grammar), `timeline` (vertical
+  period/event list, sections as headers), `gitGraph` (`git log --graph`
+  lanes, newest on top; connector rows go through the direction bits so
+  merges crossing a lane draw `┼`). They draw rows straight onto a Canvas —
+  no Sugiyama involved. Differential class `newTypes` — 30 cases.
 - **Cardinalities sit at their own edge ends.** ER and class relations carry
   `cardFrom`/`cardTo` beside `label`; forward routes paint each at its end
   with the verb between (TD rank gaps grow to 3 rows to make space), lanes
@@ -295,9 +304,10 @@ a case that diverges for a reason not on the deviations list above.
 since `render` no longer has one; that shim lives there rather than in `src`
 precisely because it is upstream's behaviour and not the port's.
 
-Current state: 3823 identical, 2224 expected (clustering), 126 lenient,
+Current state: 3793 identical, 2224 expected (clustering), 126 lenient,
 7 composite, 0 v2shape, 6 activations, 68 cards, 20 diamond, 509 tabs,
-6 noteLeft, 0 laneOrder, 0 header, 7 slack, 384 trimmed, 0 regressions.
+6 noteLeft, 0 laneOrder, 30 newTypes, 0 header, 7 slack, 384 trimmed,
+0 regressions.
 
 Commit `617cbf3` was the fidelity cutoff: up to there the port matched upstream
 byte for byte on all 7180 cases. Divergence after it is deliberate and listed
@@ -354,7 +364,7 @@ notions is what the port dropped.
 
 ## Tests
 
-125 tests. The bulk of rendering behaviour is pinned by markdown golden files
+129 tests. The bulk of rendering behaviour is pinned by markdown golden files
 in `test/cases/<type>/<name>.md`, run by `test/cases.test.ts`: each file holds
 one or more ```mermaid fences, each followed by a ```text fence with the
 expected `plain` (or a bare `(null)` line for sources that must refuse) and an

@@ -65,8 +65,9 @@ enforced, parse warnings, control characters stripped, staged npm releases.
       skipped + its title drawn, quoted cardinality, region subtree loss,
       seq-cap throw, lane edges cutting through boxes, …), diamonds drawn as
       double-bordered boxes, css-colors.ts generated from spec.
-- [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
-      gitGraph (commit lanes). Registry makes each a one-file addition.
+- [x] New diagram types (2026-08-15): pie (bar list), mindmap (tree),
+      timeline, gitGraph (commit lanes, newest-first). One file each in
+      `diagrams/`, drawing rows straight onto a Canvas.
 - [x] Demo app in `demo/` (SvelteKit): light/dark page theme, class-styled
       `/styles` preset. lovely-mermaid by source alias; svelte-asciiart@0.1.0
       and lovely-ansi-svg@0.1.0 from npm (dev symlinks retired) — Pages

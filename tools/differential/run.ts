@@ -264,6 +264,16 @@ function laneOrderHere(src: string, got: string): boolean {
   return g.edges.some((e) => e.from !== e.to && ranks[e.to] !== ranks[e.from] + 1)
 }
 
+/**
+ * pie / mindmap / timeline / gitGraph are diagram types upstream never had —
+ * it prints the source box, the port draws them.
+ */
+function newTypeHere(src: string, got: string): boolean {
+  if (got === '#NONE') return false
+  const kind = diagramKind(src)
+  return kind === 'pie' || kind === 'mindmap' || kind === 'timeline' || kind === 'gitgraph'
+}
+
 function fitsOnlyHere(src: string, maxWidth: number | undefined, want: string): boolean {
   // Upstream printed a source box; we drew art that fits. Matching on the box
   // title rather than the note, which wraps and so is not contiguous at small
@@ -297,6 +307,7 @@ const diamond: number[] = []
 const tabs: number[] = []
 const noteLeft: number[] = []
 const laneOrder: number[] = []
+const newTypes: number[] = []
 const regressions: { i: number; width: string; src: string; want: string; got: string }[] = []
 corpus.forEach((line, i) => {
   const tab = line.indexOf('\t')
@@ -317,6 +328,7 @@ corpus.forEach((line, i) => {
   else if (diamondHere(src, got)) diamond.push(i)
   else if (noteLeftHere(src, got)) noteLeft.push(i)
   else if (laneOrderHere(src, got)) laneOrder.push(i)
+  else if (newTypeHere(src, got)) newTypes.push(i)
   else if (stricterHeaderHere(src, golden[i])) header.push(i)
   else if (fitsOnlyHere(src, maxWidth, golden[i])) slack.push(i)
   else regressions.push({ i, width, src, want: golden[i], got })
@@ -341,6 +353,9 @@ console.log(`tabs:        ${tabs.length}  (source box expands tabs — see CODE.
 console.log(`noteLeft:    ${noteLeft.length}  (left-edge notes get their own margin — see CODE.md)`)
 console.log(
   `laneOrder:   ${laneOrder.length}  (lane endpoints order last in their rank — see CODE.md)`,
+)
+console.log(
+  `newTypes:    ${newTypes.length}  (pie/mindmap/timeline/gitGraph drawn, upstream boxed — see CODE.md)`,
 )
 console.log(`header:      ${header.length}  (exact header match — see CODE.md)`)
 console.log(`slack:       ${slack.length}  (painted vs allocated width — see CODE.md)`)

@@ -11,13 +11,26 @@ import type { Canvas } from './canvas.ts'
 import { classDiagram } from './diagrams/class.ts'
 import { er } from './diagrams/er.ts'
 import { flowchart } from './diagrams/flowchart.ts'
+import { gitgraph } from './diagrams/gitgraph.ts'
+import { mindmap } from './diagrams/mindmap.ts'
+import { pie } from './diagrams/pie.ts'
 import { sequence } from './diagrams/sequence.ts'
 import { state } from './diagrams/state.ts'
+import { timeline } from './diagrams/timeline.ts'
 import { stripControls } from './labels.ts'
 import { headerKind, statementsOf } from './statements.ts'
 
 /** A diagram type this renderer draws. */
-export type DiagramKind = 'flowchart' | 'state' | 'class' | 'er' | 'sequence'
+export type DiagramKind =
+  | 'flowchart'
+  | 'state'
+  | 'class'
+  | 'er'
+  | 'sequence'
+  | 'pie'
+  | 'mindmap'
+  | 'timeline'
+  | 'gitgraph'
 
 export interface Diagram {
   kind: DiagramKind
@@ -35,7 +48,17 @@ export interface Diagram {
   } | null
 }
 
-export const DIAGRAMS: Diagram[] = [flowchart, state, classDiagram, er, sequence]
+export const DIAGRAMS: Diagram[] = [
+  flowchart,
+  state,
+  classDiagram,
+  er,
+  sequence,
+  pie,
+  mindmap,
+  timeline,
+  gitgraph,
+]
 
 /** The registry entry `src`'s header declares, or `null`. */
 export function diagramFor(src: string): Diagram | null {

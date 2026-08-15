@@ -90,7 +90,11 @@ test('diagramKind reads the header without parsing the body', () => {
   expect(diagramKind('classDiagram')).toBe('class')
   expect(diagramKind('erDiagram')).toBe('er')
   expect(diagramKind('sequenceDiagram')).toBe('sequence')
-  expect(diagramKind('pie title x')).toBeNull()
+  expect(diagramKind('pie title x')).toBe('pie')
+  expect(diagramKind('mindmap')).toBe('mindmap')
+  expect(diagramKind('timeline')).toBe('timeline')
+  expect(diagramKind('gitGraph LR:')).toBe('gitgraph')
+  expect(diagramKind('gantt')).toBeNull()
   expect(diagramKind('')).toBeNull()
 })
 

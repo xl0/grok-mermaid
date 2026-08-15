@@ -82,7 +82,7 @@ different messages:
 
 ```ts
 if (render(src) === null) {
-  const kind = diagramKind(src) // 'flowchart' | 'state' | 'class' | 'er' | 'sequence' | null
+  const kind = diagramKind(src) // 'flowchart' | 'state' | … | 'gitgraph' | null
   console.log(kind ? `${kind} diagram: syntax error` : 'diagram type not supported here')
 }
 ```
@@ -194,6 +194,10 @@ classed spans instead.
 | `classDiagram` | compartments, annotations, generics, per-end cardinalities, inheritance/realization/composition/aggregation/dependency |
 | `erDiagram` | entities, attributes, crow's-foot cardinalities at their own ends |
 | `sequenceDiagram` | participants, messages, self-messages, activations, notes, `loop`/`alt`/`opt` dividers, `autonumber` |
+| `pie` | a labelled bar list — proportions read better than circles in a terminal; `showData` appends the raw values |
+| `mindmap` | the indentation tree, drawn with `├──`/`└──` guides |
+| `timeline` | periods and events as a vertical list, sections as headers |
+| `gitGraph` | commit lanes in `git log --graph` style: newest on top, branch heads, tags, merges — even across lanes |
 
 YAML frontmatter is understood: its `title:` is drawn above the diagram, the
 rest is skipped. `:::class` tags and `classDef`s work in every grammar that

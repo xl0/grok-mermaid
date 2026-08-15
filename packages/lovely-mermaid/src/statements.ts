@@ -44,7 +44,7 @@ export function splitStatements(line: string, out: string[]): void {
  * there is none. While the block is still unterminated everything is
  * frontmatter, so a streamed diagram stays blank until it closes.
  */
-function frontmatterEnd(lines: string[]): number {
+export function frontmatterEnd(lines: string[]): number {
   let i = 0
   while (i < lines.length && lines[i].trim() === '') i++
   if (lines[i]?.trim() !== '---') return 0

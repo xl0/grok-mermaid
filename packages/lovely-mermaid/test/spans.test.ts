@@ -17,6 +17,13 @@ const DIAGRAMS: [string, string][] = [
   ['er', 'erDiagram\n CUSTOMER ||--o{ ORDER : places\n CUSTOMER {\n string name\n }'],
   ['sequence', 'sequenceDiagram\n A->>B: hi\n loop x\n B-->>A: ok\n end\n Note over A,B: n'],
   ['wide', 'flowchart LR\n A[aaaaaaaaaaaaaaaaaaaa] --> B[bbbbbbbbbbbbbbbbbbbb]'],
+  ['pie', 'pie title Pets\n "Dogs" : 3\n "Cats" : 1'],
+  ['mindmap', 'mindmap\n  root((App))\n    UI\n      Theme\n    DB'],
+  ['timeline', 'timeline\n title T\n section S\n 2023 : one : two'],
+  [
+    'gitgraph',
+    'gitGraph\n commit id: "a"\n branch dev\n commit id: "b"\n checkout main\n merge dev',
+  ],
 ]
 
 /** Both public producers of art; the span contract covers each equally. */
