@@ -403,7 +403,7 @@ live. `bun run differential` is what actually pins fidelity.
 bun (runtime + test runner + workspace), tsgo (typecheck + emit), biome
 (lint + format, configured at the repo root). No runtime dependencies.
 Root scripts: `test`, `test:update`, `check`, `fix`, `typecheck`,
-`differential`, `dev` (demo), `release` (forwards to the package); package
+`differential`, `build`, `dev` (demo), `release` (both forward to the package); package
 scripts: `build`, `gen:width`, `gen:colors`, `gen:demo`, `release`,
 `prepublishOnly`.
 

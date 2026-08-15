@@ -937,6 +937,11 @@ flowchart LR
 	.art :global(svg) {
 		display: block;
 	}
+	/* Unstyled runs fill with currentColor, and the UA link colors (worst:
+	   :visited's dark purple) would leak in through the OSC 8 <a> wrappers. */
+	.art :global(svg a) {
+		color: inherit;
+	}
 	.art.empty {
 		color: var(--dim);
 		padding: 0.4rem 0;

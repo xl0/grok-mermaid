@@ -12,6 +12,7 @@
     "fix": "biome check --write .",
     "typecheck": "tsgo --noEmit -p packages/lovely-mermaid",
     "differential": "bun run tools/differential/run.ts",
+    "build": "cd packages/lovely-mermaid && bun run build",
     "dev": "cd demo && bun run dev",
     "release": "cd packages/lovely-mermaid && bun run release"
   },
