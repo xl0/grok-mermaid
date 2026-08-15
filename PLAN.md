@@ -40,11 +40,13 @@ enforced, parse warnings, control characters stripped, staged npm releases.
   `bun run test:update` to regenerate); programmatic tests keep only what
   the art can't show.
 
-## [ ] Release 0.3.0
+## [x] Releases 0.3.0–0.3.2 (2026-08-15)
 
-- [ ] Re-create the npm trusted publisher for `lovely-mermaid` (stage-only,
-      `publish.yml`), then `bun run release minor` from the package dir.
+Trusted publisher recreated; staged releases flowing.
+
 - [ ] Deprecate `grok-mermaid` on npm with a pointer.
+- [ ] Release 0.4.0: the routing rework + review fixes sit under
+      `[Unreleased]` — `/cl` audit, then `bun run release minor`.
 
 ## [ ] Features (order from REDESIGN.md)
 
@@ -87,6 +89,14 @@ adjacent-back routing rather than a left lane strip), the medium tier
 low tier, plus the streaming-prefix sweep and the ANSI snapshot. Parked for
 the next major: typed warnings, `Span.node`. Changelog updated under
 `[Unreleased]`.
+
+Follow-on routing rework (same day, demo-driven): adjacent-rank back edges
+return locally; skips split off the bottom fan, drop straight when the
+column is clear, enter target tops on evenly spread slots with side-aware
+labels; lanes pack shortest-innermost. TD/BT only — LR/RL still route
+side-entry lanes and could get the same polish if it ever matters. An A*
+router experiment lives on the `astar-routing` branch: works, legible,
+rejected as less disciplined than structured routing (see that commit).
 
 ## Open questions
 
