@@ -1,4 +1,5 @@
-A skip edge routes around the intermediate box instead of crossing it.
+A skip edge routes around the intermediate box and re-enters through the
+target's top, beside the forward arrival.
 
 ```mermaid
 graph TD
@@ -16,10 +17,10 @@ graph TD
  ┌───┐ │
  │ B │ │
  └─┬─┘ │
-   │   │
-   ▼   │
- ┌───┐ │
- │ C │◄┘
+  ┌┼───┘
+  ▼▼
+ ┌───┐
+ │ C │
  └───┘
 ```
 
