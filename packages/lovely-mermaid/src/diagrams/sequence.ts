@@ -271,6 +271,10 @@ function parseSeqMessage(
     const tail = chars.slice(pos, pos + MAX_SEQ_OP).join('')
     for (const [op, dashed, head] of SEQ_OPS) {
       if (tail.startsWith(op)) {
+        // `-x` / `-)` embedded in a hyphenated token (`pre-x->>B`) is not an
+        // operator — the real one follows. Require a non-link char after.
+        const after = chars[pos + op.length]
+        if ((op.endsWith('x') || op.endsWith(')')) && (after === '-' || after === '>')) continue
         found = { pos, op, dashed, head }
         break outer
       }

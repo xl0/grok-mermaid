@@ -87,7 +87,7 @@ opportunistically when touching a scanner; don't campaign.
 
 ### Medium
 
-- [ ] **Sequence op scan matches inside hyphenated tokens.** Position-first
+- [x] **Sequence op scan matches inside hyphenated tokens.** Position-first
       scan hits `-x` in `pre-x->>B: hi` → invents participant `>>B` with a
       cross head, no warning. Mermaid rejects the source; drop-with-warning is
       fine, inventing participants is not. Fix: require a boundary after
