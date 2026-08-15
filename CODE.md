@@ -202,10 +202,13 @@ Layout is Sugiyama-shaped: longest-path ranking over the DAG (back edges
 dropped by DFS colouring), barycenter reordering within ranks to cut crossings,
 then barycenter relaxation for cross-axis positions. Edges between adjacent
 ranks share horizontal **bus** rows; skip and multi-rank back edges route
-around the diagram through vertical **lanes** — a forward skip re-enters
-through the target's *top* off a reserved approach row above the arrival
-heads (TD/BT), a back edge through the target's right side, which keeps
-returns recognisable. An *adjacent-rank* back edge
+around the diagram through vertical **lanes**, packed shortest-span-innermost
+so exits and entries cross as few live lanes as possible. A forward skip
+(TD/BT) leaves through the source's *bottom* and re-enters through the
+target's *top*, riding reserved corridor rows above each band's arrival
+heads and landing past the arrival labels; a back edge exits and enters
+through the *sides*, which keeps returns recognisable. An *adjacent-rank*
+back edge
 returns locally through its band instead (TD/BT only — LR boxes are three
 rows tall, no room to attach off the centre row), attached right of centre
 with the band's first row reserved for its arrowhead: the lane detour cut
