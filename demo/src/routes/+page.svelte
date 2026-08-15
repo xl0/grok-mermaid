@@ -28,6 +28,17 @@
   D --> E`
 		},
 		{
+			name: 'title',
+			desc: 'frontmatter title over the art',
+			src: `---
+title: Deploy pipeline
+---
+flowchart LR
+  Build --> Test
+  Test --> Ship
+  Ship --> Done`
+		},
+		{
 			name: 'shapes',
 			desc: 'v2 @{shape, label} node syntax',
 			src: `flowchart TD
@@ -47,6 +58,17 @@
   end
   H1 --> Out[(Store)]
   H2 --> Out`
+		},
+		{
+			name: 'cycles',
+			desc: 'back and skip edges route around',
+			src: `flowchart TD
+  A[Fetch] --> B{OK?}
+  B -->|yes| C[Parse]
+  B -->|no| R[Backoff]
+  R --> A
+  C --> D[Render]
+  A -.->|cache hit| D`
 		},
 		{
 			name: 'sequence',
