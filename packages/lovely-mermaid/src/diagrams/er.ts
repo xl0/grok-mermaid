@@ -83,15 +83,24 @@ export function parseEr(src: string): Graph | null {
   return graph.nodes.length === 0 ? null : graph
 }
 
-/** Resolve an entity token (`NAME` or `id[Label]`), keeping its title row fresh. */
+/** Resolve an entity token (`NAME`, `"Quoted Name"` or `id[Label]`), keeping
+ * its title row fresh. A quoted name is its own identity; the quotes are not
+ * part of the title. */
 function erEntity(graph: Graph, token: string): number | null {
-  const open = token.indexOf('[')
+  const open = token.startsWith('"') ? -1 : token.indexOf('[')
   let idx: number | null
   if (open !== -1) {
     const id = token.slice(0, open)
+    if (!token.endsWith(']')) {
+      graph.warnings.push(`entity "${id}": alias is missing its closing \`]\``)
+    }
     const label = cleanLabel(token.slice(open + 1).replace(/\]+$/, ''))
     if (id === '' || label === '') return null
     idx = graph.nodeLabel(id, label)
+  } else if (token.startsWith('"')) {
+    const label = cleanLabel(token)
+    if (label === '') return null
+    idx = graph.nodeIndex(token, label, 'rect')
   } else {
     idx = graph.nodeIndex(token, null, 'rect')
   }

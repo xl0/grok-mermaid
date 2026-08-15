@@ -92,7 +92,7 @@ opportunistically when touching a scanner; don't campaign.
       cross head, no warning. Mermaid rejects the source; drop-with-warning is
       fine, inventing participants is not. Fix: require a boundary after
       `-x`/`--x`/`-)`/`--)` (next char not `-`/`>`).
-- [ ] **ER quoted entity names paint their quotes.** `"ORDER ITEM" ||--o{ …`
+- [x] **ER quoted entity names paint their quotes.** `"ORDER ITEM" ||--o{ …`
       → box titled `"ORDER ITEM"`. Strip quotes for the label, keep the quoted
       token as identity. Related: streamed unclosed alias `p["Person` gets no
       unterminated-bracket warning (flowchart warns; ER's local `]`-trim
