@@ -1,6 +1,6 @@
 {
   "name": "lovely-mermaid",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Render Mermaid diagrams as Unicode box-drawing art for terminals",
   "keywords": [
     "mermaid",

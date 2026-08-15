@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-15
+
 ### Breaking Changes
 
 - Renamed the package to `lovely-mermaid` (formerly `grok-mermaid`); the repository moved to `xl0/lovely-mermaid` and the library now lives in `packages/lovely-mermaid` of a workspace.
