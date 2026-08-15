@@ -19,5 +19,9 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "scripts"]
+  "include": ["src", "test", "scripts"],
+  // gen-demo-svg needs lovely-ansi-svg, which is kept out of package.json so
+  // the published manifest carries no dependencies at all; install it ad hoc
+  // to regenerate the svg (see the script's header).
+  "exclude": ["scripts/gen-demo-svg.ts"]
 }

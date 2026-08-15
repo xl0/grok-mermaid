@@ -14,9 +14,11 @@
  * correctly under both.
  */
 
-// Until lovely-ansi-svg is on npm this resolves through a manual link
-// (`ln -s ../../../../svelte-asciiart/packages/lovely-ansi-svg node_modules/lovely-ansi-svg`);
-// once published it becomes a plain devDependency, same import.
+// lovely-ansi-svg is deliberately NOT in package.json — the published
+// manifest stays dependency-free for the people who audit it. Install it ad
+// hoc to regenerate (`bun add -d lovely-ansi-svg`), then revert package.json
+// and the lockfile; tsconfig excludes this file from typecheck for the same
+// reason.
 import { defaultTheme, exportSvg } from 'lovely-ansi-svg'
 import { type AnsiTheme, render, toAnsi } from '../src/index.ts'
 

@@ -22,7 +22,8 @@ packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sib
   scripts/
     gen-width-data.ts     regenerates src/width-data.ts from the oracle
     gen-css-colors.ts     regenerates src/css-colors.ts from the CSS Color 4 spec
-    gen-demo-svg.ts       regenerates docs/demo.svg, the README's colour example
+    gen-demo-svg.ts       regenerates docs/demo.svg; needs an ad-hoc
+                          lovely-ansi-svg install — the manifest stays dep-free
     release.ts            rolls the changelog, bumps, verifies, commits, tags, pushes
   src/
     index.ts              public entry: render() + re-exports

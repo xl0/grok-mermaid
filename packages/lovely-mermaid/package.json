@@ -43,8 +43,5 @@
     "gen:colors": "bun run scripts/gen-css-colors.ts",
     "prepublishOnly": "bun run check && bun run typecheck && bun test && bun run build",
     "release": "bun run scripts/release.ts"
-  },
-  "devDependencies": {
-    "lovely-ansi-svg": "^0.1.0"
   }
 }
