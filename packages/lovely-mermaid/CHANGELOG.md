@@ -5,6 +5,7 @@
 ### Changed
 
 - A back edge between adjacent ranks returns locally beside its forward siblings (as mermaid draws it) instead of around the diagram through the side lane, whose horizontal approach could cut through a sibling box and fabricate edges that were never written. Top-down/bottom-up layouts only; LR/RL keep the lane.
+- A forward skip edge descends its lane and re-enters through the target's *top*, beside the forward arrivals, instead of poking into the right side. Top-down/bottom-up layouts only.
 - Labels of parallel edges (same source and target) join as `one / two` on the drawn edge; previously every label after the first silently vanished.
 - Repeated state descriptions (`s1 : a` then `s1 : b`) accumulate into one wrapped label instead of last-one-wins.
 - A bare timeline period line renders event-less instead of being dropped.
