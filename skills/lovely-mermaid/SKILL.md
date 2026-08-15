@@ -27,7 +27,8 @@ description: Consult before emitting a ```mermaid block.
 Works everywhere: YAML frontmatter `title:`, CJK and emoji in labels.
 
 Flowchart, state and class diagrams only: `:::class` tags +
-`classDef name fill:#f96,color:#000` node colors.
+`classDef name fill:#f96,color:#000` node colors. Flowchart/class only:
+`click A "url"` / `link A "url"` become clickable OSC 8 hyperlinks.
 
 Rules of thumb:
 

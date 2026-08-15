@@ -46,9 +46,12 @@ export const pie: Diagram = {
       const y = top + i
       drawText(canvas, r.label, 0, y, 'text')
       const eighths = Math.round(r.share * BAR_W * 8)
-      const bar = '█'.repeat(Math.floor(eighths / 8)) + EIGHTHS[eighths % 8]
+      let bar = '█'.repeat(Math.floor(eighths / 8)) + EIGHTHS[eighths % 8]
       // A nonzero slice always shows at least a sliver.
-      drawText(canvas, bar === '' && r.value > 0 ? '▏' : bar, barX, y, 'edge')
+      if (bar === '' && r.value > 0) bar = '▏'
+      drawText(canvas, bar, barX, y, 'edge')
+      // The unfilled remainder is a track, so every bar shows its full scale.
+      drawText(canvas, '░'.repeat(BAR_W - stringWidth(bar)), barX + stringWidth(bar), y, 'border')
       drawText(canvas, r.suffix, suffixX, y, 'edgeLabel')
     })
     return { canvas, warnings, classDefs: {} }

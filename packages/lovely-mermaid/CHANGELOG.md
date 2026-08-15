@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `click A "url"` (flowchart) and `link A "url"` (class diagrams) surface on the node's spans as `span.href`; `toAnsi` emits them as OSC 8 terminal hyperlinks.
+
+### Changed
+
+- Pie bars draw their unfilled remainder as a `░` track, so every bar shows its full scale.
+
 ### Fixed
 
 - Class-diagram class assignments parse instead of being dropped: `class Agent focus` (the flowchart-style form) and `cssClass "A,B" name`.

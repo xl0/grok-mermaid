@@ -16,6 +16,7 @@ import {
   nonEmpty,
   parseClassAssign,
   parseClassDef,
+  parseHref,
   quoteMask,
   splitColon,
   splitOnce,
@@ -76,6 +77,8 @@ export function parseClass(src: string): Graph | null {
   let curClass: number | 'skip' | null = null
   /** `class A,B name` / `cssClass "A,B" name` assignments, applied post-walk. */
   const classAssignments: [string[], string[]][] = []
+  /** `link A "url"` / `click A href "url"` targets, applied post-walk. */
+  const hrefs: [string, string][] = []
 
   for (const st of statements.slice(1)) {
     if (curClass !== null) {
@@ -94,7 +97,12 @@ export function parseClass(src: string): Graph | null {
       if (def) for (const name of def.names) graph.classDefs[name] = def.props
       continue
     }
-    if (['note', 'callback', 'click', 'link', 'style', 'namespace', '}'].includes(first)) {
+    if (['note', 'callback', 'style', 'namespace', '}'].includes(first)) {
+      continue
+    }
+    if (first === 'link' || first === 'click') {
+      const target = parseHref(st.slice(firstWord(st).length))
+      if (target) hrefs.push(target)
       continue
     }
     if (first === 'cssclass') {
@@ -167,6 +175,7 @@ export function parseClass(src: string): Graph | null {
   }
 
   graph.applyClasses(classAssignments)
+  graph.applyHrefs(hrefs)
 
   return graph.nodes.length === 0 ? null : graph
 }

@@ -25,6 +25,12 @@ export interface Span {
    * cells that belong to no classed node.
    */
   classes?: string[]
+  /**
+   * Link target of the node these cells belong to, from a `click A "url"`
+   * (flowchart) or `link A "url"` (class diagram) statement. `toAnsi` emits
+   * it as an OSC 8 hyperlink; other consumers map it to their own linking.
+   */
+  href?: string
 }
 
 /**

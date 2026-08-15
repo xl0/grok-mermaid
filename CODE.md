@@ -33,7 +33,7 @@ packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sib
     class-style.ts        classDef interpretation: resolveClassStyle, contrastOn
     css-colors.ts         CSS named-color table; generated, do not edit
     width.ts              display widths; width-data.ts is generated, do not edit
-    canvas.ts             cell grid, direction-bit glyphs, flips, span runs, class tags
+    canvas.ts             cell grid, direction-bit glyphs, flips, span runs, tags/hrefs
     labels.ts             entity decoding, tag/markdown stripping, wrapping, fitting
     statements.ts         source -> statements, shared scan/split helpers, classDef parsing
     graph.ts              shared model: Node/Edge/Group/Graph + caps + truncation
@@ -123,6 +123,11 @@ truecolor SGR); a style that colors nothing for a role (bold-only) merges
 with the theme SGR instead of replacing it. Consumers with their own
 styling model use the same resolver against `styled` + `classDefs`; the
 demo just calls `toAnsi`.
+`Span.href` rides the same per-cell mechanism as classes: `click A "url"`
+(flowchart) / `link A "url"` (class) set `Node.href`, every cell the node
+paints carries it, and `toAnsi` wraps those runs in OSC 8 hyperlinks.
+Callback forms (`call`/`callback`) are ignored — their quoted string is a
+tooltip, not a target.
 Class assignment is parsed in every grammar that has it:
 flowchart `:::` at the node cursor, state/class `:::` inline at each id token
 (`takeTags`; a tag inside a quoted label or description is text, not a tag),

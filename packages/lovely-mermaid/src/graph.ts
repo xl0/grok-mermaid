@@ -45,6 +45,12 @@ export interface Node {
    * carry them out through `Span.classes`.
    */
   classes?: string[]
+  /**
+   * Link target from a `click A "url"` / `link A "url"` statement, carried
+   * out through `Span.href` the way classes are; `toAnsi` emits it as an
+   * OSC 8 hyperlink.
+   */
+  href?: string
 }
 
 export interface Edge {
@@ -167,6 +173,15 @@ export class Graph {
           if (name.trim() !== '') this.addClass(idx, name.trim())
         }
       }
+    }
+  }
+
+  /** Apply `[id, url]` link targets; the last one per id wins, unknown ids
+   * are ignored. Deferred like `applyClasses`, for the same ordering reason. */
+  applyHrefs(hrefs: [string, string][]): void {
+    for (const [id, url] of hrefs) {
+      const idx = this.index.get(id.trim())
+      if (idx !== undefined) this.nodes[idx].href = url
     }
   }
 

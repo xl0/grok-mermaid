@@ -185,6 +185,17 @@ foreground picked when a fill declares no colour. Consumers with their own
 styling model use the exported `resolveClassStyle`/`contrastOn` against the
 classed spans instead.
 
+### Links
+
+`click A "https://…"` (flowchart) and `link A "https://…"` (class diagrams)
+land on the node's spans as `span.href`. `toAnsi` emits them as OSC 8
+hyperlinks — clickable in every modern terminal, invisible in the rest:
+
+```ts
+render('flowchart TD\n A[Docs] --> B\n click A "https://example.com/docs"')
+// toAnsi(art) wraps A's cells in ESC ]8;; … — the whole box is the link
+```
+
 ## Supported diagrams
 
 | Type | Notes |

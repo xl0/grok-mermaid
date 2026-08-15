@@ -163,6 +163,16 @@ flowchart LR
   classDef alert fill:#8b0000,color:#ffdddd,font-weight:bold`
 		},
 		{
+			name: 'links',
+			desc: 'click/link → OSC 8 hyperlinks',
+			src: `flowchart TD
+  A[README] --> B{Where?}
+  B -->|terminal| C[npm]
+  B -->|browser| D[GitHub]
+  click C "https://www.npmjs.com/package/lovely-mermaid"
+  click D "https://github.com/xl0/lovely-mermaid"`
+		},
+		{
 			name: 'er',
 			desc: 'cardinalities at edge ends, aliases',
 			src: `erDiagram

@@ -25,6 +25,7 @@ import {
   nonEmpty,
   parseClassAssign,
   parseClassDef,
+  parseHref,
   splitOnce,
   splitTop,
   statementsOf,
@@ -53,6 +54,8 @@ export function parseGraph(src: string): Graph | null {
   /** `class A,B name` assignments, applied after the walk so a statement may
    * precede the nodes it names. Unknown ids are ignored. */
   const classAssignments: [string[], string[]][] = []
+  /** `click A "url"` link targets, applied after the walk like classes. */
+  const hrefs: [string, string][] = []
 
   for (const st of statements.slice(1)) {
     switch (asciiLower(firstWord(st))) {
@@ -81,9 +84,15 @@ export function parseGraph(src: string): Graph | null {
         if (assign) classAssignments.push(assign)
         continue
       }
+      case 'click': {
+        // `click A "url" [tooltip]` / `click A href "url" …`; the callback
+        // forms carry nothing a terminal can invoke.
+        const target = parseHref(st.slice(firstWord(st).length))
+        if (target) hrefs.push(target)
+        continue
+      }
       case 'style':
       case 'linkstyle':
-      case 'click':
       case 'direction':
         continue
       default:
@@ -94,6 +103,7 @@ export function parseGraph(src: string): Graph | null {
   }
 
   graph.applyClasses(classAssignments)
+  graph.applyHrefs(hrefs)
 
   if (graph.truncated !== null) graph.warnings.push(`diagram truncated: ${graph.truncated}`)
   return graph.nodes.length === 0 ? null : graph

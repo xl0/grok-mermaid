@@ -658,11 +658,13 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   for (let idx = 0; idx < n; idx++) {
     const extra = extras[idx]
     canvas.curTag = graph.nodes[idx].classes?.join(' ')
+    canvas.curHref = graph.nodes[idx].href
     if (extra.kind === 'frame') drawFrame(canvas, placed[idx], graph.nodes[idx].label, extra.sub)
     else if (extra.kind === 'compartments') drawClassBox(canvas, placed[idx], extra.sections)
     else drawBox(canvas, placed[idx], wrapped[idx], graph.nodes[idx].shape)
   }
   canvas.curTag = undefined
+  canvas.curHref = undefined
 
   graph.edges.forEach((edge, i) => {
     canvas.curStyle =
@@ -828,6 +830,7 @@ function buildScope(
         label: graph.nodes[item.i].label,
         shape: graph.nodes[item.i].shape,
         classes: graph.nodes[item.i].classes,
+        href: graph.nodes[item.i].href,
       })
       extras.push({ kind: 'plain' })
     } else {
@@ -909,6 +912,7 @@ export function drawBox(canvas: Canvas, p: Placed, lines: string[], shape: Shape
       const i = canvas.idx(cx, cy)
       canvas.occupied[i] = 1
       if (canvas.curTag !== undefined) canvas.tag[i] = canvas.curTag
+      if (canvas.curHref !== undefined) canvas.href[i] = canvas.curHref
     }
   }
 

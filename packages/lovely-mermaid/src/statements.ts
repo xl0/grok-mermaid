@@ -170,6 +170,17 @@ export function parseClassAssign(rest: string): [string[], string[]] | null {
   return [split(body.slice(0, ws)), split(body.slice(ws))]
 }
 
+/**
+ * `A "url" [tooltip]` / `A href "url" …` → `[id, url]`. The callback forms
+ * (`call`/`callback`) return null — their quoted string is a tooltip.
+ */
+export function parseHref(rest: string): [string, string] | null {
+  const [id, second] = words(rest)
+  if (id === undefined || second === 'call' || second === 'callback') return null
+  const url = rest.match(/"([^"]+)"/)
+  return url === null ? null : [id, url[1]]
+}
+
 export const firstWord = (s: string): string => s.split(/\s+/).filter((w) => w !== '')[0] ?? ''
 export const words = (s: string): string[] => s.split(/\s+/).filter((w) => w !== '')
 

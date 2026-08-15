@@ -33,12 +33,16 @@ export class Canvas {
   role: Role[]
   /** Space-joined author classes per cell, or undefined; see `Span.classes`. */
   tag: (string | undefined)[]
+  /** Link target per cell, or undefined; see `Span.href`. */
+  href: (string | undefined)[]
   mask: Uint8Array
   style: Uint8Array
   occupied: Uint8Array
   curStyle: number = STY_SOLID
   /** Author classes stamped on cells painted while set, like `curStyle`. */
   curTag: string | undefined
+  /** Link target stamped on cells painted while set, like `curTag`. */
+  curHref: string | undefined
 
   constructor(w: number, h: number) {
     const n = w * h
@@ -47,6 +51,7 @@ export class Canvas {
     this.ch = new Array(n).fill(' ')
     this.role = new Array(n).fill('none')
     this.tag = new Array(n).fill(undefined)
+    this.href = new Array(n).fill(undefined)
     this.mask = new Uint8Array(n)
     this.style = new Uint8Array(n)
     this.occupied = new Uint8Array(n)
@@ -62,6 +67,7 @@ export class Canvas {
     this.ch[i] = c
     this.role[i] = role
     if (this.curTag !== undefined) this.tag[i] = this.curTag
+    if (this.curHref !== undefined) this.href[i] = this.curHref
   }
 
   /**
@@ -78,6 +84,7 @@ export class Canvas {
     this.style[i] |= this.curStyle
     if (this.role[i] !== 'border') this.role[i] = role
     if (this.curTag !== undefined) this.tag[i] = this.curTag
+    if (this.curHref !== undefined) this.href[i] = this.curHref
   }
 
   /** Stamp a finished sub-canvas (a subgraph frame's contents) at an offset. */
@@ -92,6 +99,7 @@ export class Canvas {
         this.ch[di] = sub.ch[si]
         this.role[di] = sub.role[si]
         this.tag[di] = sub.tag[si]
+        this.href[di] = sub.href[si]
         this.style[di] = sub.style[si]
         this.occupied[di] = 1
       }
@@ -155,6 +163,7 @@ export class Canvas {
         ;[this.ch[i], this.ch[j]] = [this.ch[j], this.ch[i]]
         ;[this.role[i], this.role[j]] = [this.role[j], this.role[i]]
         ;[this.tag[i], this.tag[j]] = [this.tag[j], this.tag[i]]
+        ;[this.href[i], this.href[j]] = [this.href[j], this.href[i]]
       }
     }
     for (let i = 0; i < this.ch.length; i++) this.ch[i] = flipGlyphV(this.ch[i])
@@ -173,6 +182,7 @@ export class Canvas {
         ;[this.ch[i], this.ch[j]] = [this.ch[j], this.ch[i]]
         ;[this.role[i], this.role[j]] = [this.role[j], this.role[i]]
         ;[this.tag[i], this.tag[j]] = [this.tag[j], this.tag[i]]
+        ;[this.href[i], this.href[j]] = [this.href[j], this.href[i]]
       }
     }
     for (let i = 0; i < this.ch.length; i++) this.ch[i] = flipGlyphH(this.ch[i])
@@ -209,28 +219,36 @@ export class Canvas {
       }
       width = Math.max(width, last)
       const spans: Span[] = []
-      const push = (text: string, role: Role, tag: string | undefined): void => {
+      const push = (text: string, role: Role, tag: string | undefined, href?: string): void => {
         if (text === '') return
-        spans.push(tag === undefined ? { text, role } : { text, role, classes: tag.split(' ') })
+        const span: Span = { text, role }
+        if (tag !== undefined) span.classes = tag.split(' ')
+        if (href !== undefined) span.href = href
+        spans.push(span)
       }
       let plainRow = ''
       let run = ''
       let runRole: Role = 'none'
       let runTag: string | undefined
+      let runHref: string | undefined
       for (let x = 0; x < last; x++) {
         const i = this.idx(x, y)
         const c = this.ch[i]
         if (c === CONT) continue
         plainRow += c
-        if ((this.role[i] !== runRole || this.tag[i] !== runTag) && run !== '') {
-          push(run, runRole, runTag)
+        if (
+          (this.role[i] !== runRole || this.tag[i] !== runTag || this.href[i] !== runHref) &&
+          run !== ''
+        ) {
+          push(run, runRole, runTag, runHref)
           run = ''
         }
         runRole = this.role[i]
         runTag = this.tag[i]
+        runHref = this.href[i]
         run += c
       }
-      push(run, runRole, runTag)
+      push(run, runRole, runTag, runHref)
       styled.push(spans)
       // Only ASCII spaces, which is all a blank cell ever holds. Trimming `\s`
       // would eat a trailing NBSP that `styled` keeps, desyncing the two.

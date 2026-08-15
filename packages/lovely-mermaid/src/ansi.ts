@@ -2,6 +2,8 @@ import { type ClassStyle, contrastOn, resolveClassStyle } from './class-style.ts
 import type { MermaidArt, Role } from './types.ts'
 
 const ESC = String.fromCharCode(27)
+const OSC8 = `${ESC}]8;;`
+const ST = `${ESC}\\`
 
 /**
  * SGR parameter per role, e.g. `'2'` for dim, `'36'` for cyan,
@@ -53,7 +55,10 @@ export function toAnsi(art: MermaidArt, theme: AnsiTheme = DEFAULT_THEME): strin
       .map((span) => {
         const cls = resolveClassStyle(span.classes, art.classDefs)
         const sgr = cls !== null ? classSgr(cls, span.role, theme[span.role]) : theme[span.role]
-        return sgr === undefined ? span.text : `${ESC}[${sgr}m${span.text}${ESC}[0m`
+        const text = sgr === undefined ? span.text : `${ESC}[${sgr}m${span.text}${ESC}[0m`
+        // OSC 8 hyperlink around the whole run; terminals without support
+        // ignore the sequences and print the text unchanged.
+        return span.href === undefined ? text : `${OSC8}${span.href}${ST}${text}${OSC8}${ST}`
       })
       .join(''),
   )

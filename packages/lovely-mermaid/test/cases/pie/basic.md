@@ -11,9 +11,9 @@ pie title Pets
 
 ```text
              Pets
-Dogs  ███████████████▉      79%
-Cats  ███▌                  17%
-Rats  ▋                      3%
+Dogs  ███████████████▉░░░░  79%
+Cats  ███▌░░░░░░░░░░░░░░░░  17%
+Rats  ▋░░░░░░░░░░░░░░░░░░░   3%
 ```
 
 `showData` appends the raw values.
@@ -25,8 +25,8 @@ pie showData
 ```
 
 ```text
-A  ███████████████       75%  (3)
-B  █████                 25%  (1)
+A  ███████████████░░░░░  75%  (3)
+B  █████░░░░░░░░░░░░░░░  25%  (1)
 ```
 
 Eighth-block rounding carries into a full cell: 999 of 1000 is a full bar,
@@ -40,5 +40,5 @@ pie
 
 ```text
 a  ████████████████████ 100%
-b  ▏                      0%
+b  ▏░░░░░░░░░░░░░░░░░░░   0%
 ```

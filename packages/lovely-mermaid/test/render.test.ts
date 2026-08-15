@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { CONT } from '../src/canvas.ts'
-import { diagramKind, render, sourceBox } from '../src/index.ts'
+import { diagramKind, render, sourceBox, toAnsi } from '../src/index.ts'
 import { stringWidth } from '../src/width.ts'
 import { lines, plain } from './helpers.ts'
 
@@ -288,4 +288,38 @@ test('a frontmatter title carries the title role', () => {
   const out = render('---\ntitle: Order flow\n---\nflowchart TD\n A --> B')
   if (out === null) throw new Error('render returned null')
   expect(out.styled[0].at(-1)).toEqual({ text: 'Order flow', role: 'title' })
+})
+
+test('click and link statements land on the spans as href', () => {
+  const fc = render('flowchart TD\n A[Docs] --> B\n click A "https://example.com/docs" "open"')
+  if (fc === null) throw new Error('render returned null')
+  expect(
+    fc.styled.flat().some((s) => s.text.includes('Docs') && s.href === 'https://example.com/docs'),
+  ).toBe(true)
+  // The whole box is the link, blank interior included; B carries none.
+  expect(fc.styled.flat().some((s) => s.href !== undefined && s.role === 'border')).toBe(true)
+  expect(fc.styled.flat().some((s) => s.text.includes('B') && s.href !== undefined)).toBe(false)
+
+  const cls = render('classDiagram\n class Agent {\n +run()\n }\n link Agent "https://example.com"')
+  if (cls === null) throw new Error('render returned null')
+  expect(
+    cls.styled.flat().some((s) => s.text.includes('Agent') && s.href === 'https://example.com'),
+  ).toBe(true)
+
+  // Callback forms carry nothing a terminal can open.
+  const cb = render('flowchart TD\n A --> B\n click A call doIt() "tip"')
+  expect(cb?.styled.flat().every((s) => s.href === undefined)).toBe(true)
+})
+
+test('toAnsi wraps linked spans in OSC 8, stripping back to plain', () => {
+  const art = render('flowchart TD\n A[Docs] --> B\n click A "https://example.com"')
+  if (art === null) throw new Error('render returned null')
+  const out = toAnsi(art).join('\n')
+  const esc = String.fromCharCode(27)
+  expect(out).toContain(`${esc}]8;;https://example.com${esc}\\`)
+  const stripped = out
+    .replaceAll(`${esc}]8;;https://example.com${esc}\\`, '')
+    .replaceAll(`${esc}]8;;${esc}\\`, '')
+    .replace(new RegExp(`${esc}\\[[0-9;]*m`, 'g'), '')
+  expect(stripped).toBe(art.plain.join('\n'))
 })
