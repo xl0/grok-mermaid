@@ -1,4 +1,5 @@
-A back transition uses a lane, label included.
+A back transition to the previous rank returns locally, label beside the
+arrowhead.
 
 ```mermaid
 stateDiagram-v2
@@ -13,12 +14,12 @@ stateDiagram-v2
  ╰─┬─╯
    │
    ▼
- ╭───╮ retry
- │ B │◄──────┐
- ╰─┬─╯       │
-   │         │
-   ▼         │
- ╭───╮       │
- │ C ├───────┘
+ ╭───╮
+ │ B │
+ ╰─┬─╯
+   │▲retry
+   ▼│
+ ╭──┴╮
+ │ C │
  ╰───╯
 ```

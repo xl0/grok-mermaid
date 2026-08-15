@@ -60,8 +60,14 @@ opportunistically when touching a scanner; don't campaign.
       Fix: locate the label colon first (`splitColon`), only chain on arrows
       before it.
 
-- [ ] **Back-edge lane approach crosses a sibling box** (found in the wild via
-      the demo). With `B -->|yes| C` / `B -->|no| D` / `E -->|fail| C` /
+- [x] **Back-edge lane approach crosses a sibling box** (found in the wild via
+      the demo). Fixed for the reported class by routing adjacent-rank back
+      edges *locally* through the band beside their forward siblings (what
+      mermaid draws), TD/BT only — LR boxes are three rows tall, no room to
+      offset off the centre row, so LR/RL keep the lane. The left-lane strip
+      below was NOT built: with adjacent-back edges out of the lanes, the
+      remaining collision needs two multi-rank lane edges in one rank —
+      revisit only if it shows up in practice. With `B -->|yes| C` / `B -->|no| D` / `E -->|fail| C` /
       `D --> F`: the fail back edge climbs the right lane strip and runs
       horizontally at C's row into C's right border — straight through D's
       box. `occupied` suppresses the bits inside, so the segment re-emerges on

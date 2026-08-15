@@ -361,20 +361,36 @@ export function assignTracks(spans: TrackSpan[]): { assigned: [number, number][]
   return { assigned, count: tracks.length }
 }
 
-/** Edges from rank `r` to `r + 1` that must jog sideways, so need a bus row. */
+/**
+ * An edge between adjacent ranks running against the direction. In top-down
+ * layouts these route locally through the same band as their forward
+ * siblings — the short return arrow mermaid draws — rather than around the
+ * diagram. Left-to-right boxes are three rows tall, leaving no room to
+ * offset the return off the centre row, so LR/RL keep the lane.
+ */
+export const isAdjacentBack = (ranks: number[], e: Edge): boolean =>
+  e.from !== e.to && ranks[e.from] === ranks[e.to] + 1
+
+/** Edges crossing the band between rank `r` and `r + 1` that must jog
+ * sideways, so need a bus row. `withBack` admits adjacent back edges. */
 function busSpans(
   graph: Graph,
   ranks: number[],
   centers: number[],
   r: number,
   exact: boolean,
+  withBack: boolean,
 ): TrackSpan[] {
   const out: TrackSpan[] = []
   graph.edges.forEach((e, i) => {
     const jogs = exact
       ? centers[e.from] !== centers[e.to]
       : Math.abs(centers[e.from] - centers[e.to]) > 1
-    if (e.from !== e.to && ranks[e.from] === r && ranks[e.to] === r + 1 && jogs) {
+    const lo = Math.min(ranks[e.from], ranks[e.to])
+    const adjacent = withBack
+      ? Math.abs(ranks[e.from] - ranks[e.to]) === 1
+      : ranks[e.to] === ranks[e.from] + 1
+    if (e.from !== e.to && adjacent && lo === r && jogs) {
       out.push({
         start: Math.min(centers[e.from], centers[e.to]),
         end: Math.max(centers[e.from], centers[e.to]),
@@ -397,6 +413,7 @@ function laneSpans(
   const out: TrackSpan[] = []
   graph.edges.forEach((e, i) => {
     if (e.from === e.to || ranks[e.to] === ranks[e.from] + 1) return
+    if (vertical && isAdjacentBack(ranks, e)) return
     const pf = placed[e.from]
     const pt = placed[e.to]
     const a = vertical ? Math.min(pf.cy, pt.cy) : Math.min(pf.cx, pt.cx)
@@ -421,11 +438,13 @@ function placeTd(
   const edgeBus = new Array<number>(graph.edges.length).fill(0)
   const busTracks = new Array<number>(maxRank + 1).fill(0)
   for (let r = 0; r < maxRank; r++) {
-    const spans = busSpans(graph, ranks, centers, r, false)
+    const spans = busSpans(graph, ranks, centers, r, false, true)
     if (spans.length === 0) continue
     const { assigned, count } = assignTracks(spans)
-    for (const [idx, slot] of assigned) edgeBus[idx] = slot
-    busTracks[r] = count
+    // Back-edge arrowheads sit on the first band row; bus rows start below.
+    const base = graph.edges.some((e) => isAdjacentBack(ranks, e) && ranks[e.to] === r) ? 1 : 0
+    for (const [idx, slot] of assigned) edgeBus[idx] = slot + base
+    busTracks[r] = count + base
   }
 
   const rankH = byRank.map((row) =>
@@ -469,6 +488,11 @@ function placeTd(
       }
       if (e.cardFrom !== undefined) {
         contentW = Math.max(contentW, placed[e.from].cx + 2 + stringWidth(e.cardFrom))
+      }
+    } else if (isAdjacentBack(ranks, e)) {
+      const text = edgeText(e)
+      if (text !== null) {
+        contentW = Math.max(contentW, placed[e.to].cx + 2 + Math.min(stringWidth(text), MAX_LABEL))
       }
     } else {
       const text = edgeText(e)
@@ -524,7 +548,7 @@ function placeLr(
   const edgeBus = new Array<number>(graph.edges.length).fill(0)
   const busTracks = new Array<number>(maxRank + 1).fill(0)
   for (let r = 0; r < maxRank; r++) {
-    const spans = busSpans(graph, ranks, centers, r, true)
+    const spans = busSpans(graph, ranks, centers, r, true, false)
     if (spans.length === 0) continue
     const { assigned, count } = assignTracks(spans)
     for (const [idx, slot] of assigned) edgeBus[idx] = slot
@@ -605,8 +629,10 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   // Lane edges exit through the rank's trailing side toward the lane strip;
   // their endpoints go last within the rank, or whatever the ordering put
   // beyond them would sit in that corridor and be cut through.
+  const vertical = graph.dir === 'down' || graph.dir === 'up'
   const inLane = new Array<boolean>(graph.nodes.length).fill(false)
   for (const e of graph.edges) {
+    if (vertical && isAdjacentBack(ranks, e)) continue
     if (e.from !== e.to && ranks[e.to] !== ranks[e.from] + 1) {
       inLane[e.from] = true
       inLane[e.to] = true
@@ -666,7 +692,6 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
     rank: 0,
   }))
 
-  const vertical = graph.dir === 'down' || graph.dir === 'up'
   const plan = vertical
     ? placeTd(ranks, maxRank, byRank, sizes, graph, placed)
     : placeLr(ranks, maxRank, byRank, sizes, graph, placed)
@@ -700,10 +725,13 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
     const from = placed[edge.from]
     const to = placed[edge.to]
     const adjacent = to.rank === from.rank + 1
-    const bus = plan.bandEnd[from.rank] + plan.edgeBus[i]
+    const adjacentBack = from.rank === to.rank + 1
+    // A back edge crosses the band below its *target's* rank.
+    const bus = plan.bandEnd[(adjacentBack ? to : from).rank] + plan.edgeBus[i]
     const lane = plan.laneBase + plan.edgeLane[i]
     if (vertical) {
       if (adjacent) routeForward(canvas, from, to, edge, bus)
+      else if (adjacentBack) routeBackAdjacent(canvas, from, to, edge, bus)
       else routeBack(canvas, from, to, edge, lane)
     } else if (adjacent) {
       routeForwardLr(canvas, from, to, edge, bus)
@@ -1054,6 +1082,43 @@ function routeForward(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus:
       )
     }
   }
+}
+
+/**
+ * Adjacent ranks, top-down, against the flow: up out of the source's top,
+ * jog along the band, arrow into the target's bottom. The short local return
+ * mermaid draws — not a trip around the diagram.
+ */
+function routeBackAdjacent(
+  canvas: Canvas,
+  from: Placed,
+  to: Placed,
+  edge: Edge,
+  bus: number,
+): void {
+  // Attach right of centre so the return does not merge with the forward
+  // exits and arrivals that own the centre column.
+  const tx = Math.min(to.x + to.w - 2, to.cx + 2)
+  const bx0 = Math.min(from.x + from.w - 2, from.cx + 2)
+  const bx = Math.abs(bx0 - tx) <= 1 ? tx : bx0
+  const fy = from.y
+  const headRow = to.y + to.h
+
+  canvas.junction(bx, fy, U)
+  if (bx === tx) {
+    canvas.segV(bx, headRow, fy)
+  } else {
+    canvas.segV(bx, bus, fy)
+    canvas.segH(bus, bx, tx)
+    canvas.segV(tx, headRow, bus)
+  }
+
+  if (edge.headTo === 'none') canvas.addBits(tx, headRow, D)
+  else canvas.set(tx, headRow, headGlyph(edge.headTo, '▲'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(bx, fy, headGlyph(edge.headFrom, '▼'), 'edge')
+
+  const text = edgeText(edge)
+  if (text !== null) placeLabel(canvas, text, headRow, tx + 1)
 }
 
 /** A self-edge: a stub loop hanging below the box. */

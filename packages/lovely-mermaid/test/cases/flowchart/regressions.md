@@ -49,14 +49,16 @@ graph TD
  └───┘
 ```
 
-A back edge routes around its rank through the side lane — its endpoint
+A multi-rank back edge routes around through the side lane — its endpoint
 orders rightmost, so the run to the lane does not cut through `B`.
+(Adjacent-rank back edges return locally instead; see back-edges.md.)
 
 ```mermaid
 flowchart TD
   A --> C
+  C --> D
   A --> B
-  C --> A
+  D --> A
 ```
 
 ```text
@@ -66,8 +68,13 @@ flowchart TD
    ┌───┴───┐   │
    ▼       ▼   │
  ┌───┐   ┌───┐ │
- │ B │   │ C ├─┘
- └───┘   └───┘
+ │ C │   │ B │ │
+ └─┬─┘   └───┘ │
+   │           │
+   ▼           │
+ ┌───┐         │
+ │ D ├─────────┘
+ └───┘
 ```
 
 Kebab-case ids parse as one id: `-` joins when an id char follows, while
@@ -146,4 +153,48 @@ flowchart LR
 ┌───┐ one / two  ┌───┐
 │ A ├───────────▶│ B │
 └───┘            └───┘
+```
+
+The fail-loop shape from the demo: `E -->|fail| C` is an adjacent-rank
+back edge and returns locally beside `C --> E`. Previously it climbed the
+right lane and its approach cut through `Answer directly`, fabricating
+edges that were never written.
+
+```mermaid
+flowchart TD
+  A[User prompt] --> B{Need tools?}
+  B -->|yes| C[Inspect and edit]
+  B -->|no| D[Answer directly]
+  C --> E[Run checks]
+  E -->|pass| F[Verified result]
+  E -->|fail| C
+  D --> F
+```
+
+```text
+              ┌─────────────┐
+              │ User prompt │
+              └──────┬──────┘
+                     │
+                     ▼
+              ╔═════════════╗
+              ║ Need tools? ║
+              ╚══════╤══════╝
+          ┌──────────┴───────────┐
+          ▼yes                   ▼no
+┌──────────────────┐    ┌─────────────────┐
+│ Inspect and edit │    │ Answer directly ├─┐
+└─────────┬────────┘    └─────────────────┘ │
+          │ ▲fail                           │
+          └─┼────────┐                      │
+            └────────┼─┐                    │
+                     ▼ │                    │
+              ┌────────┴───┐                │
+              │ Run checks │                │
+              └──────┬─────┘                │
+                     │                      │
+                     ▼pass                  │
+            ┌─────────────────┐             │
+            │ Verified result │◄────────────┘
+            └─────────────────┘
 ```
