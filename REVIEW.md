@@ -116,9 +116,9 @@ opportunistically when touching a scanner; don't campaign.
 - [x] `flipGlyphH`/`flipGlyphV` corrupt arrows inside user text: RL turns
       `A[go ◄ left]` into `go ▶ left`. Skip glyph-flip for
       `text`/`edgeLabel`/`title` cells.
-- [ ] Repeated state descriptions overwrite (`s1 : a` then `s1 : b` → only
-      `b`); mermaid stacks them. Needs multi-line labels in layout — if that's
-      why it was skipped, document it as a deviation instead.
+- [x] Repeated state descriptions overwrite (`s1 : a` then `s1 : b` → only
+      `b`); mermaid stacks them. Fixed by joining + wrap (no multi-line label
+      machinery needed).
 - [x] Cap-hit flowchart statements warn twice: three direct `warnings.push`
       sites in `parseStatement` bypass `Graph.drop`'s post-truncation
       suppression, so `dropped, does not start with a node` appears alongside
