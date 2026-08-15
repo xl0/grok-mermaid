@@ -206,11 +206,14 @@ around the diagram through vertical **lanes**, packed shortest-span-innermost
 so exits and entries cross as few live lanes as possible. A forward skip
 (TD/BT) splits off the source's bottom fan — its departure is a bus span, so
 endpoint sharing folds it onto the siblings' row for one `┴` origin — and
-enters the target's *top*, landing past the arrival labels; when its entry
-column crosses no intermediate box it drops straight down and skips the lane
-entirely, else it rides the lane and re-enters along a reserved approach row
-above the target's arrival heads. Back edges exit and enter through the
-*sides*, which keeps returns recognisable. An *adjacent-rank* back edge
+enters the target's *top*; when its entry column crosses no intermediate box
+it drops straight down and skips the lane entirely, else it rides the lane
+and re-enters along a reserved approach row above the target's arrival
+heads. A node's top entries (forward cluster + skips) spread evenly across
+the box top, an aligned forward arrival pinned to centre so chains stay
+straight; a label that does not fit before the next entry renders left of
+its arrowhead. Back edges exit and enter through the *sides*, which keeps
+returns recognisable. An *adjacent-rank* back edge
 returns locally through its band instead (TD/BT only — LR boxes are three
 rows tall, no room to attach off the centre row), attached right of centre
 with the band's first row reserved for its arrowhead: the lane detour cut

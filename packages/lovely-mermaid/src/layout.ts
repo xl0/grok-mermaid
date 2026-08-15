@@ -100,6 +100,10 @@ interface RoutePlan {
   edgeEntryX: number[]
   /** Skip edges: entry column is box-free, drop straight and skip the lane. */
   edgeStraight: boolean[]
+  /** Per node: the forward cluster's entry column, or -1 for the centre. */
+  fwdEntryX: number[]
+  /** Per edge: render the label left of the arrowhead instead of right. */
+  edgeLabelLeft: boolean[]
 }
 
 // ------------------------------------------------------------------ ranking
@@ -454,32 +458,116 @@ function placeTd(
 ): RoutePlan {
   const centers = assignPositions(byRank, sizes.layW, GAP_X, graph.edges, ranks)
 
-  // Skip-edge geometry, derivable before placement. The entry column lands
-  // right of the target's arrival labels when the box has the room, else
-  // left of centre. A skip whose entry column crosses no box on any
-  // intermediate rank drops straight down instead of taking a lane.
+  // Top-entry geometry, derivable before placement. A node's entries — the
+  // merged forward cluster plus each skip — spread evenly across the box top
+  // (two entries land at ~1/3 and ~2/3). A forward arrival aligned with its
+  // source stays at centre so chains keep no kinks, and the skips spread
+  // over the right half instead. A label that does not fit before the next
+  // entry renders left of its arrow. A skip whose entry column crosses no
+  // box on any intermediate rank drops straight instead of taking a lane.
   const boxL = (j: number): number => sat(centers[j], half(sizes.boxW[j]))
   const boxR = (j: number): number => boxL(j) + sizes.boxW[j] - 1
-  const labelReach = new Array<number>(graph.nodes.length).fill(-1)
-  graph.edges.forEach((e) => {
-    if (e.from === e.to || ranks[e.to] !== ranks[e.from] + 1) return
-    const parts = [e.label, e.cardTo].filter((p) => p != null) as string[]
-    if (parts.length === 0) return
-    const w = Math.max(...parts.map((p) => Math.min(stringWidth(p), MAX_LABEL)))
-    labelReach[e.to] = Math.max(labelReach[e.to], centers[e.to] + 1 + w)
-  })
   const isSkip = (e: Edge): boolean => e.from !== e.to && ranks[e.to] - ranks[e.from] > 1
   const edgeEntryX = new Array<number>(graph.edges.length).fill(-1)
   const edgeStraight = new Array<boolean>(graph.edges.length).fill(false)
+  const fwdEntryX = new Array<number>(graph.nodes.length).fill(-1)
+  const edgeLabelLeft = new Array<boolean>(graph.edges.length).fill(false)
+  const labelW = (e: Edge): number => {
+    const parts = [e.label, e.cardTo].filter((p) => p != null) as string[]
+    return parts.length === 0
+      ? -1
+      : Math.max(...parts.map((p) => Math.min(stringWidth(p), MAX_LABEL)))
+  }
+  const skipsInto: number[][] = graph.nodes.map(() => [])
+  const fwdsInto: number[][] = graph.nodes.map(() => [])
+  graph.edges.forEach((e, i) => {
+    if (e.from === e.to) return
+    if (isSkip(e)) skipsInto[e.to].push(i)
+    else if (ranks[e.to] === ranks[e.from] + 1) fwdsInto[e.to].push(i)
+  })
+  graph.nodes.forEach((_, t) => {
+    const skips = skipsInto[t]
+    if (skips.length === 0) return
+    const fwds = fwdsInto[t]
+    const cx = centers[t]
+    const left = boxL(t)
+    const right = boxR(t)
+    const hasFwd = fwds.length > 0
+    const aligned = hasFwd && fwds.some((i) => Math.abs(centers[graph.edges[i].from] - cx) <= 1)
+    const spreadL = hasFwd && aligned ? cx : left
+    const slots = hasFwd && aligned ? skips.length : (hasFwd ? 1 : 0) + skips.length
+    const slot = (i: number): number =>
+      spreadL + Math.round(((right - spreadL) * (i + 1)) / (slots + 1))
+    /** Ordered entries: the forward cluster (if any), then each skip. */
+    const items: { slot: number; w: number; skip: number | null }[] = []
+    if (hasFwd) {
+      items.push({
+        slot: aligned ? cx : slot(0),
+        w: Math.max(...fwds.map((i) => labelW(graph.edges[i]))),
+        skip: null,
+      })
+    }
+    skips.forEach((si, j) => {
+      items.push({
+        slot: slot(hasFwd && aligned ? j : j + (hasFwd ? 1 : 0)),
+        w: labelW(graph.edges[si]),
+        skip: si,
+      })
+    })
+    // Walk left to right with a cursor over the free head-row cells: each
+    // entry lands at its slot (or past the previous label), its own label
+    // going right when the next slot leaves room, else left when the cells
+    // behind the cursor allow. Overflow falls back to the legacy rule.
+    const cols: number[] = []
+    const lefts: boolean[] = []
+    let cursor = left
+    let fits = true
+    for (const [i, item] of items.entries()) {
+      const x = Math.max(item.slot, cursor)
+      if (x > right - 1) {
+        fits = false
+        break
+      }
+      const next = items[i + 1]?.slot ?? Number.MAX_SAFE_INTEGER
+      const w = item.w
+      if (w >= 0 && x + w + 2 > next && x - cursor >= w) {
+        lefts.push(true)
+        cursor = x + 2
+      } else {
+        lefts.push(false)
+        cursor = w >= 0 ? x + w + 2 : x + 2
+      }
+      cols.push(x)
+    }
+    if (fits) {
+      items.forEach((item, i) => {
+        if (item.skip === null) {
+          fwdEntryX[t] = cols[i]
+          if (lefts[i]) for (const fi of fwds) edgeLabelLeft[fi] = true
+        } else {
+          edgeEntryX[item.skip] = cols[i]
+          edgeLabelLeft[item.skip] = lefts[i]
+        }
+      })
+      return
+    }
+    // Legacy: forward stays centred; a skip lands past the arrival labels,
+    // or left of centre with its own label flipped left.
+    const reach = hasFwd ? Math.max(cx, ...fwds.map((i) => cx + 1 + labelW(graph.edges[i]))) : -1
+    for (const si of skips) {
+      const clear = reach === -1 ? cx + 2 : reach + 2
+      const capped = Math.min(clear, right - 1)
+      if (capped > Math.max(cx, reach)) {
+        edgeEntryX[si] = capped
+      } else {
+        edgeEntryX[si] = Math.max(left + 1, cx - 2)
+        edgeLabelLeft[si] = true
+      }
+    }
+  })
   graph.edges.forEach((e, i) => {
     if (!isSkip(e)) return
-    const clear = labelReach[e.to] === -1 ? centers[e.to] + 2 : labelReach[e.to] + 2
-    const capped = Math.min(clear, boxR(e.to) - 1)
-    const entryX =
-      capped > Math.max(centers[e.to], labelReach[e.to])
-        ? capped
-        : Math.max(boxL(e.to) + 1, centers[e.to] - 2)
-    edgeEntryX[i] = entryX
+    const entryX = edgeEntryX[i]
     edgeStraight[i] = graph.nodes.every(
       (_, j) =>
         ranks[j] <= ranks[e.from] ||
@@ -615,6 +703,8 @@ function placeTd(
     skipApproach,
     edgeEntryX,
     edgeStraight,
+    fwdEntryX,
+    edgeLabelLeft,
   }
 }
 
@@ -705,6 +795,8 @@ function placeLr(
     skipApproach: new Array<number>(maxRank + 1).fill(-1),
     edgeEntryX: new Array<number>(graph.edges.length).fill(-1),
     edgeStraight: new Array<boolean>(graph.edges.length).fill(false),
+    fwdEntryX: new Array<number>(graph.nodes.length).fill(-1),
+    edgeLabelLeft: new Array<boolean>(graph.edges.length).fill(false),
   }
 }
 
@@ -845,7 +937,8 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
     const bus = plan.bandEnd[(adjacentBack ? to : from).rank] + plan.edgeBus[i]
     const lane = plan.laneBase + plan.edgeLane[i]
     if (vertical) {
-      if (adjacent) routeForward(canvas, from, to, edge, bus)
+      if (adjacent)
+        routeForward(canvas, from, to, edge, bus, plan.fwdEntryX[edge.to], plan.edgeLabelLeft[i])
       else if (adjacentBack) routeBackAdjacent(canvas, from, to, edge, bus)
       else if (to.rank > from.rank) {
         routeSkip(canvas, from, to, edge, {
@@ -854,6 +947,7 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
           busY: bus,
           approachY: plan.skipApproach[to.rank],
           straight: plan.edgeStraight[i],
+          labelLeft: plan.edgeLabelLeft[i],
         })
       } else routeBack(canvas, from, to, edge, lane)
     } else if (adjacent) {
@@ -1161,9 +1255,19 @@ function headGlyph(head: Head, arrow: string): string {
   }
 }
 
-/** Adjacent ranks, top-down: drop, jog along the bus row, drop into the head. */
-function routeForward(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus: number): void {
-  const tx = to.cx
+/** Adjacent ranks, top-down: drop, jog along the bus row, drop into the head.
+ * `entryX` overrides the centre entry column when the target's top is shared
+ * with skip entries; `labelLeft` renders the label left of the arrowhead. */
+function routeForward(
+  canvas: Canvas,
+  from: Placed,
+  to: Placed,
+  edge: Edge,
+  bus: number,
+  entryX = -1,
+  labelLeft = false,
+): void {
+  const tx = entryX === -1 ? to.cx : entryX
   // A jog of one column reads as a kink; snap straight instead.
   const bx = Math.abs(from.cx - tx) <= 1 ? tx : from.cx
   const by = from.y + from.h - 1
@@ -1183,7 +1287,10 @@ function routeForward(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus:
   if (edge.headFrom !== 'none') canvas.set(bx, by, headGlyph(edge.headFrom, '▲'), 'edge')
 
   if (edge.cardFrom === undefined && edge.cardTo === undefined) {
-    if (edge.label !== null) placeLabel(canvas, edge.label, headRow, tx + 1)
+    if (edge.label !== null) {
+      const start = labelLeft ? sat(tx, Math.min(stringWidth(edge.label), MAX_LABEL)) : tx + 1
+      placeLabel(canvas, edge.label, headRow, start)
+    }
     return
   }
   // Cardinalities sit at their own ends; the verb takes the row above the
@@ -1280,9 +1387,16 @@ function routeSkip(
   from: Placed,
   to: Placed,
   edge: Edge,
-  at: { laneX: number; entryX: number; busY: number; approachY: number; straight: boolean },
+  at: {
+    laneX: number
+    entryX: number
+    busY: number
+    approachY: number
+    straight: boolean
+    labelLeft: boolean
+  },
 ): void {
-  const { laneX, entryX, busY, approachY, straight } = at
+  const { laneX, entryX, busY, approachY, straight, labelLeft } = at
   const bx = from.cx
   const bottom = from.y + from.h - 1
 
@@ -1303,7 +1417,10 @@ function routeSkip(
   if (edge.headFrom !== 'none') canvas.set(bx, bottom, headGlyph(edge.headFrom, '▲'), 'edge')
 
   const text = edgeText(edge)
-  if (text !== null) placeLabel(canvas, text, to.y - 1, entryX + 1)
+  if (text !== null) {
+    const start = labelLeft ? sat(entryX, Math.min(stringWidth(text), MAX_LABEL)) : entryX + 1
+    placeLabel(canvas, text, to.y - 1, start)
+  }
 }
 
 /**
