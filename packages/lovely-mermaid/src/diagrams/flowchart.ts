@@ -451,7 +451,12 @@ function parseLink(chars: string[], start: number): Link | null {
   if (chars[i] === '|') {
     i++
     const lStart = i
-    while (i < chars.length && chars[i] !== '|') i++
+    // A quoted stretch keeps its `|`s as text: `-->|"a|b"|`.
+    let inQuotes = false
+    while (i < chars.length && (inQuotes || chars[i] !== '|')) {
+      if (chars[i] === '"') inQuotes = !inQuotes
+      i++
+    }
     const label = cleanLabel(chars.slice(lStart, i).join(''))
     if (chars[i] === '|') i++
     return { left, right, line, label: nonEmpty(label), next: i }

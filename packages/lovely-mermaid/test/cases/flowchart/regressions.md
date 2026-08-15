@@ -85,3 +85,16 @@ flowchart LR
 │ Label ├━━━▶│ step-1 ├───▶│ step-2 │
 └───────┘    └────────┘    └────────┘
 ```
+
+A quoted stretch inside a `|label|` keeps its pipes as text.
+
+```mermaid
+flowchart LR
+  A -->|"a|b"| B
+```
+
+```text
+┌───┐ a|b  ┌───┐
+│ A ├─────▶│ B │
+└───┘      └───┘
+```
