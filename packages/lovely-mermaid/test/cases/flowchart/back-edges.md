@@ -50,3 +50,64 @@ graph TD
  │ C │
  └───┘
 ```
+
+All three regimes in one realistic pipeline: a local `flaky` return, two
+multi-rank lanes (`roll`/`notify` back to earlier ranks) and a `no` skip
+edge — no crossings between the local return and its forward sibling.
+
+```mermaid
+flowchart TD
+  push[Git push] --> ci{CI green?}
+  ci -->|yes| build[Build image]
+  ci -->|no| notify[Notify author]
+  build --> stage[Deploy staging]
+  stage --> smoke{Smoke tests}
+  smoke -->|flaky| stage
+  smoke -->|pass| prod[Deploy prod]
+  smoke -->|fail| notify
+  prod --> monitor[Monitor SLOs]
+  monitor -->|regression| roll[Rollback]
+  roll --> stage
+  notify --> push
+```
+
+```text
+                ┌──────────┐
+                │ Git push │◄───────────┐
+                └─────┬────┘            │
+                      │                 │
+                      ▼                 │
+                ╔═══════════╗           │
+                ║ CI green? ╟───────────┼┐
+                ╚═════╤═════╝           ││
+                  ┌───┘                 ││
+                  ▼yes                  ││
+           ┌─────────────┐              ││
+           │ Build image │              ││
+           └──────┬──────┘              ││
+                  │                     ││
+                  ▼                     ││
+         ┌────────────────┐             ││
+         │ Deploy staging │◄────────────┼┼┐
+         └────────┬───────┘             │││
+                  │ ▲flaky              │││
+                  ▼ │                   │││
+           ╔════════╧════╗              │││
+           ║ Smoke tests ║              │││
+           ╚══════╤══════╝              │││
+        ┌─────────┴────────┐            │││
+        ▼pass              ▼fail        │││
+ ┌─────────────┐   ┌───────────────┐  no│││
+ │ Deploy prod │   │ Notify author ├◄───┴┘│
+ └──────┬──────┘   └───────────────┘      │
+        │                                 │
+        ▼                                 │
+┌──────────────┐                          │
+│ Monitor SLOs │                          │
+└───────┬──────┘                          │
+        │                                 │
+        ▼regression                       │
+  ┌──────────┐                            │
+  │ Rollback ├────────────────────────────┘
+  └──────────┘
+```

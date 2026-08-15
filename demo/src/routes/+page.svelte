@@ -73,6 +73,23 @@ flowchart LR
   A -.->|cache hit| D`
 		},
 		{
+			name: 'pipeline',
+			desc: 'retry loops at several depths',
+			src: `flowchart TD
+  push[Git push] --> ci{CI green?}
+  ci -->|yes| build[Build image]
+  ci -->|no| notify[Notify author]
+  build --> stage[Deploy staging]
+  stage --> smoke{Smoke tests}
+  smoke -->|flaky| stage
+  smoke -->|pass| prod[Deploy prod]
+  smoke -->|fail| notify
+  prod --> monitor[Monitor SLOs]
+  monitor -->|regression| roll[Rollback]
+  roll --> stage
+  notify --> push`
+		},
+		{
 			name: 'sequence',
 			desc: 'participants, messages, notes',
 			src: `sequenceDiagram
