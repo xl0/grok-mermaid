@@ -6,7 +6,7 @@ TypeScript. Started as a 1:1 port of `xai-org/grok-build`
 checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`), now deliberately
 diverging where terminal output can be better. Review docs are episodic and
 deleted once executed (`REDESIGN.md`, `REWORK.md` — in git history);
-`REVIEW.md` is the current one with open findings.
+`REVIEW.md` is the current one, kept local and untracked.
 
 ## Layout
 

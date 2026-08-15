@@ -6,7 +6,8 @@ that bar has been met and retired. The bar now is good terminal output —
 every deliberate divergence is listed in `CODE.md`, and the old differential
 harness is gone with it (its fuzz corpus lives on in the test suite).
 Review docs are episodic: `REDESIGN.md` and `REWORK.md` were executed and
-deleted; `REVIEW.md` (2026-08-15) is the current one, holding open findings.
+deleted; `REVIEW.md` (2026-08-15) is the current one — local and untracked,
+holding only the parked next-major items.
 
 **Intent:** best-effort rendering everywhere (draw as much as possible, warn
 about the rest — it is what makes streaming work), a small semantic API
