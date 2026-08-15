@@ -440,11 +440,18 @@ function placeTd(
   for (let r = 0; r < maxRank; r++) {
     const spans = busSpans(graph, ranks, centers, r, false, true)
     if (spans.length === 0) continue
-    const { assigned, count } = assignTracks(spans)
-    // Back-edge arrowheads sit on the first band row; bus rows start below.
+    // Back-edge arrowheads sit on the first band row, back buses right under
+    // it, forward buses below those: with the attach columns offset right of
+    // centre, a reciprocal pair then runs as two parallel staircases whose
+    // verticals fall outside each other's horizontal spans — no crossings.
+    const back = spans.filter((s) => isAdjacentBack(ranks, graph.edges[s.edge]))
+    const fwd = spans.filter((s) => !isAdjacentBack(ranks, graph.edges[s.edge]))
     const base = graph.edges.some((e) => isAdjacentBack(ranks, e) && ranks[e.to] === r) ? 1 : 0
-    for (const [idx, slot] of assigned) edgeBus[idx] = slot + base
-    busTracks[r] = count + base
+    const b = assignTracks(back)
+    for (const [idx, slot] of b.assigned) edgeBus[idx] = base + slot
+    const f = assignTracks(fwd)
+    for (const [idx, slot] of f.assigned) edgeBus[idx] = base + b.count + slot
+    busTracks[r] = base + b.count + f.count
   }
 
   const rankH = byRank.map((row) =>
