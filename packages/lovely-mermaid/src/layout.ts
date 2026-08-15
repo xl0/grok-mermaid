@@ -94,10 +94,12 @@ interface RoutePlan {
   laneBase: number
   /** Lane track offset per edge. */
   edgeLane: number[]
-  /** Reserved corridor row below rank r for skip departures, or -1. */
-  skipDepart: number[]
-  /** Reserved corridor row above rank r for skip approaches, or -1. */
+  /** Reserved corridor row above rank r for laned skip approaches, or -1. */
   skipApproach: number[]
+  /** Skip edges: the column entering the target's top, or -1. */
+  edgeEntryX: number[]
+  /** Skip edges: entry column is box-free, drop straight and skip the lane. */
+  edgeStraight: boolean[]
 }
 
 // ------------------------------------------------------------------ ranking
@@ -452,10 +454,59 @@ function placeTd(
 ): RoutePlan {
   const centers = assignPositions(byRank, sizes.layW, GAP_X, graph.edges, ranks)
 
+  // Skip-edge geometry, derivable before placement. The entry column lands
+  // right of the target's arrival labels when the box has the room, else
+  // left of centre. A skip whose entry column crosses no box on any
+  // intermediate rank drops straight down instead of taking a lane.
+  const boxL = (j: number): number => sat(centers[j], half(sizes.boxW[j]))
+  const boxR = (j: number): number => boxL(j) + sizes.boxW[j] - 1
+  const labelReach = new Array<number>(graph.nodes.length).fill(-1)
+  graph.edges.forEach((e) => {
+    if (e.from === e.to || ranks[e.to] !== ranks[e.from] + 1) return
+    const parts = [e.label, e.cardTo].filter((p) => p != null) as string[]
+    if (parts.length === 0) return
+    const w = Math.max(...parts.map((p) => Math.min(stringWidth(p), MAX_LABEL)))
+    labelReach[e.to] = Math.max(labelReach[e.to], centers[e.to] + 1 + w)
+  })
+  const isSkip = (e: Edge): boolean => e.from !== e.to && ranks[e.to] - ranks[e.from] > 1
+  const edgeEntryX = new Array<number>(graph.edges.length).fill(-1)
+  const edgeStraight = new Array<boolean>(graph.edges.length).fill(false)
+  graph.edges.forEach((e, i) => {
+    if (!isSkip(e)) return
+    const clear = labelReach[e.to] === -1 ? centers[e.to] + 2 : labelReach[e.to] + 2
+    const capped = Math.min(clear, boxR(e.to) - 1)
+    const entryX =
+      capped > Math.max(centers[e.to], labelReach[e.to])
+        ? capped
+        : Math.max(boxL(e.to) + 1, centers[e.to] - 2)
+    edgeEntryX[i] = entryX
+    edgeStraight[i] = graph.nodes.every(
+      (_, j) =>
+        ranks[j] <= ranks[e.from] ||
+        ranks[j] >= ranks[e.to] ||
+        entryX < boxL(j) ||
+        entryX > boxR(j),
+    )
+  })
+
   const edgeBus = new Array<number>(graph.edges.length).fill(0)
   const busTracks = new Array<number>(maxRank + 1).fill(0)
   for (let r = 0; r < maxRank; r++) {
     const spans = busSpans(graph, ranks, centers, r, false, true)
+    // Skip departures ride the bus tracks of their own band: endpoint
+    // sharing folds them onto their siblings' row, so a node's forward fan
+    // and its skips split from one `┴` origin.
+    graph.edges.forEach((e, i) => {
+      if (!isSkip(e) || ranks[e.from] !== r) return
+      const endX = edgeStraight[i] ? edgeEntryX[i] : 1 << 29
+      spans.push({
+        start: Math.min(centers[e.from], endX),
+        end: Math.max(centers[e.from], endX),
+        from: e.from,
+        to: e.to,
+        edge: i,
+      })
+    })
     if (spans.length === 0) continue
     // Back-edge arrowheads sit on the first band row, back buses right under
     // it, forward buses below those: with the attach columns offset right of
@@ -470,19 +521,13 @@ function placeTd(
     for (const [idx, slot] of f.assigned) edgeBus[idx] = base + b.count + slot
     busTracks[r] = base + b.count + f.count
   }
-  // A skip edge leaves through its source's bottom and re-enters through its
-  // target's top; departure and approach each run on their own reserved band
-  // row above the forward-arrival heads (and their labels), so the bands grow
-  // by a phantom track per reservation. Rows resolve after rankY is known.
-  const departsFrom = new Array<boolean>(maxRank + 1).fill(false)
+  // A laned skip re-enters along a reserved approach row above the target's
+  // rank, over the arrival heads and their labels; straight drops need none.
   const entersInto = new Array<boolean>(maxRank + 1).fill(false)
-  for (const e of graph.edges) {
-    if (e.from === e.to || ranks[e.to] - ranks[e.from] <= 1) continue
-    departsFrom[ranks[e.from]] = true
-    entersInto[ranks[e.to]] = true
-  }
+  graph.edges.forEach((e, i) => {
+    if (isSkip(e) && !edgeStraight[i]) entersInto[ranks[e.to]] = true
+  })
   for (let r = 0; r < maxRank; r++) {
-    if (departsFrom[r]) busTracks[r] += 1
     if (entersInto[r + 1]) busTracks[r] += 1
   }
 
@@ -501,16 +546,10 @@ function placeTd(
   const bandEnd = Array.from({ length: maxRank + 1 }, (_, r) => rankY[r] + rankH[r])
   const rankStart = rankY
 
-  // Corridor rows, packed upward from the arrival-head row of each band.
-  const skipDepart = new Array<number>(maxRank + 1).fill(-1)
+  // Approach rows sit just above each band's arrival-head row.
   const skipApproach = new Array<number>(maxRank + 1).fill(-1)
   for (let r = 0; r < maxRank; r++) {
-    let row = rankY[r + 1] - 2
-    if (entersInto[r + 1]) {
-      skipApproach[r + 1] = row
-      row--
-    }
-    if (departsFrom[r]) skipDepart[r] = row
+    if (entersInto[r + 1]) skipApproach[r + 1] = rankY[r + 1] - 2
   }
 
   let diagramW = 1
@@ -555,7 +594,7 @@ function placeTd(
   }
 
   const edgeLane = new Array<number>(graph.edges.length).fill(0)
-  const lanes = laneSpans(graph, ranks, placed, true)
+  const lanes = laneSpans(graph, ranks, placed, true).filter((s) => !edgeStraight[s.edge])
   let canvasW = contentW
   let laneBase = 0
   if (lanes.length > 0) {
@@ -573,8 +612,9 @@ function placeTd(
     edgeBus,
     laneBase,
     edgeLane,
-    skipDepart,
     skipApproach,
+    edgeEntryX,
+    edgeStraight,
   }
 }
 
@@ -654,8 +694,6 @@ function placeLr(
   }
 
   // LR keeps side/bottom lane entries; the skip corridors are TD-only.
-  const skipDepart = new Array<number>(maxRank + 1).fill(-1)
-  const skipApproach = new Array<number>(maxRank + 1).fill(-1)
   return {
     canvasW,
     canvasH,
@@ -664,8 +702,9 @@ function placeLr(
     edgeBus,
     laneBase,
     edgeLane,
-    skipDepart,
-    skipApproach,
+    skipApproach: new Array<number>(maxRank + 1).fill(-1),
+    edgeEntryX: new Array<number>(graph.edges.length).fill(-1),
+    edgeStraight: new Array<boolean>(graph.edges.length).fill(false),
   }
 }
 
@@ -791,18 +830,6 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   canvas.curTag = undefined
   canvas.curHref = undefined
 
-  // How far right an arrival label can reach per node: forward labels flow
-  // right of the entry `▼` at the head row, so a skip entering the top must
-  // land past them (or fall back left of centre and accept the crossing).
-  const labelReach = new Array<number>(n).fill(-1)
-  graph.edges.forEach((e) => {
-    if (e.from === e.to || ranks[e.to] !== ranks[e.from] + 1) return
-    const parts = [e.label, e.cardTo].filter((p) => p != null) as string[]
-    if (parts.length === 0) return
-    const w = Math.max(...parts.map((p) => Math.min(stringWidth(p), MAX_LABEL)))
-    labelReach[e.to] = Math.max(labelReach[e.to], placed[e.to].cx + 1 + w)
-  })
-
   graph.edges.forEach((edge, i) => {
     canvas.curStyle =
       edge.line === 'dotted' ? STY_DOT : edge.line === 'thick' ? STY_THICK : STY_SOLID
@@ -821,17 +848,12 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
       if (adjacent) routeForward(canvas, from, to, edge, bus)
       else if (adjacentBack) routeBackAdjacent(canvas, from, to, edge, bus)
       else if (to.rank > from.rank) {
-        // Right of the arrival labels when the box has the room; otherwise
-        // left of centre, accepting the crossing with the arrival drops.
-        const clear = labelReach[edge.to] === -1 ? to.cx + 2 : labelReach[edge.to] + 2
-        const capped = Math.min(clear, to.x + to.w - 2)
-        const entryX =
-          capped > Math.max(to.cx, labelReach[edge.to]) ? capped : Math.max(to.x + 1, to.cx - 2)
         routeSkip(canvas, from, to, edge, {
           laneX: lane,
-          entryX,
-          departY: plan.skipDepart[from.rank],
+          entryX: plan.edgeEntryX[i],
+          busY: bus,
           approachY: plan.skipApproach[to.rank],
+          straight: plan.edgeStraight[i],
         })
       } else routeBack(canvas, from, to, edge, lane)
     } else if (adjacent) {
@@ -1247,31 +1269,34 @@ function routeSelf(canvas: Canvas, p: Placed, edge: Edge): void {
 }
 
 /**
- * Forward skip edge, top-down: out the source's *bottom*, right along its
- * reserved departure row, down the lane, in along the reserved approach row
- * above the target's rank, and through the target's *top* — the same shape
- * mermaid draws. The corridor rows sit above the arrival heads so nothing
- * runs over their labels; `entryX` lands past them (dispatch decides).
+ * Forward skip edge, top-down: out the source's *bottom* onto its band's bus
+ * row (endpoint sharing folds it onto its siblings' row — one `┴` origin
+ * split), then either straight down an unobstructed column into the
+ * target's *top*, or around: down the lane and in along the reserved
+ * approach row above the target's rank, over the arrival heads and labels.
  */
 function routeSkip(
   canvas: Canvas,
   from: Placed,
   to: Placed,
   edge: Edge,
-  at: { laneX: number; entryX: number; departY: number; approachY: number },
+  at: { laneX: number; entryX: number; busY: number; approachY: number; straight: boolean },
 ): void {
-  const { laneX, entryX, departY, approachY } = at
-  // Depart from the centre like every other exit: the direction bits merge
-  // the shared vertical into one origin tree with the forward exits.
+  const { laneX, entryX, busY, approachY, straight } = at
   const bx = from.cx
   const bottom = from.y + from.h - 1
 
   canvas.junction(bx, bottom, D)
-  canvas.segV(bx, bottom, departY)
-  canvas.segH(departY, bx, laneX)
-  canvas.segV(laneX, departY, approachY)
-  canvas.segH(approachY, entryX, laneX)
-  canvas.segV(entryX, approachY, to.y - 1)
+  canvas.segV(bx, bottom, busY)
+  if (straight) {
+    canvas.segH(busY, bx, entryX)
+    canvas.segV(entryX, busY, to.y - 1)
+  } else {
+    canvas.segH(busY, bx, laneX)
+    canvas.segV(laneX, busY, approachY)
+    canvas.segH(approachY, entryX, laneX)
+    canvas.segV(entryX, approachY, to.y - 1)
+  }
 
   if (edge.headTo === 'none') canvas.addBits(entryX, to.y - 1, D)
   else canvas.set(entryX, to.y - 1, headGlyph(edge.headTo, '▼'), 'edge')
