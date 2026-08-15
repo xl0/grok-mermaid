@@ -164,7 +164,7 @@ opportunistically when touching a scanner; don't campaign.
       that the mechanism was built so this stays cheap. Full geometry
       (`art.nodes` rects) fights the blit/flip pipeline — leave unless
       demanded.
-- [ ] One ANSI-layer golden file (escaped SGR) to pin the `toAnsi`
+- [x] One ANSI-layer golden file (escaped SGR) to pin the `toAnsi`
       theme×classDef merge matrix, currently unit-only.
 - Note, no action: `noUncheckedIndexedAccess: off` was justified by the Rust
   port's inherited guards; pie/mindmap/timeline/gitgraph were written fresh
