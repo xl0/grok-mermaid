@@ -167,8 +167,7 @@ function parseStatement(st: string, graph: Graph): void {
     i = skipSpaces(chars, link.next)
     const target = parseNodeGroup(chars, i, graph)
     if (!target) {
-      if (graph.truncated === null)
-        graph.warnings.push(`dropped, link has no target: "${st}"`)
+      if (graph.truncated === null) graph.warnings.push(`dropped, link has no target: "${st}"`)
       break
     }
     i = target.next

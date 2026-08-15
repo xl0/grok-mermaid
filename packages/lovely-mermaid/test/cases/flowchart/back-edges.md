@@ -1,4 +1,5 @@
-Back edges to one target share a lane.
+A back edge between adjacent ranks returns locally beside the forward
+edge; one skipping ranks goes around through the side lane.
 
 ```mermaid
 graph TD
@@ -12,10 +13,10 @@ graph TD
  ┌───┐
  │ A │◄┐
  └─┬─┘ │
-   │   │
-   ▼   │
- ┌───┐ │
- │ B ├─┤
+   │▲  │
+   ▼│  │
+ ┌──┴┐ │
+ │ B │ │
  └─┬─┘ │
    │   │
    ▼   │
@@ -24,7 +25,7 @@ graph TD
  └───┘
 ```
 
-Back edges to different targets claim separate lanes.
+Adjacent-rank back edges return locally at every step of a chain.
 
 ```mermaid
 graph TD
@@ -36,16 +37,16 @@ graph TD
 
 ```text
  ┌───┐
- │ A │◄┐
- └─┬─┘ │
-   │   │
-   ▼   │
- ┌───┐ │
- │ B ├◄┴┐
- └─┬─┘  │
-   │    │
-   ▼    │
- ┌───┐  │
- │ C ├──┘
+ │ A │
+ └─┬─┘
+   │▲
+   ▼│
+ ┌──┴┐
+ │ B │
+ └─┬─┘
+   │▲
+   ▼│
+ ┌──┴┐
+ │ C │
  └───┘
 ```
