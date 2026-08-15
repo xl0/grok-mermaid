@@ -4,8 +4,9 @@
 TypeScript. Started as a 1:1 port of `xai-org/grok-build`
 (`crates/codegen/xai-grok-markdown/src/mermaid.rs`, ~3.6k lines; reference
 checkout: `~/.cache/checkouts/github.com/xai-org/grok-build`), now deliberately
-diverging where terminal output can be better. `REDESIGN.md` records the
-redesign rationale and the feature roadmap.
+diverging where terminal output can be better. Review docs are episodic and
+deleted once executed (`REDESIGN.md`, `REWORK.md` — in git history);
+`REVIEW.md` is the current one with open findings.
 
 ## Layout
 

@@ -4,8 +4,9 @@
 Born as a byte-faithful port of the Rust renderer in `xai-org/grok-build`;
 that bar has been met and retired. The bar now is good terminal output —
 every deliberate divergence is listed in `CODE.md`, and the old differential
-harness is gone with it (its fuzz corpus lives on in the test suite). `REDESIGN.md` holds the design review that
-set the current direction.
+harness is gone with it (its fuzz corpus lives on in the test suite).
+Review docs are episodic: `REDESIGN.md` and `REWORK.md` were executed and
+deleted; `REVIEW.md` (2026-08-15) is the current one, holding open findings.
 
 **Intent:** best-effort rendering everywhere (draw as much as possible, warn
 about the rest — it is what makes streaming work), a small semantic API
@@ -75,6 +76,15 @@ enforced, parse warnings, control characters stripped, staged npm releases.
       `theme` prop (palette + panel fg/bg, keep in sync with
       `--term-bg`/`--term-fg`).
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
+
+## [ ] Review findings (2026-08-15)
+
+`REVIEW.md` has the full list with repros and fix directions. Highlights:
+five silent-corruption bugs (kebab-case flowchart ids, `class A["Label"]`,
+BT multi-row flip, state label with `-->`, back-edge lane crossing a sibling
+box — fix is a left lane strip), a medium tier (sequence `-x` scan, ER quoted
+names, tabs in raw-line diagrams, multi-edge collapse), and proposals
+(streaming-prefix test sweep now; typed warnings at next major).
 
 ## Open questions
 
