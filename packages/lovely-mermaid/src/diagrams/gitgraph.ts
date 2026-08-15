@@ -159,7 +159,7 @@ function parseGitGraph(src: string): {
       heads[cur] = commits.length
       commits.push({ lane: cur, id: attrs.id ?? `c${auto++}`, tag: attrs.tag, mergeFrom: null })
     } else if (first === 'branch') {
-      const name = words(rest)[0]
+      const { name } = nameToken(rest)
       // The fork point is the current branch's head, not the newest commit.
       const fork = heads[cur] ?? forkAt[cur]
       if (name === undefined || branches.includes(name) || fork === null) {
@@ -171,22 +171,22 @@ function parseGitGraph(src: string): {
       heads.push(null)
       cur = branches.length - 1
     } else if (first === 'checkout' || first === 'switch') {
-      const lane = branches.indexOf(words(rest)[0] ?? '')
+      const lane = branches.indexOf(nameToken(rest).name ?? '')
       if (lane === -1) {
         warnings.push(`dropped, unreadable statement: "${st}"`)
         continue
       }
       cur = lane
     } else if (first === 'merge') {
-      const name = words(rest)[0] ?? ''
-      const lane = branches.indexOf(name)
+      const { name, after } = nameToken(rest)
+      const lane = branches.indexOf(name ?? '')
       if (lane === -1 || lane === cur) {
         warnings.push(`dropped, unreadable statement: "${st}"`)
         continue
       }
       // An unnamed merge shows no id — the `⇐ branch` marker already says
       // what it is, and an invented id would collide with authored ones.
-      const attrs = commitAttrs(rest.slice(name.length))
+      const attrs = commitAttrs(after)
       heads[cur] = commits.length
       commits.push({ lane: cur, id: attrs.id ?? '', tag: attrs.tag, mergeFrom: lane })
     } else if (first === 'cherry-pick') {
@@ -205,6 +205,16 @@ function parseGitGraph(src: string): {
   if (truncated) warnings.push(`diagram truncated: commit cap (${MAX_EDGES}) reached`)
 
   return commits.length === 0 ? null : { branches, commits, forkAt, warnings }
+}
+
+/** First branch-name token; quotes let a name carry spaces or keywords. */
+function nameToken(rest: string): { name: string | undefined; after: string } {
+  if (rest.startsWith('"')) {
+    const close = rest.indexOf('"', 1)
+    if (close !== -1) return { name: rest.slice(1, close), after: rest.slice(close + 1) }
+  }
+  const w = words(rest)[0]
+  return { name: w, after: w === undefined ? rest : rest.slice(w.length) }
 }
 
 /** `id: "x" tag: "v1" …` key/value pairs trailing a commit or merge. */

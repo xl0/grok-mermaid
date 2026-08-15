@@ -122,7 +122,7 @@ opportunistically when touching a scanner; don't campaign.
       sites in `parseStatement` bypass `Graph.drop`'s post-truncation
       suppression, so `dropped, does not start with a node` appears alongside
       `diagram truncated`. Gate on `graph.truncated === null`.
-- [ ] gitgraph `branch "feat x"` keeps the opening quote in the head label
+- [x] gitgraph `branch "feat x"` keeps the opening quote in the head label
       (`words()[0]`). Take the quoted token whole.
 - [ ] timeline: bare period line (`2020` with no `:`) is dropped; mermaid
       renders an event-less period. Emit the row.
