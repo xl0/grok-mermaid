@@ -385,7 +385,8 @@ against the commits since the last tag; everything mechanical lives in
 `bun run release [patch|minor|major|x.y.z]` (run from `packages/lovely-mermaid`;
 `--no-push` to stop at the tag), which refuses a dirty tree or an empty
 `[Unreleased]`, rolls the changelog over, bumps `package.json`, runs
-`prepublishOnly` and `pm pack`, commits, tags and pushes, then waits for CI to
+`prepublishOnly` and `pm pack`, commits and tags, shows the release commit
+and confirms before pushing (the point of no return), then waits for CI to
 stage the version on npm and approves it with a prompted 2FA code
 (`npm stage approve --otp`; stage ids are UUIDs from `npm stage list --json`).
 Being a script rather than an agent is what makes its unattended push
@@ -408,7 +409,8 @@ succeeding. A version already on npm is skipped rather than failing, which is
 what lets a release that died partway be re-run; a staged but unapproved
 version is invisible to that check and fails the re-stage instead.
 
-The push is therefore the point of no return, which is what `--no-push` is for.
+The push is therefore the point of no return — hence the confirmation prompt,
+and `--no-push` for stopping short of it entirely.
 Release actions and tool versions are pinned.
 
 npm's trusted publisher matches on the workflow **filename**, so renaming

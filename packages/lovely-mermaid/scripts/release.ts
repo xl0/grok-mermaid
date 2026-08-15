@@ -5,11 +5,12 @@
  *   bun run release [patch|minor|major|x.y.z] [--no-push]
  *
  * The tag push is the trigger for `.github/workflows/publish.yml`, which
- * stages the build on npm and creates the GitHub Release. The script then
- * waits for the staged version to appear, asks for a 2FA code and approves
- * it — that approval is what actually publishes. `--no-push` stops at the
- * tag so the commit can be inspected first; nothing reaches npm until it is
- * pushed.
+ * stages the build on npm and creates the GitHub Release. The script shows
+ * the release commit and confirms before pushing — the last chance to check
+ * before CI kicks off — then waits for the staged version to appear, asks
+ * for a 2FA code and approves it; that approval is what actually publishes.
+ * `--no-push` stops at the tag with no prompt at all; nothing reaches npm
+ * until it is pushed.
  *
  * Writing changelog entries is `/cl`'s job, not this script's — everything here
  * is mechanical, which is what makes the unattended push at the end acceptable.
@@ -97,6 +98,23 @@ if (!push) {
 Committed and tagged v${version}; nothing was pushed. Publish it with:
 
   git push origin master v${version}
+`)
+  process.exit(0)
+}
+
+// The push is the point of no return (it triggers CI), so pause on the tag:
+// inspect the release commit from another terminal, then let the script
+// carry on into the stage-wait and 2FA approval.
+console.log(`\n=== review ${version} ===\n`)
+await $`git show --stat HEAD`
+const go = prompt(`\npush master + v${version} and kick off CI? [y/N]`)?.trim().toLowerCase()
+if (go !== 'y' && go !== 'yes') {
+  console.log(`
+Not pushed. When satisfied:
+
+  git push --no-follow-tags origin master && git push origin v${version}
+
+then approve the staged build: npm stage list, npm stage approve <id> --otp <code>.
 `)
   process.exit(0)
 }
