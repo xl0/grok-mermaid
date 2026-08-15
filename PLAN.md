@@ -77,14 +77,16 @@ enforced, parse warnings, control characters stripped, staged npm releases.
       `--term-bg`/`--term-fg`).
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
 
-## [ ] Review findings (2026-08-15)
+## [x] Review findings (2026-08-15)
 
-`REVIEW.md` has the full list with repros and fix directions. Highlights:
-five silent-corruption bugs (kebab-case flowchart ids, `class A["Label"]`,
-BT multi-row flip, state label with `-->`, back-edge lane crossing a sibling
-box — fix is a left lane strip), a medium tier (sequence `-x` scan, ER quoted
-names, tabs in raw-line diagrams, multi-edge collapse), and proposals
-(streaming-prefix test sweep now; typed warnings at next major).
+All actionable `REVIEW.md` items landed, one commit each: the five
+silent-corruption bugs (kebab ids, `class A["Label"]`, BT multi-row content,
+state `-->` labels, back-edge lane cut-through — solved by local
+adjacent-back routing rather than a left lane strip), the medium tier
+(sequence `-x` boundary, ER quotes, tab painting, parallel-label join), the
+low tier, plus the streaming-prefix sweep and the ANSI snapshot. Parked for
+the next major: typed warnings, `Span.node`. Changelog updated under
+`[Unreleased]`.
 
 ## Open questions
 

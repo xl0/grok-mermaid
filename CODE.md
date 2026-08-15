@@ -201,12 +201,20 @@ line style — which `toLines` splits runs on and emits as `Span.classes`.
 Layout is Sugiyama-shaped: longest-path ranking over the DAG (back edges
 dropped by DFS colouring), barycenter reordering within ranks to cut crossings,
 then barycenter relaxation for cross-axis positions. Edges between adjacent
-ranks share horizontal **bus** rows; skip and back edges route around the
-diagram through vertical **lanes**. Track packing lets edges sharing an
-endpoint reuse one row, which is why a merge draws a single arrowhead.
+ranks share horizontal **bus** rows; skip and multi-rank back edges route
+around the diagram through vertical **lanes**. An *adjacent-rank* back edge
+returns locally through its band instead (TD/BT only — LR boxes are three
+rows tall, no room to attach off the centre row), attached right of centre
+with the band's first row reserved for its arrowhead: the lane detour cut
+through sibling boxes. Track packing lets edges sharing an endpoint reuse one
+row, which is why a merge draws a single arrowhead. Parallel edges (same
+from/to) ride the same cells; their labels join (`one / two`) before sizing.
 
 `BT`/`RL` reuse the `TD`/`LR` layout and flip the finished canvas, so text is
-never mirrored — `flipHorizontal` reverses each text run back to reading order.
+never mirrored — `flipHorizontal` reverses each text run back to reading
+order, glyph remapping skips text/edgeLabel/title cells, and under `dir: up`
+the box/compartment/frame draw fns emit multi-row content upside down so the
+flip restores it.
 
 Subgraphs recurse: each is laid out into its own canvas, then blitted into a
 framed box in its parent scope. An edge is drawn in the innermost scope holding
@@ -271,7 +279,8 @@ title row centres, the rest left-align.
   beyond its endpoints sat in the corridor and was cut through.
 - **The source box expands tabs** to 4-column stops (post-cutoff): a literal
   tab measures one cell here but jumps to the terminal's tab stop there, so
-  the frame misaligned.
+  the frame misaligned. `Canvas.set` paints any tab as a space for the same
+  reason (post-cutoff), covering every diagram label path.
 - **A note left of the first participant gets its own margin** (post-cutoff):
   the diagram shifts right instead of the note painting over the lifelines.
 - **YAML frontmatter is skipped**, not mistaken for a header (post-cutoff);
@@ -290,6 +299,14 @@ title row centres, the rest left-align.
   Upstream folds everything into one mid-edge string, so nothing says which
   end a number belongs to. ER aliases are also parsed quote-aware, so
   `a["Bank Account"]` renders instead of failing.
+- **2026-08-15 review fixes** (post-cutoff, `REVIEW.md`): kebab-case
+  flowchart ids; `class A["Label"]`; state labels containing `-->`; state
+  descriptions accumulate; sequence `-x`/`-)` need a token boundary
+  (hyphenated participants work); ER quoted entity names unquote and
+  unterminated aliases warn; gitGraph quoted branch names; quote-aware
+  flowchart `|labels|`; bare timeline periods render; adjacent-back local
+  routing; parallel-edge label joining; BT multi-row content; flips leave
+  user text glyphs alone.
 
 ## Verification
 
@@ -357,8 +374,11 @@ notions is what the port dropped.
 
 ## Tests
 
-123 tests. `corpus.test.ts` sweeps the retired harness’s corpus for
-crash-safety and the span/width invariants. The bulk of rendering behaviour is pinned by markdown golden files
+129 tests. `corpus.test.ts` sweeps the retired harness’s corpus for
+crash-safety and the span/width invariants; `streaming.test.ts` renders
+every code-point prefix of every golden fence under the same invariants
+(the states a streaming TUI actually feeds); `ansi.test.ts` snapshots the
+`toAnsi` theme × classDef merge matrix as escaped SGR. The bulk of rendering behaviour is pinned by markdown golden files
 in `test/cases/<type>/<name>.md`, run by `test/cases.test.ts`: each file holds
 one or more ```mermaid fences, each followed by a ```text fence with the
 expected `plain` (or a bare `(null)` line for sources that must refuse) and an
