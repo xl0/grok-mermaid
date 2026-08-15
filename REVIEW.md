@@ -97,7 +97,7 @@ opportunistically when touching a scanner; don't campaign.
       token as identity. Related: streamed unclosed alias `p["Person` gets no
       unterminated-bracket warning (flowchart warns; ER's local `]`-trim
       reimplementation doesn't).
-- [ ] **Tabs survive into pie/timeline/mindmap/gitgraph output.** `\t` is
+- [x] **Tabs survive into pie/timeline/mindmap/gitgraph output.** `\t` is
       exempt from `stripControls`, measured 1 column, but the terminal jumps
       to a tab stop → bar/percent/dash columns misalign and `width`
       under-reports (the one contract callers act on). The source box already

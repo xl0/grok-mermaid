@@ -64,7 +64,10 @@ export class Canvas {
   set(x: number, y: number, c: string, role: Role): void {
     if (x >= this.w || y >= this.h) return
     const i = this.idx(x, y)
-    this.ch[i] = c
+    // A literal tab measures one cell here but jumps to the terminal's tab
+    // stop there, desyncing every column after it (the source box expands
+    // tabs for the same reason). Same width, safe glyph.
+    this.ch[i] = c === '\t' ? ' ' : c
     this.role[i] = role
     if (this.curTag !== undefined) this.tag[i] = this.curTag
     if (this.curHref !== undefined) this.href[i] = this.curHref
