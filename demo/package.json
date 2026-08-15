@@ -23,6 +23,6 @@
 	},
 	"dependencies": {
 		"jetbrains-mono": "^1.0.6",
-		"svelte-asciiart": "^0.1.0"
+		"svelte-asciiart": "^0.1.1"
 	}
 }
