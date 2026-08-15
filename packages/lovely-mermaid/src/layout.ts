@@ -720,10 +720,31 @@ function placeLr(
     row.length === 0 ? 0 : Math.max(...row.map((i) => sizes.boxW[i])),
   )
 
+  const centers = assignPositions(byRank, sizes.layH, 1, graph.edges, ranks)
+
+  // A skip whose target entry row crosses no box on any intermediate rank
+  // runs straight through the diagram into the target's left side, exiting
+  // through the source's right-side fan; the bottom lane is the fallback.
+  // (No entry spreading or local returns here: LR boxes are three rows tall,
+  // so the centre row is the only usable port on a side.)
+  const isSkip = (e: Edge): boolean => e.from !== e.to && ranks[e.to] - ranks[e.from] > 1
+  const edgeStraight = new Array<boolean>(graph.edges.length).fill(false)
+  graph.edges.forEach((e, i) => {
+    if (!isSkip(e)) return
+    const row = centers[e.to]
+    edgeStraight[i] = graph.nodes.every(
+      (_, j) =>
+        ranks[j] <= ranks[e.from] ||
+        ranks[j] >= ranks[e.to] ||
+        Math.abs(centers[j] - row) > half(sizes.boxH[j] + sizes.extraH[j]),
+    )
+  })
+
   // Left-to-right edge labels sit in the gap between columns, so the gap has
-  // to be wide enough for the widest of them.
+  // to be wide enough for the widest of them; a straight skip's label sits
+  // in the gap before its target.
   const labelWidths = graph.edges
-    .filter((e) => e.from === e.to || ranks[e.to] === ranks[e.from] + 1)
+    .filter((e, i) => e.from === e.to || ranks[e.to] === ranks[e.from] + 1 || edgeStraight[i])
     .map((e) => {
       const verb = e.label === null ? 0 : Math.min(stringWidth(e.label), MAX_LABEL)
       const cards = [e.cardFrom, e.cardTo]
@@ -735,12 +756,22 @@ function placeLr(
   const maxLabel = labelWidths.length === 0 ? 0 : Math.max(...labelWidths)
   const baseGap = Math.max(GAP_X + 1, maxLabel + 3)
 
-  const centers = assignPositions(byRank, sizes.layH, 1, graph.edges, ranks)
-
   const edgeBus = new Array<number>(graph.edges.length).fill(0)
   const busTracks = new Array<number>(maxRank + 1).fill(0)
   for (let r = 0; r < maxRank; r++) {
     const spans = busSpans(graph, ranks, centers, r, true, false)
+    // Straight-skip departures ride their own band's bus tracks: endpoint
+    // sharing folds them onto their siblings' column — one fan origin.
+    graph.edges.forEach((e, i) => {
+      if (!isSkip(e) || !edgeStraight[i] || ranks[e.from] !== r) return
+      spans.push({
+        start: Math.min(centers[e.from], centers[e.to]),
+        end: Math.max(centers[e.from], centers[e.to]),
+        from: e.from,
+        to: e.to,
+        edge: i,
+      })
+    })
     if (spans.length === 0) continue
     const { assigned, count } = assignTracks(spans)
     for (const [idx, slot] of assigned) edgeBus[idx] = slot
@@ -773,7 +804,7 @@ function placeLr(
   })
 
   const edgeLane = new Array<number>(graph.edges.length).fill(0)
-  const lanes = laneSpans(graph, ranks, placed, false)
+  const lanes = laneSpans(graph, ranks, placed, false).filter((s) => !edgeStraight[s.edge])
   let canvasH = diagramH
   let laneBase = 0
   if (lanes.length > 0) {
@@ -783,7 +814,6 @@ function placeLr(
     laneBase = diagramH + 1
   }
 
-  // LR keeps side/bottom lane entries; the skip corridors are TD-only.
   return {
     canvasW,
     canvasH,
@@ -794,7 +824,7 @@ function placeLr(
     edgeLane,
     skipApproach: new Array<number>(maxRank + 1).fill(-1),
     edgeEntryX: new Array<number>(graph.edges.length).fill(-1),
-    edgeStraight: new Array<boolean>(graph.edges.length).fill(false),
+    edgeStraight,
     fwdEntryX: new Array<number>(graph.nodes.length).fill(-1),
     edgeLabelLeft: new Array<boolean>(graph.edges.length).fill(false),
   }
@@ -952,6 +982,8 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
       } else routeBack(canvas, from, to, edge, lane)
     } else if (adjacent) {
       routeForwardLr(canvas, from, to, edge, bus)
+    } else if (to.rank > from.rank && plan.edgeStraight[i]) {
+      routeSkipLr(canvas, from, to, edge, bus)
     } else {
       routeBackLr(canvas, from, to, edge, lane)
     }
@@ -1475,6 +1507,33 @@ function routeForwardLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bu
   if (edge.cardTo !== undefined) {
     placeLabel(canvas, edge.cardTo, sat(ly, 1), sat(headCol, stringWidth(edge.cardTo)))
   }
+}
+
+/**
+ * Straight forward skip, left-to-right: out the source's right-side fan, jog
+ * on its own band's bus column, then straight along the target's entry row
+ * into its left side — merging with the forward arrivals' head. Only used
+ * when that row crosses no intermediate box; the bottom lane is the fallback.
+ */
+function routeSkipLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus: number): void {
+  const ry = from.cy
+  const ty = to.cy
+  const rx = from.x + from.w - 1
+  const headCol = to.x - 1
+
+  canvas.junction(rx, ry, R)
+  canvas.segH(ry, rx, bus)
+  if (ry !== ty) canvas.segV(bus, ry, ty)
+  canvas.segH(ty, bus, headCol)
+
+  if (edge.headTo === 'none') canvas.addBits(headCol, ty, R)
+  else canvas.set(headCol, ty, headGlyph(edge.headTo, '▶'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(rx, ry, headGlyph(edge.headFrom, '◄'), 'edge')
+
+  // Label after the bus jog, where forward labels sit — the gap before the
+  // target belongs to the arrivals that end there.
+  const text = edgeText(edge)
+  if (text !== null) placeLabel(canvas, text, sat(ty, 1), bus + 1)
 }
 
 /** Skip or back edge, left-to-right: down out the bottom, along a lane, back up. */
