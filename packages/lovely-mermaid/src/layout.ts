@@ -753,21 +753,20 @@ function placeLr(
       )
   })
 
-  // Left-to-right edge labels sit in the gap between columns, so the gap has
-  // to be wide enough for the widest of them; a straight skip's label sits
-  // in the gap before its target.
-  const labelWidths = graph.edges
-    .filter((e, i) => e.from === e.to || ranks[e.to] === ranks[e.from] + 1 || edgeStraight[i])
-    .map((e) => {
-      const verb = e.label === null ? 0 : Math.min(stringWidth(e.label), MAX_LABEL)
-      const cards = [e.cardFrom, e.cardTo]
-        .filter((c) => c !== undefined)
-        .reduce((w, c) => w + stringWidth(c as string) + 1, 0)
-      return verb + cards
-    })
-    .filter((w) => w > 0)
-  const maxLabel = labelWidths.length === 0 ? 0 : Math.max(...labelWidths)
-  const baseGap = Math.max(GAP_X + 1, maxLabel + 3)
+  // Left-to-right edge labels sit in the gap after their source's column, so
+  // each gap sizes to the widest label *leaving through it* — one long label
+  // widens its own band, not the whole diagram. Straight skips label there
+  // too; a self-loop's label hangs beside its own box (selfLabelW).
+  const bandLabel = new Array<number>(maxRank + 1).fill(0)
+  graph.edges.forEach((e, i) => {
+    if (e.from === e.to) return
+    if (ranks[e.to] !== ranks[e.from] + 1 && !edgeStraight[i]) return
+    const verb = e.label === null ? 0 : Math.min(stringWidth(e.label), MAX_LABEL)
+    const cards = [e.cardFrom, e.cardTo]
+      .filter((c) => c !== undefined)
+      .reduce((w, c) => w + stringWidth(c as string) + 1, 0)
+    bandLabel[ranks[e.from]] = Math.max(bandLabel[ranks[e.from]], verb + cards)
+  })
 
   const edgeBus = new Array<number>(graph.edges.length).fill(0)
   const busTracks = new Array<number>(maxRank + 1).fill(0)
@@ -793,7 +792,8 @@ function placeLr(
 
   const rankX = new Array<number>(maxRank + 1).fill(0)
   for (let r = 1; r <= maxRank; r++) {
-    rankX[r] = rankX[r - 1] + colW[r - 1] + Math.max(baseGap, busTracks[r - 1] + 1)
+    const gap = Math.max(GAP_X + 1, bandLabel[r - 1] + 3, busTracks[r - 1] + 1)
+    rankX[r] = rankX[r - 1] + colW[r - 1] + gap
   }
   const selfTails = byRank[maxRank]
     .filter((i) => sizes.extraH[i] > 0 && sizes.selfLabelW[i] > 0)
@@ -965,6 +965,7 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   canvas.curTag = undefined
   canvas.curHref = undefined
 
+  const laneLabels: LaneLabel[] = []
   graph.edges.forEach((edge, i) => {
     canvas.curStyle =
       edge.line === 'dotted' ? STY_DOT : edge.line === 'thick' ? STY_THICK : STY_SOLID
@@ -998,9 +999,10 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
     } else if (to.rank > from.rank && plan.edgeStraight[i]) {
       routeSkipLr(canvas, from, to, edge, bus)
     } else {
-      routeBackLr(canvas, from, to, edge, lane)
+      routeBackLr(canvas, from, to, edge, lane, laneLabels)
     }
   })
+  placeLaneLabels(canvas, laneLabels)
 
   canvas.finalizeMask()
   return canvas
@@ -1549,8 +1551,23 @@ function routeSkipLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus: 
   if (text !== null) placeLabel(canvas, text, sat(ty, 1), bus + 1)
 }
 
+/** A lane label waiting for every route to land before claiming its spot. */
+interface LaneLabel {
+  text: string
+  y: number
+  lo: number
+  hi: number
+}
+
 /** Skip or back edge, left-to-right: down out the bottom, along a lane, back up. */
-function routeBackLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, laneY: number): void {
+function routeBackLr(
+  canvas: Canvas,
+  from: Placed,
+  to: Placed,
+  edge: Edge,
+  laneY: number,
+  laneLabels: LaneLabel[],
+): void {
   const sx = from.cx
   const sy = from.y + from.h - 1
   const tx = to.cx
@@ -1565,15 +1582,55 @@ function routeBackLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, laneY
   else canvas.set(tx, ty + 1, headGlyph(edge.headTo, '▲'), 'edge')
   if (edge.headFrom !== 'none') canvas.set(sx, sy, headGlyph(edge.headFrom, '▲'), 'edge')
 
-  // The label interrupts its own lane row, centred on the run — the row
-  // above belongs to the neighbouring lane once several stack.
+  // The label interrupts its own lane row — the row above belongs to the
+  // neighbouring lane once several stack. Deferred until all edges landed,
+  // so it can dodge the verticals that cross this row.
   const backText = edgeText(edge)
   if (backText !== null) {
-    const text = ` ${fitLabel(backText, MAX_LABEL)} `
-    const lo = Math.min(sx, tx)
-    const hi = Math.max(sx, tx)
-    const start = Math.max(lo + 1, half(lo + hi) - half(stringWidth(text)))
-    drawTextOverEdges(canvas, text, start, laneY, 'edgeLabel')
+    laneLabels.push({
+      text: ` ${fitLabel(backText, MAX_LABEL)} `,
+      y: laneY,
+      lo: Math.min(sx, tx),
+      hi: Math.max(sx, tx),
+    })
+  }
+}
+
+/**
+ * Write each lane label onto its own row, centred on the run but slid to
+ * the nearest stretch free of crossing verticals, arrowheads and earlier
+ * labels — clearing a crossing line under a label would sever it.
+ */
+function placeLaneLabels(canvas: Canvas, labels: LaneLabel[]): void {
+  for (const { text, y, lo, hi } of labels) {
+    const tw = stringWidth(text)
+    const lastStart = hi - 1 - tw
+    if (lastStart < lo + 1 || y >= canvas.h) continue
+    const clear = (start: number): boolean => {
+      for (let x = start; x < start + tw; x++) {
+        const i = canvas.idx(x, y)
+        if (canvas.occupied[i] === 1) return false
+        if ((canvas.mask[i] & (U | D)) !== 0) return false
+        if (canvas.ch[i] !== ' ') return false
+      }
+      return true
+    }
+    const mid = Math.min(Math.max(half(lo + hi) - half(tw), lo + 1), lastStart)
+    let at = mid
+    for (let d = 0; ; d++) {
+      const left = mid - d
+      const right = mid + d
+      if (left < lo + 1 && right > lastStart) break
+      if (left >= lo + 1 && clear(left)) {
+        at = left
+        break
+      }
+      if (right <= lastStart && clear(right)) {
+        at = right
+        break
+      }
+    }
+    drawTextOverEdges(canvas, text, at, y, 'edgeLabel')
   }
 }
 
