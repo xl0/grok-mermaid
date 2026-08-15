@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-15
+
 ### Added
 
 - `click A "url"` (flowchart) and `link A "url"` (class diagrams) surface on the node's spans as `span.href`; `toAnsi` emits them as OSC 8 terminal hyperlinks.
