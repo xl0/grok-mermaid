@@ -68,11 +68,11 @@ enforced, parse warnings, control characters stripped, staged npm releases.
 - [ ] New diagram types, by TUI fit: pie (bar list), mindmap (tree), timeline,
       gitGraph (commit lanes). Registry makes each a one-file addition.
 - [x] Demo app in `demo/` (SvelteKit): light/dark page theme, class-styled
-      `/styles` preset. lovely-mermaid by source alias;
-      svelte-asciiart via `bun link` until published — Pages deploy waits on
-      that. AsciiArt colors now resolve at parse time through its `theme`
-      prop (palette + panel fg/bg, keep in sync with `--term-bg`/`--term-fg`);
-      the old `--ansi-*` CSS-var hooks are gone.
+      `/styles` preset. lovely-mermaid by source alias; svelte-asciiart@0.1.0
+      and lovely-ansi-svg@0.1.0 from npm (dev symlinks retired) — Pages
+      deploy is unblocked. AsciiArt colors resolve at parse time through its
+      `theme` prop (palette + panel fg/bg, keep in sync with
+      `--term-bg`/`--term-fg`).
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
 
 ## Open questions
