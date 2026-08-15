@@ -112,7 +112,7 @@ opportunistically when touching a scanner; don't campaign.
 
 ### Low
 
-- [ ] `flipGlyphH`/`flipGlyphV` corrupt arrows inside user text: RL turns
+- [x] `flipGlyphH`/`flipGlyphV` corrupt arrows inside user text: RL turns
       `A[go ◄ left]` into `go ▶ left`. Skip glyph-flip for
       `text`/`edgeLabel`/`title` cells.
 - [ ] Repeated state descriptions overwrite (`s1 : a` then `s1 : b` → only

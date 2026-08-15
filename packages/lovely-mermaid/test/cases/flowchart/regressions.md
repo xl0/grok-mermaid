@@ -98,3 +98,17 @@ flowchart LR
 │ A ├─────▶│ B │
 └───┘      └───┘
 ```
+
+Arrow and box-drawing characters inside user text survive RL/BT flips —
+the glyph remap applies to structure, not authored cells.
+
+```mermaid
+flowchart RL
+  A[go ◄ left] -->|l ◄ r| B
+```
+
+```text
+┌───┐  l ◄ r ┌───────────┐
+│ B │◄───────┤ go ◄ left │
+└───┘        └───────────┘
+```
