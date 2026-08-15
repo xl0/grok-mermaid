@@ -4,27 +4,28 @@
 
 ### Changed
 
-- A back edge between adjacent ranks returns locally beside its forward siblings (as mermaid draws it) instead of around the diagram through the side lane, whose horizontal approach could cut through a sibling box and fabricate edges that were never written. Top-down/bottom-up layouts only; LR/RL keep the lane.
-- A forward skip edge now takes the shape mermaid draws: it splits off the source's bottom fan (one `┴` origin shared with the sibling exits) and enters the target's *top*. When the entry column crosses no intermediate box it drops straight down; otherwise it rides the side lane and re-enters along a reserved approach row. Lanes also pack shortest-span-innermost, so exits and entries stop crossing lanes that aren't active at their row. Top-down/bottom-up layouts only.
-- A node's top entries (the forward cluster plus each skip) spread evenly across the box top — two entries land at ~1/3 and ~2/3 — with an aligned forward arrival pinned to centre so chains stay straight. An entry label that does not fit before the next entry renders left of its arrowhead instead.
-- A labelled lane no longer shares its row with another edge to the same endpoint — the label appeared to cover every edge merged onto the row. LR/RL lane labels now interrupt their own line (`── flaky ──`) instead of sitting on the neighbouring lane's row.
-- LR/RL skips whose target row is clear of intermediate boxes run straight through, splitting off the source's right-side fan and merging into the target's arrival, instead of detouring through the bottom lane. Same-row skips keep the lane (the row is occupied by the very boxes being skipped); adjacent-rank back edges keep it too — three-row boxes leave no off-centre side port for a local return.
-- Labels of parallel edges (same source and target) join as `one / two` on the drawn edge; previously every label after the first silently vanished.
+- Adjacent-rank back edges (TD/BT) return locally beside their forward edge instead of routing around the diagram, as mermaid draws them.
+- Skip edges (TD/BT) leave through the source's bottom fan and enter through the target's top, dropping straight down when the column is clear; side lanes remain the fallback and pack shortest-span-innermost to minimise crossings.
+- A node's top entries spread evenly across the box top; an entry label that does not fit before the next entry renders left of its arrowhead.
+- LR/RL skips whose target row is clear run straight through off the source's right-side fan instead of detouring via the bottom lane.
+- A labelled lane keeps its own row, with the label set into its line (`── flaky ──`), instead of merging onto a shared row where the label appeared to cover other edges.
+- LR/RL column gaps size to the labels passing through each gap, not the diagram's widest label, tightening label-heavy layouts.
+- Labels of parallel edges (same source and target) join as `one / two`; previously every label after the first silently vanished.
 - Repeated state descriptions (`s1 : a` then `s1 : b`) accumulate into one wrapped label instead of last-one-wins.
 - A bare timeline period line renders event-less instead of being dropped.
 
 ### Fixed
 
-- Kebab-case flowchart ids parse as one id: `step-1-->step-2` no longer mangles into a self-loop on `step` plus a stray node.
-- `class Animal["Label"]` declares a class titled by its label; previously the spaced form silently refused the whole diagram and the compact form forked into two nodes.
+- Kebab-case flowchart ids parse as one id: `step-1-->step-2` no longer mangles into a self-loop plus a stray node.
+- `class Animal["Label"]` declares a class titled by its label instead of refusing the diagram or forking into two nodes.
 - A state transition label containing `-->` (e.g. `A --> B: go "x --> y"`) stays one label instead of inventing a phantom state.
 - A `-x`/`-)` sequence operator embedded in a hyphenated participant name (`pre-x->>B`) no longer invents a participant; hyphenated names work throughout.
 - Quoted ER entity names render without their quotes; an unterminated ER alias bracket now warns.
 - Quoted gitGraph branch names (`branch "feat x"`) work in `branch`/`checkout`/`merge`.
-- `BT` diagrams read correctly: wrapped labels top-down, class compartments in order with the title on top, frame titles on the top border; arrows and box-drawing characters inside labels survive `RL`/`BT` flips.
-- A literal tab in a label paints as a space, keeping columns aligned on the terminal and `width` accurate.
+- `BT` renders multi-row content in reading order (wrapped labels, class compartments, frame titles); arrows and box-drawing characters inside labels survive `RL`/`BT` flips.
+- A literal tab in a label paints as a space, keeping terminal columns aligned and `width` accurate.
 - Flowchart `|labels|` are quote-aware: `A -->|"a|b"| B` keeps its pipe.
-- A flowchart that hits the node cap reports the one truncation warning, without a spurious per-statement drop warning beside it.
+- A flowchart that hits the node cap reports one truncation warning, without a spurious per-statement drop warning beside it.
 
 ## [0.3.2] - 2026-08-15
 
