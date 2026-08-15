@@ -5,12 +5,12 @@
  *   bun run release [patch|minor|major|x.y.z] [--no-push]
  *
  * The tag push is the trigger for `.github/workflows/publish.yml`, which
- * stages the build on npm and creates the GitHub Release. The script shows
- * the release commit and confirms before pushing — the last chance to check
- * before CI kicks off — then waits for the staged version to appear, asks
- * for a 2FA code and approves it; that approval is what actually publishes.
- * `--no-push` stops at the tag with no prompt at all; nothing reaches npm
- * until it is pushed.
+ * stages the build on npm and creates the GitHub Release. After verification
+ * the script pauses with the changelog roll and version bump still
+ * uncommitted — the chance to inspect before anything lands in history; one
+ * yes covers commit, tag and push, then it waits for the staged version,
+ * asks for a 2FA code and approves it; that approval is what actually
+ * publishes. `--no-push` stops at the tag; nothing reaches npm until pushed.
  *
  * Writing changelog entries is `/cl`'s job, not this script's — everything here
  * is mechanical, which is what makes the unattended push at the end acceptable.
@@ -88,6 +88,24 @@ console.log(`\n=== verifying ${version} ===\n`)
 await $`bun run prepublishOnly`
 await $`bun pm pack --dry-run`
 
+// Pause before anything lands in history: the changelog roll and version bump
+// sit in the working tree for inspection from another terminal. Declining
+// leaves them there to fix up or `git checkout --` away.
+console.log(`\n=== review ${version} ===\n`)
+await $`git diff CHANGELOG.md package.json`
+const go = prompt(`\ncommit and tag v${version}${push ? ', push, and kick off CI' : ''}? [y/N]`)
+  ?.trim()
+  .toLowerCase()
+if (go !== 'y' && go !== 'yes') {
+  console.log(`
+Nothing committed; CHANGELOG.md and package.json hold the rolled release.
+Adjust and re-run, or discard the roll with:
+
+  git checkout -- CHANGELOG.md package.json
+`)
+  process.exit(0)
+}
+
 console.log(`\n=== committing and tagging ${version} ===\n`)
 await $`git add CHANGELOG.md package.json`
 await $`git commit -m ${`chore(release): ${version}`}`
@@ -98,23 +116,6 @@ if (!push) {
 Committed and tagged v${version}; nothing was pushed. Publish it with:
 
   git push origin master v${version}
-`)
-  process.exit(0)
-}
-
-// The push is the point of no return (it triggers CI), so pause on the tag:
-// inspect the release commit from another terminal, then let the script
-// carry on into the stage-wait and 2FA approval.
-console.log(`\n=== review ${version} ===\n`)
-await $`git show --stat HEAD`
-const go = prompt(`\npush master + v${version} and kick off CI? [y/N]`)?.trim().toLowerCase()
-if (go !== 'y' && go !== 'yes') {
-  console.log(`
-Not pushed. When satisfied:
-
-  git push --no-follow-tags origin master && git push origin v${version}
-
-then approve the staged build: npm stage list, npm stage approve <id> --otp <code>.
 `)
   process.exit(0)
 }
