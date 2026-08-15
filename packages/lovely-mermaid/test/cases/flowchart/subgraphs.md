@@ -203,7 +203,7 @@ graph TD
  └───┘
 ```
 
-BT flips a frame and its contents.
+BT flips a frame and its contents; the title stays on the top border.
 
 ```mermaid
 flowchart BT
@@ -214,7 +214,7 @@ flowchart BT
 ```
 
 ```text
-┌──────┐
+┌ Up ──┐
 │ ┌───┐│
 │ │ B ││
 │ └───┘│
@@ -223,7 +223,7 @@ flowchart BT
 │ ┌─┴─┐│
 │ │ A ││
 │ └───┘│
-└ Up ──┘
+└──────┘
     ▲
     │
   ┌─┴─┐
