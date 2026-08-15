@@ -133,17 +133,18 @@ opportunistically when touching a scanner; don't campaign.
       (`words()[0]`). Take the quoted token whole.
 - [x] timeline: bare period line (`2020` with no `:`) is dropped; mermaid
       renders an event-less period. Emit the row.
-- [ ] pie: `"a" :` parses as 0% (`Number('')` = 0); `0x10` also slips
-      through. Defensible for streaming — tighten only if mermaid parity
-      matters.
+- [x] pie: `"a" :` parses as 0% (`Number('')` = 0); `0x10` also slips
+      through. Decided: keep — the streaming-friendly read (a value being
+      typed) outweighs mermaid parity here.
 - [x] Flowchart `|`-labels aren't quote-aware: `A -->|"a|b"| B` → label `"a`
       plus node `b`. At least it warns; recording as shared-helper drift.
-- [ ] BT self-loop: return `▼` sits on a border cell with no tee, `┴┴`
-      adjacency. Cosmetic.
+- [x] BT self-loop: return `▼` sits on a border cell with no tee, `┴┴`
+      adjacency. Decided: keep — TD draws the same un-teed return; parity,
+      not a BT defect.
 
 ## Proposals beyond bug fixes
 
-- [ ] **Streaming-prefix invariant sweep as a test.** The library's central
+- [x] **Streaming-prefix invariant sweep as a test.** The library's central
       argument is streaming, and manual per-character prefix sweeps over five
       complex sources held (zero throws, sane partials) — but nothing in
       `test/` pins it. Sweep prefixes of the golden-corpus sources asserting
