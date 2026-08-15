@@ -11,7 +11,9 @@
     "check": "biome check .",
     "fix": "biome check --write .",
     "typecheck": "tsgo --noEmit -p packages/lovely-mermaid",
-    "differential": "bun run tools/differential/run.ts"
+    "differential": "bun run tools/differential/run.ts",
+    "dev": "cd demo && bun run dev",
+    "release": "cd packages/lovely-mermaid && bun run release"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
