@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-15
+
 ### Changed
 
 - Adjacent-rank back edges (TD/BT) return locally beside their forward edge instead of routing around the diagram, as mermaid draws them.
