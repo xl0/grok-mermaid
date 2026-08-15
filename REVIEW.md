@@ -124,7 +124,7 @@ opportunistically when touching a scanner; don't campaign.
       `diagram truncated`. Gate on `graph.truncated === null`.
 - [x] gitgraph `branch "feat x"` keeps the opening quote in the head label
       (`words()[0]`). Take the quoted token whole.
-- [ ] timeline: bare period line (`2020` with no `:`) is dropped; mermaid
+- [x] timeline: bare period line (`2020` with no `:`) is dropped; mermaid
       renders an event-less period. Emit the row.
 - [ ] pie: `"a" :` parses as 0% (`Number('')` = 0); `0x10` also slips
       through. Defensible for streaming — tighten only if mermaid parity
