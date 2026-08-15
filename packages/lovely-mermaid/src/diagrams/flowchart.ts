@@ -219,7 +219,13 @@ function parseNode(
 ): { index: number; next: number } | null {
   let i = skipSpaces(chars, start)
   const idStart = i
-  while (i < chars.length && isIdChar(chars[i])) i++
+  // `-` joins the id only when an id char follows, so kebab-case ids parse
+  // while `-->` / `-.` / `--` still terminate (mermaid lexes ids greedily).
+  while (
+    i < chars.length &&
+    (isIdChar(chars[i]) || (chars[i] === '-' && i + 1 < chars.length && isIdChar(chars[i + 1])))
+  )
+    i++
   if (i === idStart) return null
   const id = chars.slice(idStart, i).join('')
 
