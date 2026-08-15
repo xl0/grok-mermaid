@@ -130,12 +130,41 @@
 		setTimeout(() => (copiedTheme = false), 1200);
 	}
 
+	// Simulated streaming: replay the current source a few code points per
+	// tick, the way an LLM would emit it — the live demo of render-per-prefix.
+	// Clicking again stops and restores the full source; a manual edit or a
+	// preset switch just stops (the user has taken over the text).
+	let streaming = $state<ReturnType<typeof setInterval> | null>(null);
+	let streamFull = '';
+	function stopStream(restore = false) {
+		if (streaming === null) return;
+		clearInterval(streaming);
+		streaming = null;
+		if (restore) src = streamFull;
+	}
+	function stream() {
+		if (streaming !== null) {
+			stopStream(true);
+			return;
+		}
+		streamFull = src;
+		const cps = [...src];
+		let at = 0;
+		src = '';
+		streaming = setInterval(() => {
+			at = Math.min(at + 2, cps.length);
+			src = cps.slice(0, at).join('');
+			if (at >= cps.length) stopStream();
+		}, 40);
+	}
+
 	// Presets differ in height, so switching reflows everything above the
 	// commands. Pegging the viewport to the page bottom keeps the input and
 	// the command grid (where the cursor is) exactly where they were.
 	// The viewport widens to the smallest setting the preset's art fits —
 	// a preset should always open showing art, not the source box.
 	async function pick(p: { src: string }) {
+		stopStream();
 		const fromBottom = document.documentElement.scrollHeight - window.scrollY;
 		src = p.src;
 		const a = render(p.src);
@@ -379,6 +408,9 @@
 				<span class="err">render(src) → null</span>
 			{/if}
 			<span class="spacer"></span>
+			<button class="ghost" onclick={stream} disabled={src.trim() === '' && streaming === null}>
+				[{streaming === null ? 'stream' : 'stop'}]
+			</button>
 			<span class="cols">
 				<span class="dim">viewport</span>
 				{#each [30, 60, 120, Infinity] as w (w)}
@@ -421,6 +453,7 @@
 		<span class="accent">❯</span>
 		<textarea
 			bind:value={src}
+			oninput={() => stopStream()}
 			rows={Math.max(2, src.split('\n').length)}
 			wrap="off"
 			spellcheck="false"
