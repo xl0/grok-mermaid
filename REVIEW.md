@@ -29,7 +29,7 @@ opportunistically when touching a scanner; don't campaign.
 
 ### High — silently wrong structure, no warning
 
-- [ ] **Flowchart ids can't contain `-`.** `flowchart.ts` id scan stops at the
+- [x] **Flowchart ids can't contain `-`.** `flowchart.ts` id scan stops at the
       first `-`, so `step-1-->step-2` renders a *self-loop on `step` labelled
       `1`* plus a stray node `2`; `my-node[Label] --> B` turns the id tail into
       an edge label. Kebab-case ids are everywhere; mermaid accepts them, and
@@ -54,7 +54,7 @@ opportunistically when touching a scanner; don't campaign.
       lines and sections in reverse order, frame title on the bottom border,
       when `dir === 'up'`.
 
-- [ ] **State transition label containing `-->`.** `parseTransition` chains on
+- [x] **State transition label containing `-->`.** `parseTransition` chains on
       every `-->` with no quote awareness: `A --> B: go "x --> y"` → label
       `go "x` plus phantom node `y"`. Mermaid: after the colon it's all label.
       Fix: locate the label colon first (`splitColon`), only chain on arrows
