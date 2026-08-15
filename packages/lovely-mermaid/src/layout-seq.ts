@@ -7,7 +7,7 @@
  * self-message stub — then items stack down the canvas in source order.
  */
 
-import { Canvas, D, drawTextOverEdges, L, R, STY_THICK, U } from './canvas.ts'
+import { Canvas, D, drawTextOverEdges, L, R, U } from './canvas.ts'
 import type { NoteAnchor, SeqItem, Sequence } from './diagrams/sequence.ts'
 import { fitLabel, WRAP_WIDTH } from './labels.ts'
 import {
@@ -145,9 +145,11 @@ export function layoutSequence(seq: Sequence): CanvasResult {
     else if (item.kind === 'divider') drawDivider(canvas, item.text, r, canvasW)
   })
 
-  // Activations thicken the lifeline from the activating message's arrow row
-  // to the deactivating one's (to the bottom while still open). Overwriting
-  // the style keeps junction glyphs on the run thick too (│→┃, ├→┣).
+  // Activations turn the lifeline into a double line from the activating
+  // message's arrow row to the deactivating one's (to the bottom while still
+  // open) — two rails, echoing mermaid's slim activation rectangle. Setting
+  // the glyph directly leaves the mask bits for `finalizeMask`, whose
+  // double-tee pass resolves message junctions on the run (║ → ╟ ╢ ╫).
   const startRow = (k: number): number => {
     const item = seq.items[k]
     const labeled = item.kind === 'message' && item.from !== item.to && item.text !== null
@@ -162,7 +164,7 @@ export function layoutSequence(seq: Sequence): CanvasResult {
     const y1 = a.to === null ? bottomTop - 1 : endRow(a.to)
     for (let y = startRow(a.from); y <= y1; y++) {
       const i = canvas.idx(xs[a.at], y)
-      if (canvas.mask[i] !== 0) canvas.style[i] = STY_THICK
+      if (canvas.mask[i] !== 0) canvas.ch[i] = '║'
     }
   }
 

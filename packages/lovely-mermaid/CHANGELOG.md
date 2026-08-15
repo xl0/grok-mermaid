@@ -6,6 +6,10 @@
 
 - Four new diagram types: `pie` (a labelled bar list with eighth-block precision; `showData` appends raw values), `mindmap` (the indentation tree with `├──`/`└──` guides), `timeline` (periods and events as a vertical list, sections as headers) and `gitGraph` (`git log --graph`-style commit lanes: newest on top, branch heads, tags, and merges that cross lanes cleanly). `diagramKind` reports the new kinds.
 
+### Changed
+
+- Sequence activations draw the active lifeline span as a double line (`║`, junctions `╟` `╢`) — two rails echoing mermaid's slim activation rectangle — instead of a thick line.
+
 ## [0.3.0] - 2026-08-15
 
 ### Breaking Changes

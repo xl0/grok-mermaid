@@ -345,7 +345,7 @@ console.log(
 )
 console.log(`v2shape:     ${v2shape.length}  (v2 @{} node syntax parsed — see CODE.md)`)
 console.log(
-  `activations: ${activations.length}  (sequence activations thicken lifelines — see CODE.md)`,
+  `activations: ${activations.length}  (sequence activations double lifelines — see CODE.md)`,
 )
 console.log(`cards:       ${cards.length}  (cardinalities at their own edge ends — see CODE.md)`)
 console.log(`diamond:     ${diamond.length}  (diamond nodes get double borders — see CODE.md)`)

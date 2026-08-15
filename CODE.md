@@ -252,11 +252,12 @@ title row centres, the rest left-align.
   bare-id node and drops the rest of the statement. Shape names fold onto the
   three silhouettes (`AT_SHAPES`; unknown means rect). Differential class
   `v2shape` (0 corpus cases; pinned by unit tests).
-- **Sequence activations thicken the lifeline.** `->>+` / `-->>-` and
-  `activate`/`deactivate` drive per-participant spans, drawn by overwriting
-  the cell style to thick (`│`→`┃`, junctions `├`→`┣`) between the activating
-  and deactivating rows; an unclosed span runs to the bottom. Upstream strips
-  the markers. Differential class `activations` — 6 cases.
+- **Sequence activations double the lifeline.** `->>+` / `-->>-` and
+  `activate`/`deactivate` drive per-participant spans, drawn as `║` (message
+  junctions `╟` `╢` `╫` via the double-tee pass) between the activating and
+  deactivating rows — two rails, echoing mermaid's slim activation rectangle;
+  an unclosed span runs to the bottom. Upstream strips the markers.
+  Differential class `activations` — 6 cases.
 - **Diamond nodes get double borders** (post-cutoff). `A{...}` and state
   `<<choice>>` draw `╔═╗`; upstream draws them identically to `round`, an
   inert distinction. Double lines carry no direction bits — the sides are
