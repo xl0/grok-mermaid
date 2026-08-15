@@ -93,8 +93,9 @@ the next major: typed warnings, `Span.node`. Changelog updated under
 Follow-on routing rework (same day, demo-driven): adjacent-rank back edges
 return locally; skips split off the bottom fan, drop straight when the
 column is clear, enter target tops on evenly spread slots with side-aware
-labels; lanes pack shortest-innermost. TD/BT only — LR/RL still route
-side-entry lanes and could get the same polish if it ever matters. An A*
+labels; lanes pack shortest-innermost. LR/RL skips run straight through
+clear rows off the right-side fan (adjacent-back local returns stay
+TD-only: three-row boxes have no off-centre side port). An A*
 router experiment lives on the `astar-routing` branch: works, legible,
 rejected as less disciplined than structured routing (see that commit).
 

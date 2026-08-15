@@ -111,3 +111,28 @@ flowchart TD
   │ Rollback ├──────────────────────────┘
   └──────────┘
 ```
+
+An LR skip whose target row is clear of intermediate boxes runs straight
+through, splitting off the source's right-side fan (`┤` up/down) and
+merging into the target's arrival; a same-row skip keeps the bottom lane.
+
+```mermaid
+flowchart LR
+  push[Git push] --> ci{CI green?}
+  ci -->|yes| build[Build image]
+  ci -->|no| notify[Notify author]
+  build --> stage[Deploy staging]
+  stage --> smoke{Smoke}
+  smoke -->|pass| prod[Ship]
+  smoke -->|fail| notify
+```
+
+```text
+                                                                                                pass  ┌──────┐
+                                                                                               ┌─────▶│ Ship │
+                                 yes   ┌─────────────┐       ┌────────────────┐       ╔═══════╗│      └──────┘
+┌──────────┐       ╔═══════════╗┌─────▶│ Build image ├──────▶│ Deploy staging ├──────▶║ Smoke ╟┤
+│ Git push ├──────▶║ CI green? ╟┤no    └─────────────┘       └────────────────┘       ╚═══════╝│fail  ┌───────────────┐
+└──────────┘       ╚═══════════╝└──────────────────────────────────────────────────────────────┴─────▶│ Notify author │
+                                                                                                      └───────────────┘
+```

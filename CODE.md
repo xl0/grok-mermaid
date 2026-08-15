@@ -212,8 +212,11 @@ and re-enters along a reserved approach row above the target's arrival
 heads. A node's top entries (forward cluster + skips) spread evenly across
 the box top, an aligned forward arrival pinned to centre so chains stay
 straight; a label that does not fit before the next entry renders left of
-its arrowhead. Back edges exit and enter through the *sides*, which keeps
-returns recognisable. An *adjacent-rank* back edge
+its arrowhead. LR/RL skips run straight through when the target's row is
+clear of intermediate boxes (right-side fan split, merged arrival), else
+the bottom lane; same-row skips always lane. Back edges exit and enter
+through the *sides*, which keeps returns recognisable. An *adjacent-rank*
+back edge
 returns locally through its band instead (TD/BT only — LR boxes are three
 rows tall, no room to attach off the centre row), attached right of centre
 with the band's first row reserved for its arrowhead: the lane detour cut
