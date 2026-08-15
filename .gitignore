@@ -8,3 +8,6 @@ dist/
 tools/**/target/
 tools/differential/src/mermaid.rs
 tools/differential/corpus.txt
+
+# The root README is canonical; the build copies it into the package for npm.
+packages/lovely-mermaid/README.md

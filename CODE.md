@@ -53,6 +53,10 @@ code fence cannot do — it is the only way to show what `Role` buys. Its line
 height is one em on purpose: box-drawing glyphs span at least that, so rows
 overlap rather than gap in whatever font the viewer has.
 
+The README lives at the repo root (so GitHub renders it — a symlink would
+not) and is the one full copy; the package `build` script copies it into
+`packages/lovely-mermaid/` for npm, where the copy is gitignored.
+
 `docs/streaming.gif` is a screen recording, GIF rather than MP4 because npm's
 README renderer strips `<video>`. Both assets are referenced by absolute
 `raw.githubusercontent.com` URL (under `packages/lovely-mermaid/docs/`): npm
