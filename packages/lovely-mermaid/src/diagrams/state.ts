@@ -217,13 +217,14 @@ function parseTransition(st: string, graph: Graph): true | null {
       from = f
     }
 
+    // After the label colon it is all label — mermaid never chains past a
+    // label, so an arrow inside one (`: go "x --> y"`) is text, not a link.
     const nextArrow = rhs.indexOf('-->')
-    const toPartRaw = nextArrow === -1 ? rhs : rhs.slice(0, nextArrow)
-    const tail = nextArrow === -1 ? '' : rhs.slice(nextArrow)
-
-    const colon = splitColon(toPartRaw)
-    const toPart = colon ? colon[0] : toPartRaw
-    const label = colon ? nonEmpty(decodeHtmlEntities(colon[1].trim())) : null
+    const colon = splitColon(rhs)
+    const labelFirst = colon !== null && (nextArrow === -1 || colon[0].length < nextArrow)
+    const toPart = labelFirst ? colon[0] : nextArrow === -1 ? rhs : rhs.slice(0, nextArrow)
+    const label = labelFirst ? nonEmpty(decodeHtmlEntities(colon[1].trim())) : null
+    const tail = labelFirst || nextArrow === -1 ? '' : rhs.slice(nextArrow)
 
     const toTok = takeTags(
       toPart.trimStart().replace(/^>+/, '').trimEnd().replace(/-+$/, '').trim(),

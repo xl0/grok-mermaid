@@ -87,3 +87,22 @@ stateDiagram-v2
 │ find a:::b thing │
 ╰──────────────────╯
 ```
+
+After the label colon it is all label: an arrow inside the label text is
+not another transition. Previously `y"` became a phantom state.
+
+```mermaid
+stateDiagram-v2
+  A --> B: go "x --> y"
+```
+
+```text
+ ╭───╮
+ │ A │
+ ╰─┬─╯
+   │
+   ▼go "x --> y"
+ ╭───╮
+ │ B │
+ ╰───╯
+```
