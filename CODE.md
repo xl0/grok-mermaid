@@ -429,7 +429,8 @@ Writing changelog entries and cutting the release are deliberately separate.
 `/cl` only audits `## [Unreleased]` (in `packages/lovely-mermaid/CHANGELOG.md`)
 against the commits since the last tag; everything mechanical lives in
 `bun run release [patch|minor|major|x.y.z]` (run from `packages/lovely-mermaid`;
-`--no-push` to stop at the tag), which refuses a dirty tree or an empty
+`--no-push` to stop at the tag), which lists any uncommitted files (refusing
+only when the changelog or manifest themselves are dirty) or an empty
 `[Unreleased]`, rolls the changelog over, bumps `package.json`, runs
 `prepublishOnly` and `pm pack`, then pauses with the rolled changelog and
 bump still uncommitted for review — one yes covers commit, tag and push

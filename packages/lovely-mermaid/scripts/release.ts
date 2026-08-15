@@ -37,7 +37,26 @@ const target = args.find((arg) => !arg.startsWith('-')) ?? 'patch'
 
 const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim()
 if (branch !== 'master') die(`on ${branch}; releases are cut from master`)
-if ((await $`git status --porcelain`.text()).trim()) die('worktree is dirty; commit or stash first')
+
+// Unrelated uncommitted files are fine — the release commit stages only the
+// changelog and manifest — but list them so nothing rides along unnoticed.
+// Those two files themselves must be clean: their working-tree state gets
+// swept into the release commit.
+const dirty = (await $`git status --porcelain`.text())
+  .split('\n')
+  .filter((line) => line.trim() !== '')
+if (dirty.length > 0) {
+  const releaseFiles = [
+    'packages/lovely-mermaid/CHANGELOG.md',
+    'packages/lovely-mermaid/package.json',
+  ]
+  const clashes = dirty.filter((line) => releaseFiles.some((f) => line.slice(3) === f))
+  if (clashes.length > 0)
+    die(
+      `uncommitted changes to release-managed files; commit or stash first:\n${clashes.join('\n')}`,
+    )
+  console.log(`worktree has uncommitted files (left alone by the release):\n${dirty.join('\n')}\n`)
+}
 
 // The approval at the end needs an npm login; check before touching anything.
 if (push && (await $`npm whoami`.nothrow().quiet()).exitCode !== 0)
