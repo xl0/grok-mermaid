@@ -14,6 +14,7 @@ CHANGELOG.md              (in the package) release notes; current changes under 
 .pi/prompts/cl.md         audits Unreleased changelog entries against the commits
 .github/workflows/
   publish.yml             tag-triggered npm staging via trusted publishing
+  pages.yml               deploys demo/ to GitHub Pages on push to master
 tools/                    repo-level dev tooling, not shipped
   width-oracle/           emits per-code-point widths from the unicode-width crate
   differential/           renders a corpus through Rust and TS, diffs the output
