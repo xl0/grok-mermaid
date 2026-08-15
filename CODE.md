@@ -126,9 +126,10 @@ demo just calls `toAnsi`.
 Class assignment is parsed in every grammar that has it:
 flowchart `:::` at the node cursor, state/class `:::` inline at each id token
 (`takeTags`; a tag inside a quoted label or description is text, not a tag),
-and `class A,B name` statements in flowchart/state (`parseClassAssign` +
-`Graph.applyClasses`, deferred so a statement may precede the nodes it
-names). classDefs parse in flowchart/state/class diagrams.
+and `class A,B name` statements in flowchart/state/class — plus class-diagram
+`cssClass "A,B" name` — via `parseClassAssign` + `Graph.applyClasses`,
+deferred so a statement may precede the nodes it names. classDefs parse in
+flowchart/state/class diagrams.
 
 **Shared scan helpers** (`statements.ts`) are the one place quote rules live:
 `splitTop` (split outside quotes and parens — classDef props, at-shape pairs,
@@ -365,7 +366,7 @@ notions is what the port dropped.
 
 ## Tests
 
-129 tests. The bulk of rendering behaviour is pinned by markdown golden files
+119 tests. The bulk of rendering behaviour is pinned by markdown golden files
 in `test/cases/<type>/<name>.md`, run by `test/cases.test.ts`: each file holds
 one or more ```mermaid fences, each followed by a ```text fence with the
 expected `plain` (or a bare `(null)` line for sources that must refuse) and an
@@ -381,6 +382,13 @@ edge endpoints/markers, entity decoding at sinks, choice shape),
 `test/render.test.ts` (classes/classDefs on spans, `diagramKind`, streaming
 flip counts, caps on generated sources, width reporting, sourceBox, control
 characters).
+
+**Every discovered bug gets a regression test in the same change that fixes
+it** — a golden case (`test/cases/<type>/regressions.md`) whenever the
+failure shows in `plain` or `warnings`, a unit test only for what they cannot
+carry (span classes, classDefs, the model, throws, widths). The differential
+only guards against upstream divergence; bugs shared with upstream (or in
+post-cutoff features) are invisible to it.
 
 The unit suite alone is not sufficient: it passed while four width bugs were
 live. `bun run differential` is what actually pins fidelity.

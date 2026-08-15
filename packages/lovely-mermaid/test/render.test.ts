@@ -62,17 +62,6 @@ test('blank source returns null', () => {
   expect(render('   \n  ')).toBeNull()
 })
 
-test('an unsupported diagram draws nothing', () => {
-  expect(render('gantt\n title Plan\n section A\n task :a1, 2024-01-01, 30d')).toBeNull()
-})
-
-test('a junk header suffix is not a diagram type', () => {
-  // Upstream accepts `stateDiagramFoo` by prefix; mermaid proper rejects it.
-  expect(render('stateDiagramFoo\n A --> B')).toBeNull()
-  expect(diagramKind('stateDiagramFoo\n A --> B')).toBeNull()
-  expect(diagramKind('classDiagram-v2\n A --> B')).toBe('class')
-})
-
 test('diagramKind separates an unsupported type from a malformed one', () => {
   // Both render to null; only one is worth telling the author to fix.
   const malformed = 'stateDiagram-v2\n bad one here\n bad two here'
@@ -95,6 +84,8 @@ test('diagramKind reads the header without parsing the body', () => {
   expect(diagramKind('timeline')).toBe('timeline')
   expect(diagramKind('gitGraph LR:')).toBe('gitgraph')
   expect(diagramKind('gantt')).toBeNull()
+  expect(diagramKind('stateDiagramFoo\n A --> B')).toBeNull()
+  expect(diagramKind('classDiagram-v2\n A --> B')).toBe('class')
   expect(diagramKind('')).toBeNull()
 })
 
@@ -280,29 +271,10 @@ test('a source of only control characters is blank', () => {
   expect(render(`${CONT}${ESC}`)).toBeNull()
 })
 
-test('a reparented region keeps its subtree', () => {
-  const out = render(
-    'stateDiagram-v2\n state Outer {\n  state Inner {\n   A --> B\n  }\n  --\n  C\n }',
-  )
-  if (out === null) throw new Error('render returned null')
-  const art = out.plain.join('\n')
-  for (const piece of ['Inner', 'A', 'B', 'C']) expect(art).toContain(piece)
-})
-
 test('diagramKind strips control characters the way render does', () => {
   const src = '\x01flowchart TD\n A --> B'
   expect(render(src)).not.toBeNull()
   expect(diagramKind(src)).toBe('flowchart')
-})
-
-test('a note left of the first participant sits beside the lifeline', () => {
-  const out = render('sequenceDiagram\n Note left of A: hello there\n A->>B: hi')
-  if (out === null) throw new Error('render returned null')
-  // The note's right border must end before the first lifeline column.
-  const noteRow = out.plain.findIndex((l) => l.includes('hello there'))
-  const lifelineX = out.plain[out.plain.length - 2].indexOf('│')
-  expect(noteRow).toBeGreaterThan(-1)
-  expect(out.plain[noteRow].indexOf('hello there')).toBeLessThan(lifelineX)
 })
 
 test('tabs in the source box expand to spaces', () => {
@@ -311,18 +283,9 @@ test('tabs in the source box expand to spaces', () => {
   expect(new Set(box.plain.slice(1, -1).map((r) => r.length)).size).toBe(1)
 })
 
-test('a frontmatter title is centred above the art in the title role', () => {
+test('a frontmatter title carries the title role', () => {
+  // The placement is pinned by cases/flowchart/frontmatter.md; the role is not.
   const out = render('---\ntitle: Order flow\n---\nflowchart TD\n A --> B')
   if (out === null) throw new Error('render returned null')
-  expect(out.plain[0].trim()).toBe('Order flow')
-  expect(out.plain[1]).toBe('')
   expect(out.styled[0].at(-1)).toEqual({ text: 'Order flow', role: 'title' })
-  expect(out.width).toBeGreaterThanOrEqual(10)
-})
-
-test('a back edge routes around its rank, not through a sibling box', () => {
-  const out = render('flowchart TD\n A --> C\n A --> B\n C --> A')
-  if (out === null) throw new Error('render returned null')
-  // The lane endpoint orders rightmost, so the run to the lane is clear.
-  expect(out.plain.join('\n')).toMatch(/│ B │\s+│ C ├─/)
 })

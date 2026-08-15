@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Class-diagram class assignments parse instead of being dropped: `class Agent focus` (the flowchart-style form) and `cssClass "A,B" name`.
+
 ## [0.3.1] - 2026-08-15
 
 ### Added

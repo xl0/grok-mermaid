@@ -28,3 +28,17 @@ pie showData
 A  ███████████████       75%  (3)
 B  █████                 25%  (1)
 ```
+
+Eighth-block rounding carries into a full cell: 999 of 1000 is a full bar,
+not a dropped fraction.
+
+```mermaid
+pie
+  "a" : 999
+  "b" : 1
+```
+
+```text
+a  ████████████████████ 100%
+b  ▏                      0%
+```

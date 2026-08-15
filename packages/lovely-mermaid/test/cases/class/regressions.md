@@ -1,0 +1,48 @@
+# Class-diagram regressions
+
+`class Agent focus` is the assignment form (a class name carries no spaces),
+not a malformed declaration — no warning, and the spans carry the class
+(pinned in parse.test.ts).
+
+```mermaid
+classDiagram
+  class Agent {
+    +run()
+  }
+  class Agent focus
+  Tool <|-- Agent
+  classDef focus fill:#ff9966
+```
+
+```text
+ ┌──────┐
+ │ Tool │
+ └───△──┘
+     │
+     │
+┌────────┐
+│ Agent  │
+├────────┤
+│ +run() │
+└────────┘
+```
+
+A quoted cardinality containing `..` on the left side never reads as a
+dotted-link operator.
+
+```mermaid
+classDiagram
+  Customer "0..*" --> Order
+```
+
+```text
+┌──────────┐
+│ Customer │
+└─────┬────┘
+      │0..*
+      │
+      ▼
+  ┌───────┐
+  │ Order │
+  └───────┘
+```

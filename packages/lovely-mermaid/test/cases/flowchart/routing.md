@@ -121,3 +121,37 @@ graph TD
  │ C │   │ D │
  └───┘   └───┘
 ```
+
+A fan mid-chain continues from the whole group; a reversed arrow fans the
+sources.
+
+```mermaid
+graph LR
+  A & B --> C --> D
+```
+
+```text
+┌───┐
+│ A ├┐
+└───┘│   ┌───┐    ┌───┐
+     ├──▶│ C ├───▶│ D │
+┌───┐│   └───┘    └───┘
+│ B ├┘
+└───┘
+```
+
+```mermaid
+graph TD
+  A & B <-- C
+```
+
+```text
+     ┌───┐
+     │ C │
+     └─┬─┘
+   ┌───┴───┐
+   ▼       ▼
+ ┌───┐   ┌───┐
+ │ A │   │ B │
+ └───┘   └───┘
+```

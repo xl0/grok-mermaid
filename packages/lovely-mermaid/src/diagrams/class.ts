@@ -14,6 +14,7 @@ import {
   firstWord,
   headerKind,
   nonEmpty,
+  parseClassAssign,
   parseClassDef,
   quoteMask,
   splitColon,
@@ -73,6 +74,8 @@ export function parseClass(src: string): Graph | null {
   }
   /** The open `{` body: a class index, `'skip'` for a dropped class, or none. */
   let curClass: number | 'skip' | null = null
+  /** `class A,B name` / `cssClass "A,B" name` assignments, applied post-walk. */
+  const classAssignments: [string[], string[]][] = []
 
   for (const st of statements.slice(1)) {
     if (curClass !== null) {
@@ -91,16 +94,26 @@ export function parseClass(src: string): Graph | null {
       if (def) for (const name of def.names) graph.classDefs[name] = def.props
       continue
     }
-    if (
-      ['note', 'callback', 'click', 'link', 'style', 'cssclass', 'namespace', '}'].includes(first)
-    ) {
+    if (['note', 'callback', 'click', 'link', 'style', 'namespace', '}'].includes(first)) {
+      continue
+    }
+    if (first === 'cssclass') {
+      const assign = parseClassAssign(st.slice(firstWord(st).length).replace(/"/g, ''))
+      if (assign) classAssignments.push(assign)
+      else graph.drop(st)
       continue
     }
     if (first === 'class') {
       const rest = st.slice('class'.length).trim()
       const open = rest.endsWith('{')
       const name = open ? rest.slice(0, -1).trim() : rest
-      if (name === '' || /\s/.test(name)) {
+      if (!open && /\s/.test(name)) {
+        // Class names carry no spaces, so `class Agent focus` is the
+        // assignment form, as in flowcharts.
+        const assign = parseClassAssign(name)
+        if (assign) classAssignments.push(assign)
+        else graph.drop(st)
+      } else if (name === '' || /\s/.test(name)) {
         // A bad declaration that opened a body swallows it whole; reading the
         // members as top-level statements would misparse everything inside.
         graph.drop(st)
@@ -152,6 +165,8 @@ export function parseClass(src: string): Graph | null {
       break
     }
   }
+
+  graph.applyClasses(classAssignments)
 
   return graph.nodes.length === 0 ? null : graph
 }
