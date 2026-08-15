@@ -10,6 +10,10 @@
 
 ### Added
 
+- Composite states draw as titled frames: `state X { ... }` nests, `--` splits a composite into side-by-side regions, and `[*]` is scoped per composite.
+- The flowchart v2 node syntax `id@{shape: cyl, label: "..."}` parses; shape names map onto the terminal's silhouettes.
+- Sequence activations (`->>+` / `-->>-`, `activate`/`deactivate`) thicken the lifeline over the active range.
+- ER and class-diagram cardinalities render at their own edge ends with the verb between (`0..*` shortens to `*`), and ER entity aliases may be quoted (`a["Bank Account"]`).
 - Author classes are surfaced: `A:::name` and `class A,B name` land on the spans of the cells that node paints (`span.classes`), and `classDef` declarations are parsed into `art.classDefs` (`{ name: { fill: '#f96', … } }`). The renderer never interprets either.
 - `toAnsi` applies classDef styles best-effort on top of the role theme: `fill` backs the node's cells, `stroke` colors its border, `color` its text, `font-weight:bold` bolds (merging with the role theme rather than replacing it) — as truecolor SGR, with a black/white foreground picked by luminance when a fill declares no color. The interpreter is exported (`resolveClassStyle`, `classSgr`, `contrastOn`) for consumers with their own styling model; every other property is ignored.
 - A frontmatter `title:` is rendered, centred above the art in the `title` role.
