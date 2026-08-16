@@ -45,7 +45,7 @@ const OPTS: Record<string, string> = {
   'elk.spacing.edgeLabel': '1',
   // Reversed (cycle-breaking) edges route as feedback beside the flow
   // instead of wrapping the whole diagram to re-enter from the top.
-  'elk.layered.feedbackEdges': 'true',
+  // 'elk.layered.feedbackEdges': 'true',
   // Depth-first reverses far fewer edges than the greedy default here, so
   // clusters land in causal order and the wrap-around bundles mostly
   // disappear, at some width cost. (MODEL_ORDER crashes in elkjs 0.12.)
