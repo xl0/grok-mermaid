@@ -77,8 +77,20 @@ Trusted publisher recreated; staged releases flowing.
       and lovely-ansi-svg@0.1.0 from npm (dev symlinks retired) — Pages
       deploy is unblocked. AsciiArt colors resolve at parse time through its
       `theme` prop (palette + panel fg/bg, keep in sync with
-      `--term-bg`/`--term-fg`).
+      `--term-bg`/`--term-fg`). 2026-08-15: pure SPA (no SSR/prerender,
+      404.html fallback + index.html copy for Pages); the source travels
+      as deflate+base64url (old plain-base64 links dropped); shared
+      `$lib/{theme,hash,ThemeEditor}`; `/render/<data>` viewer route —
+      pan/zoom canvas, minimap, theme drawer, copy, bottom editor drawer
+      that rewrites the URL live.
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
+- [ ] Width work, both parked (2026-08-16): text discipline without an API
+      (sequence message/note wrap at 32 cols, compartment rows truncate at
+      40) on the `width-discipline` branch; the full `render(src,
+      {maxWidth})` reflow-to-target experiment (wrap steps, sequence
+      steps, rank wrapping, demo drag) on `reflow-maxwidth` — rule-based
+      routing degrades badly at heavy compression; revisit only with a
+      smarter router.
 
 ## [x] Review findings (2026-08-15)
 

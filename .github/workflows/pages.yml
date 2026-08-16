@@ -36,6 +36,10 @@ jobs:
           BASE_PATH: /lovely-mermaid
         run: bun run build
 
+      # Pure SPA: the build emits only the 404.html fallback. GitHub Pages
+      # serves it for unknown paths; '/' needs a real index.html.
+      - run: cp demo/build/404.html demo/build/index.html
+
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

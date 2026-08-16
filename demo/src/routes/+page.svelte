@@ -1,94 +1,17 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { base } from '$app/paths';
 	import { tick } from 'svelte';
-	import {
-		type AnsiTheme,
-		diagramKind,
-		type MermaidArt,
-		render,
-		type Role,
-		sourceBox,
-		toAnsi
-	} from 'lovely-mermaid';
+	import { type AnsiTheme, diagramKind, type MermaidArt, render, sourceBox, toAnsi } from 'lovely-mermaid';
 	import { AsciiArt } from 'svelte-asciiart';
-	// Bundled at build time: full box-drawing coverage (incl. ╭╮╰╯ arcs), so
-	// no per-glyph fallback to a mismatched font can misalign the line art.
-	import jbmRegular from 'jetbrains-mono/fonts/webfonts/JetBrainsMono-Regular.woff2';
-	import jbmBold from 'jetbrains-mono/fonts/webfonts/JetBrainsMono-Bold.woff2';
 	// Bundled verbatim, so the overlay can never drift from the repo copy.
 	import skillMd from '../../../skills/lovely-mermaid/SKILL.md?raw';
+	import { packHash, unpackHash } from '$lib/hash';
 	import { presets } from '$lib/presets';
+	import { BASE16, defaultThemes, ROLE_KEYS, sgrOf, TERM } from '$lib/theme';
+	import ThemeEditor from '$lib/ThemeEditor.svelte';
 
-	// The theme is a Role → ANSI-style mapping — lovely-mermaid's AnsiTheme made
-	// tangible, one default per terminal scheme: dim border, bold title, plain
-	// labels; yellow edges on dark, blue on light.
-	type RoleKey = Exclude<Role, 'none'>;
-	interface RoleStyle {
-		bold: boolean;
-		dim: boolean;
-		/** ANSI 256-color indices, or null for the terminal defaults. */
-		color: number | null;
-		bg: number | null;
-	}
-	type Slot = 'color' | 'bg';
-	const ROLE_KEYS: RoleKey[] = ['border', 'text', 'edge', 'edgeLabel', 'title'];
-	const defaultThemes: Record<'dark' | 'light', Record<RoleKey, RoleStyle>> = {
-		dark: {
-			border: { bold: false, dim: true, color: 14, bg: null },
-			text: { bold: false, dim: false, color: null, bg: null },
-			edge: { bold: false, dim: false, color: 12, bg: null },
-			edgeLabel: { bold: false, dim: false, color: 11, bg: null },
-			title: { bold: true, dim: false, color: null, bg: null }
-		},
-		light: {
-			border: { bold: false, dim: false, color: 4, bg: null },
-			text: { bold: false, dim: false, color: null, bg: null },
-			edge: { bold: false, dim: false, color: 4, bg: null },
-			edgeLabel: { bold: false, dim: false, color: 5, bg: null },
-			title: { bold: true, dim: false, color: null, bg: null }
-		}
-	};
-	function sgrOf(s: RoleStyle): string | null {
-		const p: string[] = [];
-		if (s.bold) p.push('1');
-		if (s.dim) p.push('2');
-		if (s.color !== null) {
-			if (s.color < 8) p.push(String(30 + s.color));
-			else if (s.color < 16) p.push(String(90 + s.color - 8));
-			else p.push(`38;5;${s.color}`);
-		}
-		if (s.bg !== null) {
-			if (s.bg < 8) p.push(String(40 + s.bg));
-			else if (s.bg < 16) p.push(String(100 + s.bg - 8));
-			else p.push(`48;5;${s.bg}`);
-		}
-		return p.length ? p.join(';') : null;
-	}
-
-	// The 16-color ANSI palette: fed to AsciiArt as its Theme and used for the
-	// picker swatches, followed by the xterm 6x6x6 cube and grayscale ramp.
-	// prettier-ignore
-	const BASE16 = [
-		'#000000', '#cd3131', '#00a600', '#b58900', '#0451a5', '#bc05bc', '#0598bc', '#a5a5a5',
-		'#666666', '#f14c4c', '#23d18b', '#f5f543', '#3b8eea', '#d670d6', '#29b8db', '#ffffff'
-	];
-	// Keep in sync with --term-bg/--term-fg in the styles below: the component
-	// resolves colors at parse time now, so dim must mix toward the actual
-	// panel background rather than a CSS var.
-	const TERM = {
-		dark: { bg: '#101014', fg: '#d4d4d4' },
-		light: { bg: '#f6f8fa', fg: '#24292f' }
-	};
-	function swatch(n: number): string {
-		if (n < 16) return BASE16[n];
-		const hex = (c: number) => c.toString(16).padStart(2, '0');
-		if (n >= 232) return `#${hex(8 + 10 * (n - 232)).repeat(3)}`;
-		const i = n - 16;
-		const v = (c: number) => (c === 0 ? 0 : 55 + 40 * c);
-		return `#${hex(v(Math.floor(i / 36)))}${hex(v(Math.floor(i / 6) % 6))}${hex(v(i % 6))}`;
-	}
-
-	let src = $state(initialSrc());
+	let src = $state(presets[0].src);
 	let cols = $state(60);
 	// Page theme (CSS vars on body, overridden by body.light). The terminal
 	// panel follows it, so switching also loads the matching role theme.
@@ -100,9 +23,7 @@
 	function setMode(d: boolean) {
 		dark = d;
 		theme = structuredClone(defaultThemes[d ? 'dark' : 'light']);
-		paletteFor = null;
 	}
-	let paletteFor = $state<{ c: RoleKey; slot: Slot } | null>(null);
 	let copied = $state(false);
 	let copiedTheme = $state(false);
 
@@ -175,31 +96,38 @@
 		window.scrollTo({ top: document.documentElement.scrollHeight - fromBottom });
 	}
 
-	// The source rides in the hash as base64url of its UTF-8 bytes — far more
-	// compact than percent-encoding, where every space and newline is 3 chars.
-	const b64 = (s: string) =>
-		btoa(String.fromCharCode(...new TextEncoder().encode(s)))
-			.replaceAll('+', '-')
-			.replaceAll('/', '_')
-			.replace(/=+$/, '');
-	function unB64(h: string): string {
-		const bin = atob(h.replaceAll('-', '+').replaceAll('_', '/'));
-		return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+	// The hash decodes async; hold the hash writer off until then so the
+	// default source cannot clobber it.
+	const hasHash = browser && location.hash.length > 1;
+	let hashLoaded = $state(!hasHash);
+	if (hasHash) {
+		unpackHash(location.hash.slice(1))
+			.then((s) => (src = s))
+			.catch(() => {
+				// junk hash from outside — keep the default
+			})
+			.finally(() => (hashLoaded = true));
 	}
 
-	function initialSrc(): string {
-		if (browser && location.hash.length > 1) {
-			try {
-				return unB64(location.hash.slice(1));
-			} catch {
-				// junk hash from outside — fall through to the default
-			}
-		}
-		return presets[0].src;
-	}
-
+	// Writes are async too: apply only the latest, or a slow compression of an
+	// old source could land after a newer one. `packed` also feeds the [view]
+	// link to the /render/<data> viewer.
+	let packed = $state('');
+	let writeSeq = 0;
 	$effect(() => {
-		history.replaceState(null, '', src === '' ? location.pathname : `#${b64(src)}`);
+		const s = src;
+		if (!hashLoaded) return;
+		const seq = ++writeSeq;
+		if (s === '') {
+			packed = '';
+			history.replaceState(null, '', location.pathname);
+			return;
+		}
+		packHash(s).then((h) => {
+			if (seq !== writeSeq) return;
+			packed = h;
+			history.replaceState(null, '', `#${h}`);
+		});
 	});
 
 	const rendered = $derived.by(() => {
@@ -272,39 +200,20 @@
 </script>
 
 <svelte:window
-	onclick={() => (paletteFor = null)}
 	onkeydown={(e) => {
-		if (e.key === 'Escape') {
-			paletteFor = null;
-			skillOpen = false;
-		}
+		if (e.key === 'Escape') skillOpen = false;
 	}}
 />
 
 <svelte:head>
 	<title>lovely-mermaid — Mermaid diagrams as Unicode art</title>
-	{@html `<style>
-		@font-face {
-			font-family: 'JetBrains Mono';
-			font-style: normal;
-			font-weight: 400;
-			src: url('${jbmRegular}') format('woff2');
-		}
-		@font-face {
-			font-family: 'JetBrains Mono';
-			font-style: normal;
-			font-weight: 700;
-			src: url('${jbmBold}') format('woff2');
-		}
-	</style>`}
 	<meta
 		name="description"
 		content="Render Mermaid diagrams as Unicode box-drawing art for terminals. No browser, no SVG — a self-contained layout engine that emits text."
 	/>
 </svelte:head>
 
-<!-- The unlimited viewport drops the page cap too: wide art gets the window. -->
-<main class:wide={cols === Infinity}>
+<main>
 	<!-- assistant turn: the pitch -->
 	<div class="assistant">
 		<div class="header-row">
@@ -328,65 +237,7 @@
 			<code>AnsiTheme</code>. Styling per role regenerates the SGR codes: the exact bytes a
 			terminal would get. Defaults are the library's <code>DEFAULT_THEME</code>.
 		</p>
-		<div class="clsrows">
-			{#each ROLE_KEYS as c (c)}
-				<div class="clsrow">
-					<span class="clsname">{c}</span>
-					<button
-						class="tog"
-						class:active={theme[c].bold}
-						onclick={() => (theme[c].bold = !theme[c].bold)}>bold</button
-					>
-					<button class="tog" class:active={theme[c].dim} onclick={() => (theme[c].dim = !theme[c].dim)}
-						>dim</button
-					>
-					{#each ['color', 'bg'] as const as slot (slot)}
-						<span class="slotname">{slot === 'color' ? 'fg' : 'bg'}</span>
-						<button
-							class="swatch"
-							class:auto={theme[c][slot] === null}
-							style={theme[c][slot] === null ? '' : `background:${swatch(theme[c][slot])}`}
-							title={theme[c][slot] === null ? 'terminal default' : `ANSI color ${theme[c][slot]}`}
-							onclick={(e) => {
-								e.stopPropagation();
-								paletteFor = paletteFor?.c === c && paletteFor.slot === slot ? null : { c, slot };
-							}}
-							>{theme[c][slot] === null ? '–' : ''}</button
-						>
-					{/each}
-					{#if paletteFor?.c === c}
-						{@const slot = paletteFor.slot}
-						{@const pick = (n: number | null) => (theme[c][slot] = n)}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="palette" onclick={(e) => e.stopPropagation()} role="presentation">
-							<!-- the xterm-256 chart in its natural structure: 16 basics,
-							     the 6x6x6 cube one red-level per row, the gray ramp -->
-							{#each [[null, ...Array.from({ length: 16 }, (_, n) => n)], ...Array.from({ length: 6 }, (_, r) => Array.from({ length: 36 }, (_, i) => 16 + r * 36 + i)), Array.from({ length: 24 }, (_, i) => 232 + i)] as prow}
-								<div class="prow">
-									{#each prow as n (n)}
-										{#if n === null}
-											<button class="swatch auto" title="terminal default" onclick={() => pick(null)}
-												>–</button
-											>
-										{:else}
-											<button
-												class="swatch"
-												class:selected={theme[c][slot] === n}
-												style="background:{swatch(n)}"
-												title="ANSI color {n}"
-												onclick={() => pick(n)}
-												aria-label="ANSI color {n}"
-											></button>
-										{/if}
-									{/each}
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			{/each}
-			<button class="ghost" onclick={() => setMode(dark)}>[reset]</button>
-		</div>
+		<ThemeEditor bind:theme onreset={() => setMode(dark)} />
 
 		<div class="themecode">
 			<pre>{themeCode}</pre>
@@ -407,7 +258,13 @@
 			{:else if shown}
 				<span class="err">render(src) → null</span>
 			{/if}
+			{#if shown}
+				<span class="dim">{rendered.ms < 0.05 ? '<0.1' : rendered.ms.toFixed(1)} ms</span>
+			{/if}
 			<span class="spacer"></span>
+			{#if packed !== ''}
+				<a class="ghost" href="{base}/render/{packed}" target="_blank" rel="noopener">[view]</a>
+			{/if}
 			<button class="ghost" onclick={stream} disabled={src.trim() === '' && streaming === null}>
 				[{streaming === null ? 'stream' : 'stop'}]
 			</button>
@@ -481,7 +338,6 @@
 		{#if shown}
 			<span>{shown.width}×{shown.plain.length} cells</span>
 		{/if}
-		<span>{rendered.ms < 0.05 ? '<0.1' : rendered.ms.toFixed(1)} ms</span>
 		<span class:warn={art !== null && art.warnings.length > 0}>
 			⚠ {art?.warnings.length ?? 0}
 		</span>
@@ -525,72 +381,12 @@
 	:global(html) {
 		scrollbar-gutter: stable;
 	}
-	/* the page palette; body.light re-skins everything, terminal panel
-	   (--term-bg/--term-fg) included */
-	:global(body) {
-		--term-bg: #101014;
-		--term-fg: #d4d4d4;
-		--bg: #101014;
-		--fg: #d4d4d4;
-		--dim: #666666;
-		--accent: #8abeb7;
-		--err: #cc6666;
-		--link: #81a2be;
-		--gold: #f0c674;
-		--warnc: #ffff00;
-		--cmd: #00d7ff;
-		--msg-bg: #343541;
-		--msg-fg: #d4d4d4;
-		--active-bg: #2a3a44;
-		--ok: #b5bd68;
-		--ghost: #808080;
-		--muted: #505050;
-		--custom-bg: #2d2838;
-		--purple: #9575cd;
-		--palette-bg: #1c1826;
-		--shadow: rgba(0, 0, 0, 0.55);
-		margin: 0;
-		background: var(--bg);
-		color: var(--fg);
-		font-family: 'JetBrains Mono', ui-monospace, monospace;
-		font-size: 0.85rem;
-		line-height: 1.45;
-		--ascii-font-family: 'JetBrains Mono', ui-monospace, monospace;
-	}
-	:global(body.light) {
-		--term-bg: #f6f8fa;
-		--term-fg: #24292f;
-		--bg: #ffffff;
-		--fg: #2b2b2b;
-		--dim: #767676;
-		--accent: #2f7a6e;
-		--err: #b3413e;
-		--link: #3567a8;
-		--gold: #9a6700;
-		--warnc: #9a6700;
-		--cmd: #0087af;
-		--msg-bg: #ececf1;
-		--msg-fg: #3f3f46;
-		--active-bg: #cfe3ec;
-		--ok: #4f7d21;
-		--ghost: #6e6e6e;
-		--muted: #c0c0c0;
-		--custom-bg: #efe9f7;
-		--purple: #6a4fa3;
-		--palette-bg: #f6f3fb;
-		--shadow: rgba(0, 0, 0, 0.2);
-	}
 
 	main {
-		max-width: 72rem;
-		margin: 0 auto;
 		padding: 1.2rem 1rem 2rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.9rem;
-	}
-	main.wide {
-		max-width: none;
 	}
 
 	.dim {
@@ -741,8 +537,12 @@
 		color: var(--ghost);
 		cursor: pointer;
 		padding: 0;
+		text-decoration: none;
 	}
 	.ghost:hover:enabled {
+		color: var(--cmd);
+	}
+	a.ghost:hover {
 		color: var(--cmd);
 	}
 	.ghost:disabled {
@@ -800,85 +600,6 @@
 	.note {
 		margin: 0.3rem 0 0.6rem;
 		max-width: 60rem;
-	}
-
-	.clsrows {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		align-items: flex-start;
-	}
-	.clsrow {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.5rem;
-		/* anchor for the palette overlay */
-		position: relative;
-	}
-	.clsname {
-		width: 6.5rem;
-		color: var(--fg);
-	}
-	.slotname {
-		color: var(--dim);
-		font-size: 0.75rem;
-	}
-	.tog {
-		font: inherit;
-		font-size: 0.75rem;
-		border: none;
-		background: none;
-		color: var(--dim);
-		cursor: pointer;
-		padding: 0;
-	}
-	.tog.active {
-		color: var(--ok);
-	}
-	.tog::before {
-		content: '[';
-		color: var(--muted);
-	}
-	.tog::after {
-		content: ']';
-		color: var(--muted);
-	}
-	.swatch {
-		width: 1.05rem;
-		height: 1.05rem;
-		padding: 0;
-		border: 1px solid var(--muted);
-		border-radius: 2px;
-		font-size: 0.7rem;
-		line-height: 1;
-		cursor: pointer;
-	}
-	.swatch.auto {
-		background: transparent;
-		color: var(--ghost);
-	}
-	.swatch.selected {
-		outline: 2px solid var(--cmd);
-	}
-	/* an overlay, so opening it never reflows the page */
-	.palette {
-		position: absolute;
-		top: calc(100% + 4px);
-		left: 0;
-		z-index: 20;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 0.45rem;
-		background: var(--palette-bg);
-		border: 1px solid var(--muted);
-		border-radius: 4px;
-		box-shadow: 0 6px 20px var(--shadow);
-	}
-	.prow {
-		display: flex;
-		gap: 2px;
 	}
 
 	.themecode {
