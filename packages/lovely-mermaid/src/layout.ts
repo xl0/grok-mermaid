@@ -1550,7 +1550,7 @@ function openCorridor(
   return null
 }
 
-function headGlyph(head: Head, arrow: string): string {
+export function headGlyph(head: Head, arrow: string): string {
   switch (head) {
     case 'circle':
       return 'o'
