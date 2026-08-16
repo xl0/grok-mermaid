@@ -2,11 +2,10 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { displayWidth } from 'lovely-ansi-svg';
-	import { type AnsiTheme, diagramKind, type MermaidArt, render, toAnsi } from 'lovely-mermaid';
-	import { AsciiArt } from 'svelte-asciiart';
+	import { diagramKind, type MermaidArt, render } from 'lovely-mermaid';
 	import AnsiCanvas from '$lib/AnsiCanvas.svelte';
 	import { packHash, unpackHash } from '$lib/hash';
-	import { BASE16, defaultThemes, ROLE_KEYS, sgrOf, TERM } from '$lib/theme';
+	import { defaultThemes } from '$lib/theme';
 	import ThemeEditor from '$lib/ThemeEditor.svelte';
 
 	// A bare /render opens empty with the editor up — a scratchpad; with data
@@ -52,16 +51,6 @@
 	}
 	let menuOpen = $state(false);
 
-	const ansiTheme = $derived(
-		Object.fromEntries(
-			ROLE_KEYS.map((c) => [c, sgrOf(theme[c])] as const).filter(([, v]) => v !== null)
-		) as AnsiTheme
-	);
-	const asciiTheme = $derived({
-		palette: BASE16,
-		foreground: TERM[dark ? 'dark' : 'light'].fg,
-		background: TERM[dark ? 'dark' : 'light'].bg
-	});
 
 	const baseArt = $derived(src === null ? null : render(src));
 
@@ -91,7 +80,6 @@
 		elkOn && elkArt === null && src !== null && diagramKind(src) === 'flowchart'
 	);
 	const art = $derived(elkPending ? null : elkOn && elkArt !== null ? elkArt : baseArt);
-	const ansi = $derived(art === null ? '' : toAnsi(art, ansiTheme).join('\n'));
 
 	// The official mermaid.js renderer as a second opinion; loaded on first
 	// use so the terminal path never pays for it. ELK layout is optional:
@@ -450,17 +438,9 @@
 					zoomAt(tx + px * s, ty + py * s, Math.exp(-e.deltaY * 0.0015));
 				}}
 			>
-				<div class="mini-art" style="transform: scale({k})">
-					<AsciiArt
-						text={ansi}
-						theme={asciiTheme}
-						cols={art.width}
-						margin={1}
-						cellSize={CELL}
-						style="width: auto; height: auto;"
-						aria-hidden="true"
-					/>
-				</div>
+				<!-- the same canvas renderer at a fixed camera: repaints only when
+				     the art or theme changes, never during pan/zoom -->
+				<AnsiCanvas {art} {theme} {dark} cell={CELL} s={k} tx={0} ty={0} />
 				<div
 					class="mini-view"
 					style="transform: translate({miniRect.x}px, {miniRect.y}px); width: {miniRect.w}px; height: {miniRect.h}px"
@@ -639,13 +619,6 @@
 	.minimap.off {
 		transform: translateY(calc(100% + 1.6rem));
 		pointer-events: none;
-	}
-	.mini-art {
-		position: absolute;
-		transform-origin: 0 0;
-		pointer-events: none;
-		/* its own layer: the viewport rect moving must not re-raster the art */
-		will-change: transform;
 	}
 	.mini-view {
 		position: absolute;
