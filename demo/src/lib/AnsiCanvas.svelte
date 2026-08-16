@@ -57,11 +57,14 @@
 	}
 
 	/** Resolved paint for one span: theme by role, classDefs overriding —
-	 * the same mapping `classSgr` applies for terminals. */
-	function styleFor(role: Role, classes: string[] | undefined): Omit<Cell, 'ch' | 'w'> {
+	 * the same mapping `classSgr` applies for terminals. A cell inside a
+	 * subgraph gets a per-depth background tint, the way mermaid shades
+	 * clusters; explicit backgrounds win over the tint. */
+	function styleFor(role: Role, classes: string[] | undefined, frame: number): Omit<Cell, 'ch' | 'w'> {
 		const base = role === 'none' ? null : theme[role as RoleKey];
 		let fg = base === null || base.color === null ? term.fg : swatch(base.color);
 		let bg = base === null || base.bg === null ? null : swatch(base.bg);
+		if (bg === null && frame > 0) bg = mix(term.bg, term.fg, Math.min(0.05 * frame, 0.2));
 		let bold = base?.bold ?? false;
 		if (base?.dim) fg = mix(fg, term.bg, 0.45);
 		const cls = resolveClassStyle(classes, art.classDefs);
@@ -80,7 +83,7 @@
 		return art.styled.map((row) => {
 			const cells: (Cell | null)[] = [];
 			for (const span of row) {
-				const paint = styleFor(span.role, span.classes);
+				const paint = styleFor(span.role, span.classes, span.frame ?? 0);
 				for (const ch of clusters(span.text)) {
 					const w = clusterWidth(ch);
 					if (w === 0) continue;

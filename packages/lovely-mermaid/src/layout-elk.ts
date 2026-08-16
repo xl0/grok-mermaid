@@ -165,6 +165,13 @@ export async function renderElk(
         canvas.addBits(x + w - 1, cy, U | D, 'border')
       }
       canvas.curStyle = STY_SOLID
+      // Interior cells carry the nesting depth; renderers tint per depth
+      // the way mermaid shades clusters. Nested frames stack via ++.
+      for (let cy = y + 1; cy < y + h - 1; cy++) {
+        for (let cx = x + 1; cx < x + w - 1; cx++) {
+          canvas.frame[canvas.idx(cx, cy)]++
+        }
+      }
       const title = graph.groups[gi].label
       if (title !== '') {
         drawTextOverEdges(canvas, ` ${fitLabel(title, sat(w, 4))} `, x + 1, y, 'text')

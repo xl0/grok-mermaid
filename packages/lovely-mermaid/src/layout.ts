@@ -1482,6 +1482,13 @@ function drawClassBox(canvas: Canvas, p: Placed, sections: string[][], mirrored 
 /** A subgraph frame: a titled box with a finished sub-canvas centred inside. */
 function drawFrame(canvas: Canvas, p: Placed, title: string, sub: Canvas, mirrored = false): void {
   drawBox(canvas, p, [], 'rect')
+  // Interior cells carry the nesting depth (see Span.frame); the blit below
+  // adds the sub-canvas's own frame depths on top.
+  for (let cy = p.y + 1; cy < p.y + p.h - 1; cy++) {
+    for (let cx = p.x + 1; cx < p.x + p.w - 1; cx++) {
+      canvas.frame[canvas.idx(cx, cy)]++
+    }
+  }
   // An unlabelled frame (a state `--` region) keeps its border unbroken.
   if (title !== '') {
     const t = fitLabel(title, sat(p.w, 4))

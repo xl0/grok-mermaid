@@ -19,6 +19,12 @@ export interface Span {
   text: string
   role: Role
   /**
+   * Subgraph nesting depth of these cells: 1 inside a frame, 2 inside a
+   * nested frame, and so on. Absent outside any frame. Renderers may tint
+   * the background per depth, the way mermaid shades clusters.
+   */
+  frame?: number
+  /**
    * Author-assigned class names of the node these cells belong to, from a
    * `:::name` shorthand or a `class A,B name` statement. The renderer never
    * interprets them — pair with `MermaidArt.classDefs` to style. Absent on

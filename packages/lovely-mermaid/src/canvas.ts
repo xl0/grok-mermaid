@@ -38,6 +38,8 @@ export class Canvas {
   mask: Uint8Array
   style: Uint8Array
   occupied: Uint8Array
+  /** Subgraph nesting depth per cell; see `Span.frame`. */
+  frame: Uint8Array
   curStyle: number = STY_SOLID
   /** Author classes stamped on cells painted while set, like `curStyle`. */
   curTag: string | undefined
@@ -55,6 +57,7 @@ export class Canvas {
     this.mask = new Uint8Array(n)
     this.style = new Uint8Array(n)
     this.occupied = new Uint8Array(n)
+    this.frame = new Uint8Array(n)
   }
 
   idx(x: number, y: number): number {
@@ -104,6 +107,8 @@ export class Canvas {
         this.tag[di] = sub.tag[si]
         this.href[di] = sub.href[si]
         this.style[di] = sub.style[si]
+        // Additive: the parent frame already stamped its own depth here.
+        this.frame[di] += sub.frame[si]
         this.occupied[di] = 1
       }
     }
@@ -186,6 +191,7 @@ export class Canvas {
         ;[this.role[i], this.role[j]] = [this.role[j], this.role[i]]
         ;[this.tag[i], this.tag[j]] = [this.tag[j], this.tag[i]]
         ;[this.href[i], this.href[j]] = [this.href[j], this.href[i]]
+        ;[this.frame[i], this.frame[j]] = [this.frame[j], this.frame[i]]
       }
     }
     for (let i = 0; i < this.ch.length; i++) {
@@ -207,6 +213,7 @@ export class Canvas {
         ;[this.role[i], this.role[j]] = [this.role[j], this.role[i]]
         ;[this.tag[i], this.tag[j]] = [this.tag[j], this.tag[i]]
         ;[this.href[i], this.href[j]] = [this.href[j], this.href[i]]
+        ;[this.frame[i], this.frame[j]] = [this.frame[j], this.frame[i]]
       }
     }
     for (let i = 0; i < this.ch.length; i++) {
@@ -245,11 +252,18 @@ export class Canvas {
       }
       width = Math.max(width, last)
       const spans: Span[] = []
-      const push = (text: string, role: Role, tag: string | undefined, href?: string): void => {
+      const push = (
+        text: string,
+        role: Role,
+        tag: string | undefined,
+        href: string | undefined,
+        frame: number,
+      ): void => {
         if (text === '') return
         const span: Span = { text, role }
         if (tag !== undefined) span.classes = tag.split(' ')
         if (href !== undefined) span.href = href
+        if (frame > 0) span.frame = frame
         spans.push(span)
       }
       let plainRow = ''
@@ -257,24 +271,29 @@ export class Canvas {
       let runRole: Role = 'none'
       let runTag: string | undefined
       let runHref: string | undefined
+      let runFrame = 0
       for (let x = 0; x < last; x++) {
         const i = this.idx(x, y)
         const c = this.ch[i]
         if (c === CONT) continue
         plainRow += c
         if (
-          (this.role[i] !== runRole || this.tag[i] !== runTag || this.href[i] !== runHref) &&
+          (this.role[i] !== runRole ||
+            this.tag[i] !== runTag ||
+            this.href[i] !== runHref ||
+            this.frame[i] !== runFrame) &&
           run !== ''
         ) {
-          push(run, runRole, runTag, runHref)
+          push(run, runRole, runTag, runHref, runFrame)
           run = ''
         }
         runRole = this.role[i]
         runTag = this.tag[i]
         runHref = this.href[i]
+        runFrame = this.frame[i]
         run += c
       }
-      push(run, runRole, runTag, runHref)
+      push(run, runRole, runTag, runHref, runFrame)
       styled.push(spans)
       // Only ASCII spaces, which is all a blank cell ever holds. Trimming `\s`
       // would eat a trailing NBSP that `styled` keeps, desyncing the two.
