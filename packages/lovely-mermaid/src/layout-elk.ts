@@ -13,13 +13,13 @@
 
 // The bundled build: elkjs's node entry requires the `web-worker` package,
 // which browser bundlers cannot resolve; the bundle inlines its glue.
-import type { ElkExtendedEdge, ElkLabel, ElkNode } from 'elkjs'
+import type { ElkExtendedEdge, ElkNode } from 'elkjs'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import { Canvas, D, drawTextOverEdges, L, R, STY_DOT, STY_SOLID, STY_THICK, U } from './canvas.ts'
 import { parseGraph } from './diagrams/flowchart.ts'
 import type { Edge } from './graph.ts'
 import { fitLabel, MAX_LABEL, MAX_LINES, stripControls, WRAP_WIDTH, wrapLabel } from './labels.ts'
-import { drawBox, half, headGlyph, MAX_CANVAS_CELLS, sat } from './layout.ts'
+import { drawBox, half, headGlyph, MAX_CANVAS_CELLS, placeLabel, sat } from './layout.ts'
 import type { MermaidArt } from './types.ts'
 import { stringWidth } from './width.ts'
 
@@ -97,22 +97,14 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
     const gi = proxy.get(ni)
     return gi === undefined ? `n${ni}` : `g${gi}`
   }
-  const edges: ElkExtendedEdge[] = graph.edges.map((e, i) => {
-    const labels: ElkLabel[] = []
-    const text = [e.cardFrom ?? '', e.label ?? '', e.cardTo ?? ''].filter(Boolean).join(' ')
-    if (text !== '') {
-      // Inline: the label sits in the edge's own line (drawTextOverEdges
-      // interrupts the stroke), costing no corridor width beside it.
-      const t = fitLabel(text, MAX_LABEL)
-      labels.push({
-        text: t,
-        width: stringWidth(t) + 2,
-        height: 1,
-        layoutOptions: { 'elk.edgeLabels.inline': 'true' },
-      })
-    }
-    return { id: `e${i}`, sources: [elkId(e.from)], targets: [elkId(e.to)], labels }
-  })
+  // ELK never sees the labels: reserving corridor space beside long
+  // vertical runs is what spread the diagram. Labels are placed after
+  // routing, set into a horizontal run of their own edge.
+  const edges: ElkExtendedEdge[] = graph.edges.map((e, i) => ({
+    id: `e${i}`,
+    sources: [elkId(e.from)],
+    targets: [elkId(e.to)],
+  }))
 
   const root: ElkNode = {
     id: 'root',
@@ -198,7 +190,7 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
   origins.set('root', { x: 0, y: 0 })
   for (const c of laid.children ?? []) collectOrigins(c, 0, 0)
 
-  const drawEdge = (e: ElkExtendedEdge, edge: Edge): void => {
+  const drawEdge = (e: ElkExtendedEdge, edge: Edge): { x: number; y: number }[] => {
     const base = origins.get((e as { container?: string }).container ?? 'root') ?? { x: 0, y: 0 }
     canvas.curStyle =
       edge.line === 'dotted' ? STY_DOT : edge.line === 'thick' ? STY_THICK : STY_SOLID
@@ -248,14 +240,73 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
       }
       if (edge.headFrom !== 'none') head(chain[1], chain[0], (a) => headGlyph(edge.headFrom, a))
     }
-    for (const l of e.labels ?? []) {
-      if (l.text !== undefined && l.x !== undefined && l.y !== undefined) {
-        drawTextOverEdges(canvas, l.text, r(l.x + base.x), r(l.y + base.y), 'edgeLabel')
+    return chain
+  }
+  const chains: { x: number; y: number }[][] = []
+  laid.edges?.forEach((e, i) => {
+    chains[i] = drawEdge(e, graph.edges[i])
+  })
+
+  // Labels go onto a horizontal run of their own edge, once every edge has
+  // landed: centred on the longest run, slid to a stretch free of crossing
+  // verticals and other labels, set into the line (`── label ──`). Falls
+  // back to shorter runs, then to sitting beside the longest vertical run.
+  const placeOnRun = (text: string, y: number, lo: number, hi: number): boolean => {
+    const tw = stringWidth(text)
+    const lastStart = hi - 1 - tw
+    if (lastStart < lo + 1 || y < 0 || y >= canvas.h) return false
+    const clear = (start: number): boolean => {
+      for (let x = start; x < start + tw; x++) {
+        const ci = canvas.idx(x, y)
+        if (canvas.occupied[ci] === 1) return false
+        if ((canvas.mask[ci] & (U | D)) !== 0) return false
+        if (canvas.ch[ci] !== ' ') return false
+      }
+      return true
+    }
+    const mid = Math.min(Math.max(half(lo + hi) - half(tw), lo + 1), lastStart)
+    for (let d = 0; ; d++) {
+      const l = mid - d
+      const rr = mid + d
+      if (l < lo + 1 && rr > lastStart) return false
+      if (l >= lo + 1 && clear(l)) {
+        drawTextOverEdges(canvas, text, l, y, 'edgeLabel')
+        return true
+      }
+      if (rr <= lastStart && clear(rr)) {
+        drawTextOverEdges(canvas, text, rr, y, 'edgeLabel')
+        return true
       }
     }
   }
-  laid.edges?.forEach((e, i) => {
-    drawEdge(e, graph.edges[i])
+  graph.edges.forEach((edge, i) => {
+    const text = [edge.cardFrom ?? '', edge.label ?? '', edge.cardTo ?? '']
+      .filter(Boolean)
+      .join(' ')
+    const chain = chains[i]
+    if (text === '' || chain === undefined || chain.length < 2) return
+    const t = ` ${fitLabel(text, MAX_LABEL)} `
+    const hRuns: { y: number; lo: number; hi: number; len: number }[] = []
+    let longestV: { x: number; midY: number; len: number } | null = null
+    for (let j = 0; j + 1 < chain.length; j++) {
+      const a = chain[j]
+      const b = chain[j + 1]
+      if (a.y === b.y) {
+        const lo = Math.min(a.x, b.x)
+        const hi = Math.max(a.x, b.x)
+        hRuns.push({ y: a.y, lo, hi, len: hi - lo })
+      } else {
+        const len = Math.abs(b.y - a.y)
+        if (longestV === null || len > longestV.len) {
+          longestV = { x: a.x, midY: half(a.y + b.y), len }
+        }
+      }
+    }
+    hRuns.sort((a, b) => b.len - a.len)
+    for (const run of hRuns) {
+      if (placeOnRun(t, run.y, run.lo, run.hi)) return
+    }
+    if (longestV !== null) placeLabel(canvas, text, longestV.midY, longestV.x + 2)
   })
 
   canvas.finalizeMask()

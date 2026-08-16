@@ -1963,7 +1963,7 @@ function placeLabelSided(canvas: Canvas, label: string, row: number, x: number):
 }
 
 /** Write an edge label, stopping at the first cell already occupied. */
-function placeLabel(canvas: Canvas, label: string, row: number, startX: number): void {
+export function placeLabel(canvas: Canvas, label: string, row: number, startX: number): void {
   if (row >= canvas.h) return
   const text = fitLabel(label, MAX_LABEL)
   let x = startX
