@@ -91,9 +91,18 @@ export function parseGraph(src: string): Graph | null {
         if (target) hrefs.push(target)
         continue
       }
+      case 'direction': {
+        // A subgraph's own layout direction. Flipping values (BT/RL) are
+        // ignored: the sub-canvas cannot flip inside an unflipped parent
+        // without mirroring its text. Top-level `direction` is not mermaid.
+        const tok = asciiLower(words(st)[1] ?? '')
+        if (graph.curGroup !== null && ['tb', 'td', 'lr'].includes(tok)) {
+          graph.groups[graph.curGroup].dir = tok === 'lr' ? 'right' : 'down'
+        }
+        continue
+      }
       case 'style':
       case 'linkstyle':
-      case 'direction':
         continue
       default:
         break

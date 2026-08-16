@@ -109,12 +109,31 @@ export class Canvas {
     }
   }
 
-  /** Add direction bits even to an occupied cell, so an edge can meet a border. */
+  /** Add direction bits even to an occupied cell, so an edge can meet a border.
+   * A cell holding a finished grid glyph (a blitted border — `blit` drops mask
+   * bits) merges the bits into the glyph directly. */
   junction(x: number, y: number, bits: number): void {
     if (x >= this.w || y >= this.h) return
     const i = this.idx(x, y)
     this.mask[i] |= bits
     if (this.role[i] !== 'border') this.role[i] = 'edge'
+    const known = GLYPH_BITS[this.ch[i]]
+    if (known !== undefined) {
+      const c = maskChar(known | this.mask[i])
+      this.ch[i] =
+        this.style[i] === STY_DOT ? dottedChar(c) : this.style[i] === STY_THICK ? thickChar(c) : c
+    }
+  }
+
+  /** Whether an edge may cross this cell: blank or mask (resolved later), a
+   * finished grid glyph (merged by `junction`), or a double border (resolved
+   * by `doubleTee`). Text cells — a frame title, spaces included — refuse. */
+  canPierce(x: number, y: number): boolean {
+    if (x >= this.w || y >= this.h) return false
+    const i = this.idx(x, y)
+    if (this.role[i] === 'text' || this.role[i] === 'edgeLabel') return false
+    const c = this.ch[i]
+    return c === ' ' || GLYPH_BITS[c] !== undefined || c === '═' || c === '║'
   }
 
   segV(x: number, y0: number, y1: number): void {
@@ -360,6 +379,26 @@ function doubleTee(c: string, mask: number): string {
     if (mask & L) return '╢'
   }
   return c
+}
+
+/** Direction bits of finished single-line glyphs, for merging a junction
+ * into a blitted border. Rounded corners stay out: merging would square them. */
+const GLYPH_BITS: Record<string, number> = {
+  '│': U | D,
+  '─': L | R,
+  '┌': D | R,
+  '┐': D | L,
+  '└': U | R,
+  '┘': U | L,
+  '├': U | D | R,
+  '┤': U | D | L,
+  '┬': D | L | R,
+  '┴': U | L | R,
+  '┼': U | D | L | R,
+  '╌': L | R,
+  '╎': U | D,
+  '━': L | R,
+  '┃': U | D,
 }
 
 const DOTTED: Record<string, string> = { '─': '╌', '│': '╎' }

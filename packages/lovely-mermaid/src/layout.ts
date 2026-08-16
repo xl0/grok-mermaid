@@ -23,7 +23,7 @@ import {
   STY_THICK,
   U,
 } from './canvas.ts'
-import type { Edge, Head, Node, Shape } from './graph.ts'
+import type { Dir, Edge, Head, Node, Shape } from './graph.ts'
 import { Graph } from './graph.ts'
 import { fitLabel, MAX_LABEL, MAX_LINES, WRAP_WIDTH, wrapLabel } from './labels.ts'
 import { measured, stringWidth } from './width.ts'
@@ -90,10 +90,8 @@ interface RoutePlan {
   rankStart: number[]
   /** Bus track offset per edge. */
   edgeBus: number[]
-  /** Coordinate of the first lane track. */
-  laneBase: number
-  /** Lane track offset per edge. */
-  edgeLane: number[]
+  /** Absolute lane coordinate per laned edge (x in TD, y in LR). */
+  edgeLaneX: number[]
   /** Reserved corridor row above rank r for laned skip approaches, or -1. */
   skipApproach: number[]
   /** Skip edges: the column entering the target's top, or -1. */
@@ -458,6 +456,8 @@ function placeTd(
   sizes: NodeSizes,
   graph: Graph,
   placed: Placed[],
+  edgeSide: ('left' | 'right')[],
+  edgeInner?: (EdgeInner | undefined)[],
 ): RoutePlan {
   const centers = assignPositions(byRank, sizes.layW, GAP_X, graph.edges, ranks)
 
@@ -598,14 +598,44 @@ function placeTd(
         edge: i,
       })
     })
+    // An inner-attached endpoint can move an edge's attach column anywhere
+    // on its frame after placement, so reserve a track wide enough for any
+    // outcome — even for an edge the plan saw as straight.
+    if (edgeInner !== undefined) {
+      graph.edges.forEach((e, i) => {
+        if (edgeInner[i] === undefined || e.from === e.to) return
+        const inBand =
+          ((ranks[e.to] === ranks[e.from] + 1 || isSkip(e)) && ranks[e.from] === r) ||
+          (isAdjacentBack(ranks, e) && ranks[e.to] === r)
+        if (!inBand) return
+        const span = {
+          start: Math.min(boxL(e.from), boxL(e.to)),
+          end: Math.max(boxR(e.from), boxR(e.to)),
+          from: e.from,
+          to: e.to,
+          edge: i,
+        }
+        const at = spans.findIndex((s) => s.edge === i)
+        if (at === -1) spans.push(span)
+        else spans[at] = span
+      })
+    }
     if (spans.length === 0) continue
     // Back-edge arrowheads sit on the first band row, back buses right under
     // it, forward buses below those: with the attach columns offset right of
     // centre, a reciprocal pair then runs as two parallel staircases whose
     // verticals fall outside each other's horizontal spans — no crossings.
+    // A departing `<-->` head also wants that spare row: its glyph sits just
+    // below the box, and a bus turning there would erase the corner.
     const back = spans.filter((s) => isAdjacentBack(ranks, graph.edges[s.edge]))
     const fwd = spans.filter((s) => !isAdjacentBack(ranks, graph.edges[s.edge]))
-    const base = graph.edges.some((e) => isAdjacentBack(ranks, e) && ranks[e.to] === r) ? 1 : 0
+    const base = graph.edges.some(
+      (e) =>
+        (isAdjacentBack(ranks, e) && ranks[e.to] === r) ||
+        (e.from !== e.to && e.headFrom !== 'none' && ranks[e.from] === r && ranks[e.to] > r),
+    )
+      ? 1
+      : 0
     const b = assignTracks(back)
     for (const [idx, slot] of b.assigned) edgeBus[idx] = base + slot
     const f = assignTracks(fwd)
@@ -659,9 +689,34 @@ function placeTd(
     }
   })
 
+  // Lanes split by side. Left lanes sit before the diagram — lanes, then a
+  // strip for their labels, then a gap — so everything placed shifts right.
+  const lanes = laneSpans(graph, ranks, placed, true).filter((s) => !edgeStraight[s.edge])
+  const lanesL = lanes.filter((s) => edgeSide[s.edge] === 'left')
+  const lanesR = lanes.filter((s) => edgeSide[s.edge] === 'right')
+  const edgeLaneX = new Array<number>(graph.edges.length).fill(0)
+  if (lanesL.length > 0) {
+    const { assigned, count } = assignTracks(lanesL, true)
+    let leftPad = 0
+    for (const s of lanesL) {
+      const text = edgeText(graph.edges[s.edge])
+      if (text !== null) leftPad = Math.max(leftPad, Math.min(stringWidth(text), MAX_LABEL))
+    }
+    const shift = count + leftPad + 1
+    for (const p of placed) {
+      p.x += shift
+      p.cx += shift
+    }
+    for (let i = 0; i < edgeEntryX.length; i++) if (edgeEntryX[i] !== -1) edgeEntryX[i] += shift
+    for (let i = 0; i < fwdEntryX.length; i++) if (fwdEntryX[i] !== -1) fwdEntryX[i] += shift
+    diagramW += shift
+    // Shortest lane innermost: slot 0 lands nearest the diagram.
+    for (const [idx, slot] of assigned) edgeLaneX[idx] = count - 1 - slot
+  }
+
   let contentW = diagramW
-  for (const e of graph.edges) {
-    if (e.from === e.to) continue
+  graph.edges.forEach((e, i) => {
+    if (e.from === e.to) return
     if (ranks[e.to] === ranks[e.from] + 1) {
       const parts = [e.label, e.cardTo].filter((part) => part != null) as string[]
       for (const part of parts) {
@@ -677,23 +732,20 @@ function placeTd(
         // routeBackAdjacent starts the label at tx + 1 with tx up to cx + 2.
         contentW = Math.max(contentW, placed[e.to].cx + 3 + Math.min(stringWidth(text), MAX_LABEL))
       }
-    } else {
+    } else if (edgeSide[i] !== 'left' || edgeStraight[i]) {
+      // A left-laned label lives in the left strip already paid for above.
       const text = edgeText(e)
       if (text !== null) {
         contentW = Math.max(contentW, diagramW + Math.min(stringWidth(text), MAX_LABEL) + 1)
       }
     }
-  }
+  })
 
-  const edgeLane = new Array<number>(graph.edges.length).fill(0)
-  const lanes = laneSpans(graph, ranks, placed, true).filter((s) => !edgeStraight[s.edge])
   let canvasW = contentW
-  let laneBase = 0
-  if (lanes.length > 0) {
-    const { assigned, count } = assignTracks(lanes, true)
-    for (const [idx, slot] of assigned) edgeLane[idx] = slot
+  if (lanesR.length > 0) {
+    const { assigned, count } = assignTracks(lanesR, true)
+    for (const [idx, slot] of assigned) edgeLaneX[idx] = contentW + 1 + slot
     canvasW = contentW + 1 + count
-    laneBase = contentW + 1
   }
 
   return {
@@ -702,8 +754,7 @@ function placeTd(
     bandEnd,
     rankStart,
     edgeBus,
-    laneBase,
-    edgeLane,
+    edgeLaneX,
     skipApproach,
     edgeEntryX,
     edgeStraight,
@@ -719,6 +770,7 @@ function placeLr(
   sizes: NodeSizes,
   graph: Graph,
   placed: Placed[],
+  edgeInner?: (EdgeInner | undefined)[],
 ): RoutePlan {
   const colW = byRank.map((row) =>
     row.length === 0 ? 0 : Math.max(...row.map((i) => sizes.boxW[i])),
@@ -785,10 +837,40 @@ function placeLr(
         edge: i,
       })
     })
+    // Inner attachment can move an edge's row after placement; reserve a
+    // track covering both boxes' full vertical extents.
+    if (edgeInner !== undefined) {
+      const boxT = (j: number): number => sat(centers[j], half(sizes.boxH[j] + sizes.extraH[j]))
+      graph.edges.forEach((e, i) => {
+        if (edgeInner[i] === undefined || e.from === e.to) return
+        if (ranks[e.from] !== r || (ranks[e.to] !== r + 1 && !(isSkip(e) && edgeStraight[i])))
+          return
+        const span = {
+          start: Math.min(boxT(e.from), boxT(e.to)),
+          end: Math.max(
+            boxT(e.from) + sizes.boxH[e.from] + sizes.extraH[e.from],
+            boxT(e.to) + sizes.boxH[e.to] + sizes.extraH[e.to],
+          ),
+          from: e.from,
+          to: e.to,
+          edge: i,
+        }
+        const at = spans.findIndex((s) => s.edge === i)
+        if (at === -1) spans.push(span)
+        else spans[at] = span
+      })
+    }
     if (spans.length === 0) continue
+    // A departing `<-->` head sits just right of the box; keep the first bus
+    // column off it so a turn there does not erase the head.
+    const base = graph.edges.some(
+      (e) => e.from !== e.to && e.headFrom !== 'none' && ranks[e.from] === r && ranks[e.to] > r,
+    )
+      ? 1
+      : 0
     const { assigned, count } = assignTracks(spans)
-    for (const [idx, slot] of assigned) edgeBus[idx] = slot
-    busTracks[r] = count
+    for (const [idx, slot] of assigned) edgeBus[idx] = base + slot
+    busTracks[r] = base + count
   }
 
   const rankX = new Array<number>(maxRank + 1).fill(0)
@@ -817,15 +899,13 @@ function placeLr(
     }
   })
 
-  const edgeLane = new Array<number>(graph.edges.length).fill(0)
+  const edgeLaneX = new Array<number>(graph.edges.length).fill(0)
   const lanes = laneSpans(graph, ranks, placed, false).filter((s) => !edgeStraight[s.edge])
   let canvasH = diagramH
-  let laneBase = 0
   if (lanes.length > 0) {
     const { assigned, count } = assignTracks(lanes, true)
-    for (const [idx, slot] of assigned) edgeLane[idx] = slot
+    for (const [idx, slot] of assigned) edgeLaneX[idx] = diagramH + 1 + slot
     canvasH = diagramH + 1 + count
-    laneBase = diagramH + 1
   }
 
   return {
@@ -834,8 +914,7 @@ function placeLr(
     bandEnd,
     rankStart,
     edgeBus,
-    laneBase,
-    edgeLane,
+    edgeLaneX,
     skipApproach: new Array<number>(maxRank + 1).fill(-1),
     edgeEntryX: new Array<number>(graph.edges.length).fill(-1),
     edgeStraight,
@@ -846,8 +925,26 @@ function placeLr(
 
 // -------------------------------------------------------------------- canvas
 
-/** Rank, place, draw and route a graph onto a fresh canvas. */
-export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
+/** Inner-node attachment for an edge lifted onto a frame: the true
+ * endpoint's rect in the frame's sub-canvas coordinates. */
+export interface EdgeInner {
+  from?: Placed
+  to?: Placed
+}
+
+/**
+ * Rank, place, draw and route a graph onto a fresh canvas.
+ *
+ * `edgeInner` (parallel to `graph.edges`) lets an edge lifted onto a frame
+ * node attach to the true node inside it when a blank corridor allows;
+ * `outPlaced` receives the final node rects for the caller.
+ */
+export function layoutCanvas(
+  graph: Graph,
+  extras: NodeExtra[],
+  edgeInner?: (EdgeInner | undefined)[],
+  outPlaced?: Placed[],
+): CanvasResult {
   const n = graph.nodes.length
   if (n === 0) return null
 
@@ -877,19 +974,29 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   for (let idx = 0; idx < ranks.length; idx++) byRank[ranks[idx]].push(idx)
   orderRanks(byRank, graph.edges, ranks)
 
-  // Lane edges exit through the rank's trailing side toward the lane strip;
-  // their endpoints go last within the rank, or whatever the ordering put
-  // beyond them would sit in that corridor and be cut through.
+  // Lane edges exit toward their lane strip's side; the endpoints order
+  // first (left) / last (right) within their ranks, or whatever the ordering
+  // put beyond them would sit in that corridor and be cut through. Vertical
+  // layouts lane on both sides — an edge takes the side its endpoints lean
+  // toward; LR keeps its single bottom strip.
   const vertical = graph.dir === 'down' || graph.dir === 'up'
-  const inLane = new Array<boolean>(graph.nodes.length).fill(false)
-  for (const e of graph.edges) {
-    if (vertical && isAdjacentBack(ranks, e)) continue
-    if (e.from !== e.to && ranks[e.to] !== ranks[e.from] + 1) {
-      inLane[e.from] = true
-      inLane[e.to] = true
-    }
+  const edgeSide: ('left' | 'right')[] = graph.edges.map(() => 'right')
+  const frac = new Array<number>(graph.nodes.length).fill(0.5)
+  for (const row of byRank) {
+    row.forEach((v, i) => {
+      frac[v] = row.length <= 1 ? 0.5 : i / (row.length - 1)
+    })
   }
-  for (const row of byRank) row.sort((a, b) => Number(inLane[a]) - Number(inLane[b]))
+  // A node serving lanes on both sides keeps the right corridor: right wins.
+  const laneKey = new Array<number>(graph.nodes.length).fill(0)
+  graph.edges.forEach((e, i) => {
+    if (e.from === e.to || ranks[e.to] === ranks[e.from] + 1) return
+    if (vertical && isAdjacentBack(ranks, e)) return
+    const left = vertical && (frac[e.from] + frac[e.to]) / 2 < 0.5
+    if (left) edgeSide[i] = 'left'
+    for (const n of [e.from, e.to]) laneKey[n] = left ? laneKey[n] || -1 : 1
+  })
+  for (const row of byRank) row.sort((a, b) => laneKey[a] - laneKey[b])
 
   const wrapped = graph.nodes.map((node) => wrapLabel(node.label, WRAP_WIDTH, MAX_LINES))
   const widest = (lines: string[]): number =>
@@ -897,7 +1004,10 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
 
   const boxW = extras.map((extra, i) => {
     if (extra.kind === 'frame') {
-      return Math.max(extra.sub.w + 2, stringWidth(fitLabel(graph.nodes[i].label, WRAP_WIDTH)) + 4)
+      return Math.max(
+        extra.sub.w + 2 + 2 * PAD,
+        stringWidth(fitLabel(graph.nodes[i].label, WRAP_WIDTH)) + 4,
+      )
     }
     if (extra.kind === 'compartments') return widest(extra.sections.flat()) + 2 * PAD + 2
     return widest(wrapped[i]) + 2 * PAD + 2
@@ -944,8 +1054,8 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   }))
 
   const plan = vertical
-    ? placeTd(ranks, maxRank, byRank, sizes, graph, placed)
-    : placeLr(ranks, maxRank, byRank, sizes, graph, placed)
+    ? placeTd(ranks, maxRank, byRank, sizes, graph, placed, edgeSide, edgeInner)
+    : placeLr(ranks, maxRank, byRank, sizes, graph, placed, edgeInner)
 
   if (plan.canvasW * plan.canvasH > MAX_CANVAS_CELLS) return null
 
@@ -966,6 +1076,27 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   canvas.curTag = undefined
   canvas.curHref = undefined
 
+  // A frame endpoint with a known inner-node rect attaches to the node
+  // itself when a blank corridor runs between it and the frame border.
+  const innerAbs = (frameIdx: number, r: Placed): Placed | null => {
+    const p = placed[frameIdx]
+    const extra = extras[frameIdx]
+    if (extra.kind !== 'frame') return null
+    const ox = p.x + 1 + half(p.w - 2 - extra.sub.w)
+    const oy = p.y + 1 + half(p.h - 2 - extra.sub.h)
+    return { ...r, x: r.x + ox, y: r.y + oy, cx: r.cx + ox, cy: r.cy + oy, rank: p.rank }
+  }
+  const attach = (frameIdx: number, r: Placed | undefined, side: CorridorSide): Placed | null => {
+    if (r === undefined) return null
+    const abs = innerAbs(frameIdx, r)
+    if (abs === null) return null
+    const at = openCorridor(canvas, placed[frameIdx], abs, side)
+    if (at === null) return null
+    if (side === 'top' || side === 'bottom') abs.cx = at
+    else abs.cy = at
+    return abs
+  }
+
   const laneLabels: LaneLabel[] = []
   graph.edges.forEach((edge, i) => {
     canvas.curStyle =
@@ -974,27 +1105,48 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
       routeSelf(canvas, placed[edge.from], edge)
       return
     }
-    const from = placed[edge.from]
-    const to = placed[edge.to]
+    let from = placed[edge.from]
+    let to = placed[edge.to]
     const adjacent = to.rank === from.rank + 1
     const adjacentBack = from.rank === to.rank + 1
     // A back edge crosses the band below its *target's* rank.
     const bus = plan.bandEnd[(adjacentBack ? to : from).rank] + plan.edgeBus[i]
-    const lane = plan.laneBase + plan.edgeLane[i]
+    const lane = plan.edgeLaneX[i]
+    // Which frame side each endpoint's corridor must pierce for this route.
+    const left = edgeSide[i] === 'left'
+    let fromSide: CorridorSide
+    let toSide: CorridorSide
     if (vertical) {
-      if (adjacent)
-        routeForward(canvas, from, to, edge, bus, plan.fwdEntryX[edge.to], plan.edgeLabelLeft[i])
+      if (adjacent || to.rank > from.rank) [fromSide, toSide] = ['bottom', 'top']
+      else if (adjacentBack) [fromSide, toSide] = ['top', 'bottom']
+      else fromSide = toSide = left ? 'left' : 'right'
+    } else if (adjacent || (to.rank > from.rank && plan.edgeStraight[i])) {
+      ;[fromSide, toSide] = ['right', 'left']
+    } else {
+      fromSide = toSide = 'bottom'
+    }
+    const inner = edgeInner?.[i]
+    const innerFrom = inner?.from !== undefined ? attach(edge.from, inner.from, fromSide) : null
+    const innerTo = inner?.to !== undefined ? attach(edge.to, inner.to, toSide) : null
+    if (innerFrom !== null) from = innerFrom
+    if (innerTo !== null) to = innerTo
+    // Frame-top entry slots assume the frame box; an inner target reverts to
+    // its own centre column.
+    const fwdEntry = innerTo !== null ? -1 : plan.fwdEntryX[edge.to]
+    const skipEntry = innerTo !== null ? to.cx : plan.edgeEntryX[i]
+    if (vertical) {
+      if (adjacent) routeForward(canvas, from, to, edge, bus, fwdEntry, plan.edgeLabelLeft[i])
       else if (adjacentBack) routeBackAdjacent(canvas, from, to, edge, bus)
       else if (to.rank > from.rank) {
         routeSkip(canvas, from, to, edge, {
           laneX: lane,
-          entryX: plan.edgeEntryX[i],
+          entryX: skipEntry,
           busY: bus,
           approachY: plan.skipApproach[to.rank],
           straight: plan.edgeStraight[i],
           labelLeft: plan.edgeLabelLeft[i],
         })
-      } else routeBack(canvas, from, to, edge, lane)
+      } else routeBack(canvas, from, to, edge, lane, left)
     } else if (adjacent) {
       routeForwardLr(canvas, from, to, edge, bus)
     } else if (to.rank > from.rank && plan.edgeStraight[i]) {
@@ -1006,6 +1158,7 @@ export function layoutCanvas(graph: Graph, extras: NodeExtra[]): CanvasResult {
   placeLaneLabels(canvas, laneLabels)
 
   canvas.finalizeMask()
+  if (outPlaced !== undefined) outPlaced.push(...placed)
   return canvas
 }
 
@@ -1075,6 +1228,10 @@ export function layoutGrouped(graph: Graph): CanvasResult {
   /** Edges bucketed by the scope that draws them; `null` is the top level. */
   const scopeEdges = new Map<number | null, [ScopeItem, ScopeItem, number][]>()
   const referenced = new Array<boolean>(graph.groups.length).fill(false)
+  // Groups a node-level edge crosses out of. Mermaid ignores a subgraph's
+  // `direction` when any of its nodes links outside; the override would
+  // reorient a box whose layout the outer scope already committed to.
+  const crossed = new Array<boolean>(graph.groups.length).fill(false)
   graph.edges.forEach((e, ei) => {
     const f = endpoint(e.from)
     const t = endpoint(e.to)
@@ -1085,6 +1242,9 @@ export function layoutGrouped(graph: Graph): CanvasResult {
     const tItem = t.chain.length > k ? { group: true, i: t.chain[k] } : t.item
     for (const item of [fItem, tItem]) {
       if (item.group) referenced[item.i] = true
+    }
+    for (const chain of [f.chain, t.chain]) {
+      for (let j = k; j < chain.length; j++) crossed[chain[j]] = true
     }
     const list = scopeEdges.get(scope)
     if (list) list.push([fItem, tItem, ei])
@@ -1117,8 +1277,15 @@ export function layoutGrouped(graph: Graph): CanvasResult {
     if (g.parent === null) visit(gi)
   })
 
-  const canvas = buildScope(graph, null, scopeEdges, directNodes, keep)
-  return canvas && orient(canvas, graph)
+  const res = buildScope(graph, null, scopeEdges, directNodes, keep, crossed, graph.dir)
+  return res && orient(res.canvas, graph)
+}
+
+/** A laid-out scope: its canvas plus every contained node's rect (original
+ * graph indices, this scope's canvas coordinates) for inner attachment. */
+interface ScopeResult {
+  canvas: Canvas
+  rects: Map<number, Placed>
 }
 
 function buildScope(
@@ -1127,17 +1294,20 @@ function buildScope(
   scopeEdges: Map<number | null, [ScopeItem, ScopeItem, number][]>,
   directNodes: Map<number | null, number[]>,
   keep: boolean[],
-): CanvasResult {
+  crossed: boolean[],
+  dir: Dir,
+): ScopeResult | null {
   const items: ScopeItem[] = (directNodes.get(scope) ?? []).map((i) => ({ group: false, i }))
   const childGroups = graph.groups
     .map((_, gi) => gi)
     .filter((gi) => graph.groups[gi].parent === scope && keep[gi])
   items.push(...childGroups.map((i) => ({ group: true, i })))
 
-  if (items.length === 0) return new Canvas(1, 1)
+  if (items.length === 0) return { canvas: new Canvas(1, 1), rects: new Map() }
 
   const nodeAt = new Map<number, number>()
   const groupAt = new Map<number, number>()
+  const subResults = new Map<number, ScopeResult>()
   const nodes: Node[] = []
   const extras: NodeExtra[] = []
   for (const item of items) {
@@ -1151,14 +1321,23 @@ function buildScope(
       })
       extras.push({ kind: 'plain' })
     } else {
-      const sub = buildScope(graph, item.i, scopeEdges, directNodes, keep)
+      // A subgraph `direction` override applies only under a non-flipping
+      // root (a flipped ancestor mirrors blitted sub-canvases wholesale)
+      // and only when no node inside links outside, matching mermaid.
+      const subDir =
+        (graph.dir === 'down' || graph.dir === 'right') && !crossed[item.i]
+          ? (graph.groups[item.i].dir ?? dir)
+          : dir
+      const sub = buildScope(graph, item.i, scopeEdges, directNodes, keep, crossed, subDir)
       if (sub === null) return null
+      subResults.set(item.i, sub)
       nodes.push({ label: graph.groups[item.i].label, shape: 'rect' })
-      extras.push({ kind: 'frame', sub })
+      extras.push({ kind: 'frame', sub: sub.canvas })
     }
   }
 
   const edges: Edge[] = []
+  const edgeInner: (EdgeInner | undefined)[] = []
   for (const [f, t, ei] of scopeEdges.get(scope) ?? []) {
     const fi = (f.group ? groupAt : nodeAt).get(f.i)
     const ti = (t.group ? groupAt : nodeAt).get(t.i)
@@ -1172,13 +1351,41 @@ function buildScope(
       headFrom: e.headFrom,
       line: e.line,
     })
+    // A lifted endpoint remembers the true node's rect inside its frame, so
+    // routing can pierce the frame and attach to the node itself.
+    const ann: EdgeInner = {}
+    if (f.group) ann.from = subResults.get(f.i)?.rects.get(e.from)
+    if (t.group) ann.to = subResults.get(t.i)?.rects.get(e.to)
+    edgeInner.push(ann.from !== undefined || ann.to !== undefined ? ann : undefined)
   }
 
   // Layout only reads nodes/edges/dir, so a bare Graph carrying those is enough.
-  const synth = new Graph(graph.dir)
+  const synth = new Graph(dir)
   synth.nodes = nodes
   synth.edges = edges
-  return layoutCanvas(synth, extras)
+  const outPlaced: Placed[] = []
+  const canvas = layoutCanvas(synth, extras, edgeInner, outPlaced)
+  if (canvas === null) return null
+
+  const rects = new Map<number, Placed>()
+  for (const item of items) {
+    const local = (item.group ? groupAt : nodeAt).get(item.i)
+    if (local === undefined) continue
+    const p = outPlaced[local]
+    if (!item.group) {
+      rects.set(item.i, p)
+    } else {
+      // The blit offset drawFrame used: sub-canvas centred in the frame.
+      const sub = subResults.get(item.i)
+      if (sub === undefined) continue
+      const ox = p.x + 1 + half(p.w - 2 - sub.canvas.w)
+      const oy = p.y + 1 + half(p.h - 2 - sub.canvas.h)
+      for (const [ni, r] of sub.rects) {
+        rects.set(ni, { ...r, x: r.x + ox, y: r.y + oy, cx: r.cx + ox, cy: r.cy + oy })
+      }
+    }
+  }
+  return { canvas, rects }
 }
 
 // ------------------------------------------------------------------- drawing
@@ -1286,6 +1493,63 @@ function drawFrame(canvas: Canvas, p: Placed, title: string, sub: Canvas, mirror
 
 // ------------------------------------------------------------------- routing
 
+type CorridorSide = 'top' | 'bottom' | 'left' | 'right'
+
+/**
+ * Open a straight corridor between a frame's border and a node inside it,
+ * so an outer edge can attach to the node itself: every cell between must
+ * be blank (a box in the way announces itself by its border glyphs first),
+ * the cells are then released for edge bits — `blit` marks the whole frame
+ * occupied — and the border cell gets through-bits. The node's centre is
+ * tried first, then nearby columns/rows across its span — a frame title
+ * may cover the border over the centre. Returns the chosen column (top/
+ * bottom) or row (left/right), or null untouched; the caller falls back to
+ * the frame attachment. A node flush against the border needs no corridor:
+ * the arrowhead lands on the pierced border cell itself.
+ */
+function openCorridor(
+  canvas: Canvas,
+  frame: Placed,
+  inner: Placed,
+  side: CorridorSide,
+): number | null {
+  const horizontal = side === 'top' || side === 'bottom'
+  const centre = horizontal ? inner.cx : inner.cy
+  const lo = horizontal ? inner.x + 1 : inner.y + 1
+  const hi = horizontal ? inner.x + inner.w - 2 : inner.y + inner.h - 2
+  const attempt = (at: number): boolean => {
+    const cells: [number, number][] = []
+    let pierce: [number, number, number]
+    if (side === 'top') {
+      for (let y = frame.y + 1; y < inner.y; y++) cells.push([at, y])
+      pierce = [at, frame.y, U | D]
+    } else if (side === 'bottom') {
+      for (let y = inner.y + inner.h; y < frame.y + frame.h - 1; y++) cells.push([at, y])
+      pierce = [at, frame.y + frame.h - 1, U | D]
+    } else if (side === 'left') {
+      for (let x = frame.x + 1; x < inner.x; x++) cells.push([x, at])
+      pierce = [frame.x, at, L | R]
+    } else {
+      for (let x = inner.x + inner.w; x < frame.x + frame.w - 1; x++) cells.push([x, at])
+      pierce = [frame.x + frame.w - 1, at, L | R]
+    }
+    if (!canvas.canPierce(pierce[0], pierce[1])) return false
+    for (const [x, y] of cells) {
+      const ci = canvas.idx(x, y)
+      if (canvas.ch[ci] !== ' ' || canvas.mask[ci] !== 0) return false
+    }
+    for (const [x, y] of cells) canvas.occupied[canvas.idx(x, y)] = 0
+    canvas.junction(pierce[0], pierce[1], pierce[2])
+    return true
+  }
+  for (let d = 0; centre - d >= lo || centre + d <= hi; d++) {
+    for (const at of d === 0 ? [centre] : [centre + d, centre - d]) {
+      if (at >= lo && at <= hi && attempt(at)) return at
+    }
+  }
+  return null
+}
+
 function headGlyph(head: Head, arrow: string): string {
   switch (head) {
     case 'circle':
@@ -1321,8 +1585,10 @@ function routeForward(
   const by = from.y + from.h - 1
   const headRow = to.y - 1
 
-  canvas.junction(bx, by, D)
-  canvas.segV(bx, by, bus)
+  // A `<-->` source head sits outside the border like the target head does;
+  // the border keeps its plain line instead of a tee.
+  if (edge.headFrom === 'none') canvas.junction(bx, by, D)
+  canvas.segV(bx, edge.headFrom === 'none' ? by : by + 1, bus)
   if (bx === tx) {
     canvas.segV(bx, bus, headRow)
   } else {
@@ -1332,12 +1598,20 @@ function routeForward(
 
   if (edge.headTo === 'none') canvas.addBits(tx, headRow, U)
   else canvas.set(tx, headRow, headGlyph(edge.headTo, '▼'), 'edge')
-  if (edge.headFrom !== 'none') canvas.set(bx, by, headGlyph(edge.headFrom, '▲'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(bx, by + 1, headGlyph(edge.headFrom, '▲'), 'edge')
 
   if (edge.cardFrom === undefined && edge.cardTo === undefined) {
     if (edge.label !== null) {
-      const start = labelLeft ? sat(tx, Math.min(stringWidth(edge.label), MAX_LABEL)) : tx + 1
-      placeLabel(canvas, edge.label, headRow, start)
+      if (labelLeft) {
+        placeLabel(
+          canvas,
+          edge.label,
+          headRow,
+          sat(tx, Math.min(stringWidth(edge.label), MAX_LABEL)),
+        )
+      } else {
+        placeLabelSided(canvas, edge.label, headRow, tx)
+      }
     }
     return
   }
@@ -1381,22 +1655,23 @@ function routeBackAdjacent(
   const bx = Math.abs(bx0 - tx) <= 1 ? tx : bx0
   const fy = from.y
   const headRow = to.y + to.h
+  const exitY = edge.headFrom === 'none' ? fy : fy - 1
 
-  canvas.junction(bx, fy, U)
+  if (edge.headFrom === 'none') canvas.junction(bx, fy, U)
   if (bx === tx) {
-    canvas.segV(bx, headRow, fy)
+    canvas.segV(bx, headRow, exitY)
   } else {
-    canvas.segV(bx, bus, fy)
+    canvas.segV(bx, bus, exitY)
     canvas.segH(bus, bx, tx)
     canvas.segV(tx, headRow, bus)
   }
 
   if (edge.headTo === 'none') canvas.addBits(tx, headRow, D)
   else canvas.set(tx, headRow, headGlyph(edge.headTo, '▲'), 'edge')
-  if (edge.headFrom !== 'none') canvas.set(bx, fy, headGlyph(edge.headFrom, '▼'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(bx, fy - 1, headGlyph(edge.headFrom, '▼'), 'edge')
 
   const text = edgeText(edge)
-  if (text !== null) placeLabel(canvas, text, headRow, tx + 1)
+  if (text !== null) placeLabelSided(canvas, text, headRow, tx)
 }
 
 /** A self-edge: a stub loop hanging below the box. */
@@ -1448,8 +1723,8 @@ function routeSkip(
   const bx = from.cx
   const bottom = from.y + from.h - 1
 
-  canvas.junction(bx, bottom, D)
-  canvas.segV(bx, bottom, busY)
+  if (edge.headFrom === 'none') canvas.junction(bx, bottom, D)
+  canvas.segV(bx, edge.headFrom === 'none' ? bottom : bottom + 1, busY)
   if (straight) {
     canvas.segH(busY, bx, entryX)
     canvas.segV(entryX, busY, to.y - 1)
@@ -1462,37 +1737,51 @@ function routeSkip(
 
   if (edge.headTo === 'none') canvas.addBits(entryX, to.y - 1, D)
   else canvas.set(entryX, to.y - 1, headGlyph(edge.headTo, '▼'), 'edge')
-  if (edge.headFrom !== 'none') canvas.set(bx, bottom, headGlyph(edge.headFrom, '▲'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(bx, bottom + 1, headGlyph(edge.headFrom, '▲'), 'edge')
 
   const text = edgeText(edge)
   if (text !== null) {
-    const start = labelLeft ? sat(entryX, Math.min(stringWidth(text), MAX_LABEL)) : entryX + 1
-    placeLabel(canvas, text, to.y - 1, start)
+    if (labelLeft) {
+      placeLabel(canvas, text, to.y - 1, sat(entryX, Math.min(stringWidth(text), MAX_LABEL)))
+    } else {
+      placeLabelSided(canvas, text, to.y - 1, entryX)
+    }
   }
 }
 
 /**
- * Multi-rank back edge, top-down: out the right side, up a lane, back in
- * through the target's right side — side entry keeps returns recognisable
- * at a glance.
+ * Multi-rank back edge, top-down: out the side, up a lane, back in through
+ * the target's same side — side entry keeps returns recognisable at a
+ * glance. Lanes run on whichever side the endpoints lean toward.
  */
-function routeBack(canvas: Canvas, from: Placed, to: Placed, edge: Edge, laneX: number): void {
-  const sx = from.x + from.w - 1
+function routeBack(
+  canvas: Canvas,
+  from: Placed,
+  to: Placed,
+  edge: Edge,
+  laneX: number,
+  left = false,
+): void {
+  const sx = left ? from.x : from.x + from.w - 1
   const sy = from.cy
   const backText = edgeText(edge)
 
-  canvas.junction(sx, sy, R)
-  canvas.segH(sy, sx, laneX)
-  if (edge.headFrom !== 'none') canvas.set(sx, sy, headGlyph(edge.headFrom, '◄'), 'edge')
+  const exitX = edge.headFrom === 'none' ? sx : left ? sx - 1 : sx + 1
+  if (edge.headFrom === 'none') canvas.junction(sx, sy, left ? L : R)
+  canvas.segH(sy, exitX, laneX)
+  if (edge.headFrom !== 'none') {
+    canvas.set(exitX, sy, headGlyph(edge.headFrom, left ? '▶' : '◄'), 'edge')
+  }
 
-  const tx = to.x + to.w - 1
+  const hx = left ? to.x - 1 : to.x + to.w
   const tyc = to.cy
   canvas.segV(laneX, sy, tyc)
-  canvas.segH(tyc, tx + 1, laneX)
-  if (edge.headTo === 'none') canvas.addBits(tx + 1, tyc, R)
-  else canvas.set(tx + 1, tyc, headGlyph(edge.headTo, '◄'), 'edge')
+  canvas.segH(tyc, hx, laneX)
+  if (edge.headTo === 'none') canvas.addBits(hx, tyc, left ? L : R)
+  else canvas.set(hx, tyc, headGlyph(edge.headTo, left ? '▶' : '◄'), 'edge')
   if (backText !== null) {
-    placeLabel(canvas, backText, sat(tyc, 1), sat(laneX, stringWidth(backText) + 1))
+    const start = left ? laneX + 1 : sat(laneX, stringWidth(backText) + 1)
+    placeLabel(canvas, backText, sat(tyc, 1), start)
   }
 }
 
@@ -1503,8 +1792,8 @@ function routeForwardLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bu
   const ly = to.cy
   const headCol = to.x - 1
 
-  canvas.junction(rx, ry, R)
-  canvas.segH(ry, rx, bus)
+  if (edge.headFrom === 'none') canvas.junction(rx, ry, R)
+  canvas.segH(ry, edge.headFrom === 'none' ? rx : rx + 1, bus)
   if (ry === ly) {
     canvas.segH(ry, bus, headCol)
   } else {
@@ -1514,7 +1803,7 @@ function routeForwardLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bu
 
   if (edge.headTo === 'none') canvas.addBits(headCol, ly, R)
   else canvas.set(headCol, ly, headGlyph(edge.headTo, '▶'), 'edge')
-  if (edge.headFrom !== 'none') canvas.set(rx, ry, headGlyph(edge.headFrom, '◄'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(rx + 1, ry, headGlyph(edge.headFrom, '◄'), 'edge')
 
   // The verb keeps its usual spot above the line; cardinalities hug their
   // own ends on the rows above the departure and arrival cells.
@@ -1537,14 +1826,14 @@ function routeSkipLr(canvas: Canvas, from: Placed, to: Placed, edge: Edge, bus: 
   const rx = from.x + from.w - 1
   const headCol = to.x - 1
 
-  canvas.junction(rx, ry, R)
-  canvas.segH(ry, rx, bus)
+  if (edge.headFrom === 'none') canvas.junction(rx, ry, R)
+  canvas.segH(ry, edge.headFrom === 'none' ? rx : rx + 1, bus)
   if (ry !== ty) canvas.segV(bus, ry, ty)
   canvas.segH(ty, bus, headCol)
 
   if (edge.headTo === 'none') canvas.addBits(headCol, ty, R)
   else canvas.set(headCol, ty, headGlyph(edge.headTo, '▶'), 'edge')
-  if (edge.headFrom !== 'none') canvas.set(rx, ry, headGlyph(edge.headFrom, '◄'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(rx + 1, ry, headGlyph(edge.headFrom, '◄'), 'edge')
 
   // Label after the bus jog, where forward labels sit — the gap before the
   // target belongs to the arrivals that end there.
@@ -1574,14 +1863,14 @@ function routeBackLr(
   const tx = to.cx
   const ty = to.y + to.h - 1
 
-  canvas.junction(sx, sy, D)
-  canvas.segV(sx, sy, laneY)
+  if (edge.headFrom === 'none') canvas.junction(sx, sy, D)
+  canvas.segV(sx, edge.headFrom === 'none' ? sy : sy + 1, laneY)
   canvas.segH(laneY, sx, tx)
   canvas.segV(tx, laneY, ty + 1)
 
   if (edge.headTo === 'none') canvas.addBits(tx, ty + 1, D)
   else canvas.set(tx, ty + 1, headGlyph(edge.headTo, '▲'), 'edge')
-  if (edge.headFrom !== 'none') canvas.set(sx, sy, headGlyph(edge.headFrom, '▲'), 'edge')
+  if (edge.headFrom !== 'none') canvas.set(sx, sy + 1, headGlyph(edge.headFrom, '▲'), 'edge')
 
   // The label interrupts its own lane row — the row above belongs to the
   // neighbouring lane once several stack. Deferred until all edges landed,
@@ -1632,6 +1921,44 @@ function placeLaneLabels(canvas: Canvas, labels: LaneLabel[]): void {
       }
     }
     drawTextOverEdges(canvas, text, at, y, 'edgeLabel')
+  }
+}
+
+/** Free columns at `row` walking from `x` in `dir`, before the first blocked cell. */
+function freeRun(canvas: Canvas, row: number, x: number, dir: 1 | -1): number {
+  if (row >= canvas.h) return 0
+  let n = 0
+  for (let cx = x; cx >= 0 && cx < canvas.w; cx += dir) {
+    const i = canvas.idx(cx, row)
+    if (canvas.ch[i] !== ' ' || canvas.mask[i] !== 0 || canvas.occupied[i]) break
+    n++
+  }
+  return n
+}
+
+/**
+ * Place an arrival label right of its arrowhead at `x`, flipping left when
+ * the right would truncate it and the left fits it whole. When neither side
+ * fits, the roomier side gets an ellipsised prefix — a silently clipped
+ * label can lie (`recreate…` shown as `r`).
+ */
+function placeLabelSided(canvas: Canvas, label: string, row: number, x: number): void {
+  const tw = stringWidth(fitLabel(label, MAX_LABEL))
+  const right = freeRun(canvas, row, x + 1, 1)
+  if (right >= tw) {
+    placeLabel(canvas, label, row, x + 1)
+    return
+  }
+  const left = Math.min(freeRun(canvas, row, x - 1, -1), x)
+  if (left >= tw) {
+    placeLabel(canvas, label, row, x - tw)
+    return
+  }
+  if (left > right && left >= 4) {
+    const text = fitLabel(label, left)
+    placeLabel(canvas, text, row, x - stringWidth(text))
+  } else {
+    placeLabel(canvas, fitLabel(label, right), row, x + 1)
   }
 }
 

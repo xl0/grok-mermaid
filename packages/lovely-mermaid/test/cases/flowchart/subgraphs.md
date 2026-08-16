@@ -47,16 +47,16 @@ graph TD
 ```
 
 ```text
-  ┌ API ─┐
-  │┌────┐│
-  ││ A1 ││
-  │└──┬─┘│
-  │   │  │
-  │   ▼  │
-  │┌────┐│
-  ││ A2 ││
-  │└────┘│
-  └───┬──┘
+ ┌ API ───┐
+ │ ┌────┐ │
+ │ │ A1 │ │
+ │ └──┬─┘ │
+ │    │   │
+ │    ▼   │
+ │ ┌────┐ │
+ │ │ A2 │ │
+ │ └────┘ │
+ └────┬───┘
       │
       ▼
  ┌ Storage ┐
@@ -80,31 +80,32 @@ graph TD
 ```
 
 ```text
-    ┌───┐
-    │ S │
-    └─┬─┘
-      │
-      ▼
-┌ Outer ───┐
-│   ┌───┐  │
-│   │ W │  │
-│   └─┬─┘  │
-│     │    │
-│     ▼    │
-│ ┌ Inner ┐│
-│ │ ┌───┐ ││
-│ │ │ X │ ││
-│ │ └─┬─┘ ││
-│ │   │   ││
-│ │   ▼   ││
-│ │ ┌───┐ ││
-│ │ │ Y │ ││
-│ │ └───┘ ││
-│ └───────┘│
-└──────────┘
+     ┌───┐
+     │ S │
+     └─┬─┘
+       │
+       ▼
+┌ Outer ─────┐
+│    ┌───┐   │
+│    │ W │   │
+│    └─┬─┘   │
+│      │     │
+│      ▼     │
+│ ┌ Inner ─┐ │
+│ │  ┌───┐ │ │
+│ │  │ X │ │ │
+│ │  └─┬─┘ │ │
+│ │    │   │ │
+│ │    ▼   │ │
+│ │  ┌───┐ │ │
+│ │  │ Y │ │ │
+│ │  └───┘ │ │
+│ └────────┘ │
+└────────────┘
 ```
 
-A cross-member edge attaches to the frame.
+A cross-member edge pierces the frame and attaches to the node inside when
+the corridor is clear; otherwise it attaches to the frame.
 
 ```mermaid
 graph LR
@@ -119,7 +120,7 @@ graph LR
                   ┌ Workers ┐
                   │         │
 ┌───┐    ┌───┐    │  ┌───┐  │    ┌───┐
-│ S ├───▶│ A ├───▶│  │ B │  ├───▶│ T │
+│ S ├───▶│ A ├────┼─▶│ B ├──┼───▶│ T │
 └───┘    └───┘    │  └───┘  │    └───┘
                   └─────────┘
 ```
@@ -135,21 +136,21 @@ graph TD
 ```
 
 ```text
-  ┌───┐
-  │ X │
-  └─┬─┘
-    │
-    ▼
-┌ two ─┐
-│ ┌───┐│
-│ │ C ││
-│ └─┬─┘│
-│   │  │
-│   ▼  │
-│ ┌───┐│
-│ │ D ││
-│ └───┘│
-└──────┘
+   ┌───┐
+   │ X │
+   └─┬─┘
+     │
+     ▼
+┌ two ───┐
+│  ┌───┐ │
+│  │ C │ │
+│  └─┬─┘ │
+│    │   │
+│    ▼   │
+│  ┌───┐ │
+│  │ D │ │
+│  └───┘ │
+└────────┘
 ```
 
 Quoted, multi-word and entity-escaped titles.
@@ -176,11 +177,11 @@ graph TD
                     └─┬─┘
       ┌───────────────┼──────────────┐
       ▼               ▼              ▼
-┌ My Stuff ┐   ┌ batch jobs ┐    ┌ a <b> ┐
-│   ┌───┐  │   │    ┌───┐   │    │ ┌───┐ │
-│   │ A │  │   │    │ B │   │    │ │ C │ │
-│   └───┘  │   │    └───┘   │    │ └───┘ │
-└──────────┘   └────────────┘    └───────┘
+┌ My Stuff ┐   ┌ batch jobs ┐   ┌ a <b> ─┐
+│   ┌───┐  │   │    ┌───┐   │   │  ┌───┐ │
+│   │ A │  │   │    │ B │   │   │  │ C │ │
+│   └───┘  │   │    └───┘   │   │  └───┘ │
+└──────────┘   └────────────┘   └────────┘
 ```
 
 An empty subgraph is dropped.
@@ -214,21 +215,21 @@ flowchart BT
 ```
 
 ```text
-┌ Up ──┐
-│ ┌───┐│
-│ │ B ││
-│ └───┘│
-│   ▲  │
-│   │  │
-│ ┌─┴─┐│
-│ │ A ││
-│ └───┘│
-└──────┘
-    ▲
-    │
-  ┌─┴─┐
-  │ S │
-  └───┘
+┌ Up ────┐
+│  ┌───┐ │
+│  │ B │ │
+│  └───┘ │
+│    ▲   │
+│    │   │
+│  ┌─┴─┐ │
+│  │ A │ │
+│  └───┘ │
+└────────┘
+     ▲
+     │
+   ┌─┴─┐
+   │ S │
+   └───┘
 ```
 
 Nesting past the depth cap draws nothing.
@@ -255,3 +256,62 @@ graph TD
 ```
 
 (null)
+
+A subgraph `direction` statement overrides the layout inside its frame;
+flipping values (BT/RL) are ignored, as is `direction` under a flipped root.
+
+```mermaid
+flowchart TD
+  S[Start] --> W
+  subgraph W [Wide part]
+    direction LR
+    A --> B --> C
+  end
+  W --> E[End]
+```
+
+```text
+          ┌───────┐
+          │ Start │
+          └───┬───┘
+              │
+              ▼
+ ┌ Wide part ──────────────┐
+ │                         │
+ │ ┌───┐    ┌───┐    ┌───┐ │
+ │ │ A ├───▶│ B ├───▶│ C │ │
+ │ └───┘    └───┘    └───┘ │
+ └────────────┬────────────┘
+              │
+              ▼
+           ┌─────┐
+           │ End │
+           └─────┘
+```
+
+A node linked from outside its subgraph voids the subgraph's `direction`
+(mermaid's rule): the group inherits the parent direction instead.
+
+```mermaid
+flowchart TD
+  subgraph G [Group]
+    direction LR
+    A
+    B
+    C
+  end
+  X --> A
+```
+
+```text
+           ┌───┐
+           │ X │
+           └─┬─┘
+             │
+             ▼
+┌ Group ─────────────────┐
+│  ┌───┐   ┌───┐   ┌───┐ │
+│  │ A │   │ B │   │ C │ │
+│  └───┘   └───┘   └───┘ │
+└────────────────────────┘
+```

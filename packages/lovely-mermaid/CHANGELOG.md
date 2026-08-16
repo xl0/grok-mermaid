@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- A flowchart subgraph or state composite honours its `direction` statement (`TB`/`TD`/`LR`), laying out its own frame that way. Matching mermaid, the override is voided when any node inside links outside the subgraph. `BT`/`RL` overrides are ignored, as is any override under a flipped (`BT`/`RL`) root — a flipped sub-canvas inside an unflipped parent would mirror its text.
+
+### Changed
+
+- An edge crossing a subgraph boundary attaches to the node inside when a clear straight corridor exists between the frame border and the node: the border is pierced (`┼`) and the arrowhead lands on the node itself. Blocked corridors — content in the way, or the frame title covering the border — keep the frame attachment.
+- Subgraph and composite-state frames pad one column between the border and their content on each side.
+- Vertical layouts route lane edges on both sides: an edge whose endpoints lean left takes a left-side lane instead of crossing the diagram to the right strip.
+- A `<-->` source arrowhead draws outside the box border, like the target head, instead of replacing the border cell; the band keeps a spare row/column so a bus turning at the box corner never erases the head.
+- An arrival label that would be clipped by a neighbouring edge flips to the left of its arrowhead when it fits there whole (`retry` no longer shows as `r`).
+
 ### Fixed
 
 - An adjacent-rank back-edge label no longer loses its last character when it sets the canvas width (`retry` rendered `retr` inside a composite region).

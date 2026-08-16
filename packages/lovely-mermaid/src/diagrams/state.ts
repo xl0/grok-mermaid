@@ -71,7 +71,11 @@ export function parseState(src: string): Graph | null {
     }
     const first = asciiLower(firstWord(st))
     if (first === 'direction') {
-      graph.dir = parseDir(words(st)[1] ?? '')
+      // Top level sets the diagram; inside a composite it scopes to that
+      // group (non-flipping values only, as in flowchart subgraphs).
+      const d = parseDir(words(st)[1] ?? '')
+      if (graph.curGroup === null) graph.dir = d
+      else if (d === 'down' || d === 'right') graph.groups[graph.curGroup].dir = d
     } else if (first === 'note') {
       // A single-line `note ... : text` needs no terminator.
       if (!st.includes(':')) inNote = true

@@ -72,6 +72,9 @@ export interface Group {
   id: string
   label: string
   parent: number | null
+  /** A subgraph `direction` override. Only non-flipping values are stored:
+   * a flipped sub-canvas inside an unflipped parent would mirror its text. */
+  dir?: 'down' | 'right'
 }
 
 /** `LR`/`RL`/`BT` as written in a header or `direction` statement; else `down`. */

@@ -203,7 +203,11 @@ dropped by DFS colouring), barycenter reordering within ranks to cut crossings,
 then barycenter relaxation for cross-axis positions. Edges between adjacent
 ranks share horizontal **bus** rows; skip and multi-rank back edges route
 around the diagram through vertical **lanes**, packed shortest-span-innermost
-so exits and entries cross as few live lanes as possible. A forward skip
+so exits and entries cross as few live lanes as possible. TD/BT lanes run on
+*both sides*: an edge takes the side its endpoints lean toward (mean order
+fraction within their ranks), left lanes shift the whole diagram right and
+keep a label strip between lanes and content; a node serving both sides
+keeps the right corridor. A forward skip
 (TD/BT) splits off the source's bottom fan — its departure is a bus span, so
 endpoint sharing folds it onto the siblings' row for one `┴` origin — and
 enters the target's *top*; when its entry column crosses no intermediate box
@@ -223,6 +227,9 @@ with the band's first row reserved for its arrowhead: the lane detour cut
 through sibling boxes. Track packing lets edges sharing an endpoint reuse one
 row, which is why a merge draws a single arrowhead. Parallel edges (same
 from/to) ride the same cells; their labels join (`one / two`) before sizing.
+A `<-->` source head draws outside the border (no tee), mirroring the target
+head. An arrival label clipped on the right flips left of its arrowhead when
+it fits there whole (`placeLabelSided`).
 
 `BT`/`RL` reuse the `TD`/`LR` layout and flip the finished canvas, so text is
 never mirrored — `flipHorizontal` reverses each text run back to reading
@@ -232,7 +239,19 @@ flip restores it.
 
 Subgraphs recurse: each is laid out into its own canvas, then blitted into a
 framed box in its parent scope. An edge is drawn in the innermost scope holding
-both endpoints; one crossing a boundary attaches to the frame.
+both endpoints; one crossing a boundary attaches to the *node inside* when a
+blank straight corridor runs between the frame border and the node
+(`buildScope` returns per-node rects, `EdgeInner` carries them to the outer
+scope's routing, `openCorridor` scans columns/rows across the node's span,
+releases the blit-occupied cells and pierces the border; `Canvas.junction`
+merges bits into blitted glyphs since `blit` drops mask). Anything in the
+way — including the frame title, which refuses piercing — falls back to the
+frame attachment. Inner-annotated edges reserve a conservative full-span bus
+track: the attach column is only known after placement. A subgraph
+`direction` statement (`Group.dir`, TB/TD/LR only) overrides the scope's
+layout direction when the root is unflipped — flips are whole-canvas, so a
+flipped ancestor would mirror a differently-oriented sub-canvas — and, as in
+mermaid, only when no node inside links outside the subgraph (`crossed`).
 
 Class and ER compartments live on `Node.sections` (title / attrs / methods
 rows, pre-formatted by the parser); `layoutClass` draws them verbatim. The
