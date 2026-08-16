@@ -1932,7 +1932,7 @@ function placeLaneLabels(canvas: Canvas, labels: LaneLabel[]): void {
 }
 
 /** Free columns at `row` walking from `x` in `dir`, before the first blocked cell. */
-function freeRun(canvas: Canvas, row: number, x: number, dir: 1 | -1): number {
+export function freeRun(canvas: Canvas, row: number, x: number, dir: 1 | -1): number {
   if (row >= canvas.h) return 0
   let n = 0
   for (let cx = x; cx >= 0 && cx < canvas.w; cx += dir) {

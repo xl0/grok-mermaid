@@ -19,7 +19,7 @@ import { Canvas, D, drawTextOverEdges, L, R, STY_DOT, STY_SOLID, STY_THICK, U } 
 import { parseGraph } from './diagrams/flowchart.ts'
 import type { Edge } from './graph.ts'
 import { fitLabel, MAX_LABEL, MAX_LINES, stripControls, WRAP_WIDTH, wrapLabel } from './labels.ts'
-import { drawBox, half, headGlyph, MAX_CANVAS_CELLS, placeLabel, sat } from './layout.ts'
+import { drawBox, freeRun, half, headGlyph, MAX_CANVAS_CELLS, placeLabel, sat } from './layout.ts'
 import type { MermaidArt } from './types.ts'
 import { stringWidth } from './width.ts'
 
@@ -294,6 +294,47 @@ export async function renderElk(
       }
     }
   }
+  // On a vertical run the label straddles the line — centred on it, the
+  // stroke interrupted like a lane label — sliding along the run from its
+  // middle to find a row with lateral room. The run's own column is
+  // welcome inside the window; any other vertical blocks it.
+  const placeAcrossV = (t: string, x: number, yA: number, yB: number): boolean => {
+    const lo = Math.min(yA, yB) + 1
+    const hi = Math.max(yA, yB) - 1
+    if (lo > hi) return false
+    const tw = stringWidth(t)
+    const roomAt = (row: number): number | null => {
+      const extent = (dir: 1 | -1): number => {
+        let n = 0
+        while (n < tw) {
+          const cx = x + dir * (1 + n)
+          if (cx < 0 || cx >= canvas.w) break
+          const ci = canvas.idx(cx, row)
+          if (canvas.occupied[ci] || canvas.ch[ci] !== ' ' || (canvas.mask[ci] & (U | D)) !== 0)
+            break
+          n++
+        }
+        return n
+      }
+      const left = extent(-1)
+      const right = extent(1)
+      if (left + 1 + right < tw) return null
+      return Math.max(x - left, Math.min(x - half(tw), x + 1 + right - tw))
+    }
+    const mid = half(lo + hi)
+    for (let d = 0; mid - d >= lo || mid + d <= hi; d++) {
+      for (const row of d === 0 ? [mid] : [mid - d, mid + d]) {
+        if (row < lo || row > hi) continue
+        const at = roomAt(row)
+        if (at !== null) {
+          drawTextOverEdges(canvas, t, at, row, 'edgeLabel')
+          return true
+        }
+      }
+    }
+    return false
+  }
+
   graph.edges.forEach((edge, i) => {
     const text = [edge.cardFrom ?? '', edge.label ?? '', edge.cardTo ?? '']
       .filter(Boolean)
@@ -302,7 +343,7 @@ export async function renderElk(
     if (text === '' || chain === undefined || chain.length < 2) return
     const t = ` ${fitLabel(text, MAX_LABEL)} `
     const hRuns: { y: number; lo: number; hi: number; len: number }[] = []
-    let longestV: { x: number; midY: number; len: number } | null = null
+    const vRuns: { x: number; yA: number; yB: number; len: number }[] = []
     for (let j = 0; j + 1 < chain.length; j++) {
       const a = chain[j]
       const b = chain[j + 1]
@@ -311,17 +352,31 @@ export async function renderElk(
         const hi = Math.max(a.x, b.x)
         hRuns.push({ y: a.y, lo, hi, len: hi - lo })
       } else {
-        const len = Math.abs(b.y - a.y)
-        if (longestV === null || len > longestV.len) {
-          longestV = { x: a.x, midY: half(a.y + b.y), len }
-        }
+        vRuns.push({ x: a.x, yA: a.y, yB: b.y, len: Math.abs(b.y - a.y) })
       }
     }
     hRuns.sort((a, b) => b.len - a.len)
     for (const run of hRuns) {
       if (placeOnRun(t, run.y, run.lo, run.hi)) return
     }
-    if (longestV !== null) placeLabel(canvas, text, longestV.midY, longestV.x + 2)
+    vRuns.sort((a, b) => b.len - a.len)
+    for (const run of vRuns) {
+      if (placeAcrossV(t, run.x, run.yA, run.yB)) return
+    }
+    if (vRuns.length > 0) {
+      // Last resort: beside the longest vertical, ellipsised to the roomier
+      // side's free stretch — a silently clipped label lies.
+      const { x } = vRuns[0]
+      const midY = half(vRuns[0].yA + vRuns[0].yB)
+      const right = freeRun(canvas, midY, x + 2, 1)
+      const left = freeRun(canvas, midY, x - 2, -1)
+      if (right >= left) {
+        placeLabel(canvas, fitLabel(text, Math.max(right, 2)), midY, x + 2)
+      } else {
+        const cut = fitLabel(text, left)
+        placeLabel(canvas, cut, midY, x - 1 - stringWidth(cut))
+      }
+    }
   })
 
   canvas.finalizeMask()
