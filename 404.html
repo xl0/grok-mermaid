@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>lovely-mermaid</title>
+<script>
+  var m = location.pathname.match(/^(\/lovely-mermaid\/previews\/[^/]+\/)/);
+  var base = m ? m[1] : '/lovely-mermaid/';
+  sessionStorage.setItem('spa-path', location.pathname + location.search + location.hash);
+  location.replace(base);
+</script>

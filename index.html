@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		<script>
+			// GitHub Pages serves one root 404.html for the whole site; on a
+			// deep link it stashes the requested path and bounces to the app
+			// index (root or a branch preview). Restore it before the router
+			// boots so the SPA resolves the real route.
+			(function () {
+				var p = sessionStorage.getItem('spa-path');
+				if (p) {
+					sessionStorage.removeItem('spa-path');
+					history.replaceState(null, '', p);
+				}
+			})();
+		</script>
+		<link href="/lovely-mermaid/_app/immutable/entry/start.BAuP-qVR.js" rel="modulepreload">
+		<link href="/lovely-mermaid/_app/immutable/chunks/B4QHnI7g.js" rel="modulepreload">
+		<link href="/lovely-mermaid/_app/immutable/chunks/BF1R68Gy.js" rel="modulepreload">
+		<link href="/lovely-mermaid/_app/immutable/entry/app.SDIJl6TW.js" rel="modulepreload">
+		<link href="/lovely-mermaid/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
+		<link href="/lovely-mermaid/_app/immutable/nodes/0.PLcKjcxu.js" rel="modulepreload">
+		
+		<link href="/lovely-mermaid/_app/immutable/assets/0.DKF-ePeG.css" rel="stylesheet">
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">
+			<script>
+				{
+					__sveltekit_1mhs5uj = {
+						base: "/lovely-mermaid",
+						assets: "/lovely-mermaid"
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("/lovely-mermaid/_app/immutable/entry/start.BAuP-qVR.js"),
+						import("/lovely-mermaid/_app/immutable/entry/app.SDIJl6TW.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element);
+					});
+				}
+			</script>
+		</div>
+	</body>
+</html>
