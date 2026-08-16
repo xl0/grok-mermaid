@@ -228,28 +228,56 @@
 	}
 
 	let dragging = $state(false);
+	// One pointer pans, two pinch-zoom about their midpoint. Deltas come from
+	// our own positions — movementX/Y is unreliable for touch pointers.
+	const pointers = new Map<number, { x: number; y: number }>();
+	function stagePos(e: PointerEvent) {
+		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		return { x: e.clientX - r.left, y: e.clientY - r.top };
+	}
 	function onDown(e: PointerEvent) {
 		// No default: dragging must pan, never start a text selection.
 		e.preventDefault();
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		pointers.set(e.pointerId, stagePos(e));
 		dragging = true;
 	}
-	// Pointermove fires faster than the frame rate; accumulate and apply once
-	// per animation frame so a pan costs one style write per frame.
+	function onUp(e: PointerEvent) {
+		pointers.delete(e.pointerId);
+		if (pointers.size === 0) dragging = false;
+	}
+	// Pointermove fires faster than the frame rate; a lone pan accumulates
+	// and applies once per animation frame, one style write per frame.
 	let pendX = 0;
 	let pendY = 0;
 	let pendRaf = 0;
 	function onMove(e: PointerEvent) {
-		if (!dragging) return;
-		pendX += e.movementX;
-		pendY += e.movementY;
-		if (pendRaf === 0) {
-			pendRaf = requestAnimationFrame(() => {
-				tx += pendX;
-				ty += pendY;
-				pendX = pendY = 0;
-				pendRaf = 0;
-			});
+		const prev = pointers.get(e.pointerId);
+		if (prev === undefined) return;
+		const cur = stagePos(e);
+		pointers.set(e.pointerId, cur);
+		if (pointers.size === 2) {
+			// Only this pointer moved; the other anchors the previous pair.
+			const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)?.[1];
+			if (!other) return;
+			const prevDist = Math.hypot(prev.x - other.x, prev.y - other.y);
+			const dist = Math.hypot(cur.x - other.x, cur.y - other.y);
+			const prevMid = { x: (prev.x + other.x) / 2, y: (prev.y + other.y) / 2 };
+			const mid = { x: (cur.x + other.x) / 2, y: (cur.y + other.y) / 2 };
+			if (prevDist > 0 && dist > 0) zoomAt(mid.x, mid.y, dist / prevDist);
+			tx += mid.x - prevMid.x;
+			ty += mid.y - prevMid.y;
+		} else if (dragging) {
+			pendX += cur.x - prev.x;
+			pendY += cur.y - prev.y;
+			if (pendRaf === 0) {
+				pendRaf = requestAnimationFrame(() => {
+					tx += pendX;
+					ty += pendY;
+					pendX = pendY = 0;
+					pendRaf = 0;
+				});
+			}
 		}
 	}
 
@@ -367,8 +395,8 @@
 		onwheel={onWheel}
 		onpointerdown={onDown}
 		onpointermove={onMove}
-		onpointerup={() => (dragging = false)}
-		onpointercancel={() => (dragging = false)}
+		onpointerup={onUp}
+		onpointercancel={onUp}
 	>
 		{#if failed}
 			<div class="note err">This link does not decode to a diagram.</div>
