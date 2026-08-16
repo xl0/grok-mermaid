@@ -11,7 +11,10 @@
  * from the package index; an experiment.
  */
 
-import ELK, { type ElkExtendedEdge, type ElkLabel, type ElkNode } from 'elkjs'
+// The bundled build: elkjs's node entry requires the `web-worker` package,
+// which browser bundlers cannot resolve; the bundle inlines its glue.
+import type { ElkExtendedEdge, ElkLabel, ElkNode } from 'elkjs'
+import ELK from 'elkjs/lib/elk.bundled.js'
 import { Canvas, D, drawTextOverEdges, L, R, STY_DOT, STY_SOLID, STY_THICK, U } from './canvas.ts'
 import { parseGraph } from './diagrams/flowchart.ts'
 import type { Edge } from './graph.ts'
@@ -20,10 +23,13 @@ import { drawBox, half, headGlyph, MAX_CANVAS_CELLS, sat } from './layout.ts'
 import type { MermaidArt } from './types.ts'
 import { stringWidth } from './width.ts'
 
-// elkjs's own Node worker glue predates bun; hand it the runtime's Worker.
-const elk = new ELK({
-  workerFactory: () => new Worker(import.meta.resolve('elkjs/lib/elk-worker.min.js')),
-})
+// elkjs's own worker glue works in node and in browser bundles, but not
+// under bun's CJS interop — hand bun the runtime's Worker explicitly.
+const elk = new ELK(
+  (globalThis as { Bun?: unknown }).Bun === undefined
+    ? {}
+    : { workerFactory: () => new Worker(import.meta.resolve('elkjs/lib/elk-worker.min.js')) },
+)
 
 /** Cell-unit spacing fed to ELK. Rows are half as many as columns for the
  * same visual distance — terminal cells are roughly 1:2. */

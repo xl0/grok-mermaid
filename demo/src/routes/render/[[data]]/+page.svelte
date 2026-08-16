@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { displayWidth } from 'lovely-ansi-svg';
-	import { type AnsiTheme, render, toAnsi } from 'lovely-mermaid';
+	import { type AnsiTheme, type MermaidArt, render, toAnsi } from 'lovely-mermaid';
 	import { AsciiArt } from 'svelte-asciiart';
 	import AnsiCanvas from '$lib/AnsiCanvas.svelte';
 	import { packHash, unpackHash } from '$lib/hash';
@@ -63,15 +63,35 @@
 		background: TERM[dark ? 'dark' : 'light'].bg
 	});
 
-	const art = $derived(src === null ? null : render(src));
+	const baseArt = $derived(src === null ? null : render(src));
+
+	// One [elk] toggle for both renderers: on the terminal renderer it swaps
+	// the layout engine to elkjs (flowcharts only — anything else falls back
+	// to the rule-based router); on mermaid.js it swaps dagre for ELK.
+	let renderer = $state<'lovely' | 'mermaid'>('lovely');
+	let elkOn = $state(false);
+	let elkArt = $state<MermaidArt | null>(null);
+	let elkSeq = 0;
+	$effect(() => {
+		if (!elkOn || renderer !== 'lovely' || src === null || src.trim() === '') {
+			elkArt = null;
+			return;
+		}
+		const seq = ++elkSeq;
+		const source = src;
+		import('lovely-mermaid-elk')
+			.then(({ renderElk }) => renderElk(source))
+			.then((a) => {
+				if (seq === elkSeq) elkArt = a;
+			});
+	});
+	const art = $derived(elkOn && elkArt !== null ? elkArt : baseArt);
 	const ansi = $derived(art === null ? '' : toAnsi(art, ansiTheme).join('\n'));
 
 	// The official mermaid.js renderer as a second opinion; loaded on first
 	// use so the terminal path never pays for it. ELK layout is optional:
 	// dagre (mermaid's default) collapses clusters, so boundary-crossing
 	// edges stop at the cluster border — ELK routes them to the node.
-	let renderer = $state<'lovely' | 'mermaid'>('lovely');
-	let mmElk = $state(false);
 	let mmSvg = $state('');
 	let mmErr = $state('');
 	let mmSeq = 0;
@@ -80,7 +100,7 @@
 		const seq = ++mmSeq;
 		const source = src;
 		const mmTheme = dark ? 'dark' : 'default';
-		const elk = mmElk;
+		const elk = elkOn;
 		Promise.all([import('mermaid'), import('@mermaid-js/layout-elk')]).then(
 			async ([{ default: mermaid }, { default: elkLayouts }]) => {
 				mermaid.registerLayoutLoaders(elkLayouts);
@@ -320,9 +340,7 @@
 			onclick={() => (renderer = renderer === 'lovely' ? 'mermaid' : 'lovely')}
 			>[mermaid]</button
 		>
-		{#if renderer === 'mermaid'}
-			<button class="ghost" class:active={mmElk} onclick={() => (mmElk = !mmElk)}>[elk]</button>
-		{/if}
+		<button class="ghost" class:active={elkOn} onclick={() => (elkOn = !elkOn)}>[elk]</button>
 		<button class="ghost" onclick={fit}>[fit]</button>
 		<button
 			class="ghost"

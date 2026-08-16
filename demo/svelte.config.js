@@ -12,7 +12,8 @@ export default {
 		adapter: adapter({ fallback: '404.html' }),
 		// Import lovely-mermaid's source directly (no build step, tracks HEAD).
 		alias: {
-			'lovely-mermaid': '../packages/lovely-mermaid/src/index.ts'
+			'lovely-mermaid': '../packages/lovely-mermaid/src/index.ts',
+			'lovely-mermaid-elk': '../packages/lovely-mermaid/src/layout-elk.ts'
 		},
 		paths: { base: /** @type {`/${string}` | ''} */ (process.env.BASE_PATH ?? '') }
 	}
