@@ -43,6 +43,9 @@ const OPTS: Record<string, string> = {
   'elk.spacing.edgeNode': '3',
   'elk.spacing.edgeEdge': '2',
   'elk.spacing.edgeLabel': '1',
+  // Reversed (cycle-breaking) edges route as feedback beside the flow
+  // instead of wrapping the whole diagram to re-enter from the top.
+  'elk.layered.feedbackEdges': 'true',
   'elk.padding': '[top=2,left=2,bottom=2,right=2]',
 }
 
@@ -98,8 +101,15 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
     const labels: ElkLabel[] = []
     const text = [e.cardFrom ?? '', e.label ?? '', e.cardTo ?? ''].filter(Boolean).join(' ')
     if (text !== '') {
+      // Inline: the label sits in the edge's own line (drawTextOverEdges
+      // interrupts the stroke), costing no corridor width beside it.
       const t = fitLabel(text, MAX_LABEL)
-      labels.push({ text: t, width: stringWidth(t) + 2, height: 1 })
+      labels.push({
+        text: t,
+        width: stringWidth(t) + 2,
+        height: 1,
+        layoutOptions: { 'elk.edgeLabels.inline': 'true' },
+      })
     }
     return { id: `e${i}`, sources: [elkId(e.from)], targets: [elkId(e.to)], labels }
   })
@@ -202,11 +212,22 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
         if (last === undefined || last.x !== q.x || last.y !== q.y) chain.push(q)
       }
     }
+    // Snap to strict horizontal/vertical runs: rounding leaves one-cell
+    // jogs that would draw as dangling stubs at corners. Each point takes
+    // the previous point's minor-axis coordinate, then collapsed runs drop.
+    for (let i = 1; i < chain.length; i++) {
+      const a = chain[i - 1]
+      const b = chain[i]
+      if (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)) b.y = a.y
+      else b.x = a.x
+    }
+    for (let i = chain.length - 1; i > 0; i--) {
+      if (chain[i].x === chain[i - 1].x && chain[i].y === chain[i - 1].y) chain.splice(i, 1)
+    }
     for (let i = 0; i + 1 < chain.length; i++) {
       const a = chain[i]
       const b = chain[i + 1]
-      // Snap tiny rounding skew onto the dominant axis.
-      if (Math.abs(a.x - b.x) >= Math.abs(a.y - b.y)) canvas.segH(a.y, a.x, b.x)
+      if (a.y === b.y) canvas.segH(a.y, a.x, b.x)
       else canvas.segV(a.x, a.y, b.y)
     }
     // Heads point along the last (first) segment's direction, drawn one

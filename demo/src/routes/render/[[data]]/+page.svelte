@@ -69,7 +69,7 @@
 	// the layout engine to elkjs (flowcharts only — anything else falls back
 	// to the rule-based router); on mermaid.js it swaps dagre for ELK.
 	let renderer = $state<'lovely' | 'mermaid'>('lovely');
-	let elkOn = $state(false);
+	let elkOn = $state(true);
 	let elkArt = $state<MermaidArt | null>(null);
 	let elkSeq = 0;
 	$effect(() => {
