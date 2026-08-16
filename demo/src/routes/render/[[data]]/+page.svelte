@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { displayWidth } from 'lovely-ansi-svg';
-	import { type AnsiTheme, type MermaidArt, render, toAnsi } from 'lovely-mermaid';
+	import { type AnsiTheme, diagramKind, type MermaidArt, render, toAnsi } from 'lovely-mermaid';
 	import { AsciiArt } from 'svelte-asciiart';
 	import AnsiCanvas from '$lib/AnsiCanvas.svelte';
 	import { packHash, unpackHash } from '$lib/hash';
@@ -85,7 +85,12 @@
 				if (seq === elkSeq) elkArt = a;
 			});
 	});
-	const art = $derived(elkOn && elkArt !== null ? elkArt : baseArt);
+	// While ELK is still laying out a flowchart, hold the frame instead of
+	// flashing the rule-based render and swapping.
+	const elkPending = $derived(
+		elkOn && elkArt === null && src !== null && diagramKind(src) === 'flowchart'
+	);
+	const art = $derived(elkPending ? null : elkOn && elkArt !== null ? elkArt : baseArt);
 	const ansi = $derived(art === null ? '' : toAnsi(art, ansiTheme).join('\n'));
 
 	// The official mermaid.js renderer as a second opinion; loaded on first
@@ -150,10 +155,11 @@
 		}
 	});
 	// Refit once when the renderer switches (mermaid sizes arrive async).
-	let fitFor: typeof renderer = 'lovely';
+	let fitFor = 'lovely';
+	const fitKey = $derived(`${renderer}${elkOn ? '+elk' : ''}`);
 	$effect(() => {
-		if (renderer !== fitFor && worldW > 0 && vpW > 0) {
-			fitFor = renderer;
+		if (fitKey !== fitFor && worldW > 0 && vpW > 0) {
+			fitFor = fitKey;
 			fit();
 		}
 	});
@@ -396,6 +402,8 @@
 					{@html mmSvg}
 				</div>
 			{/if}
+		{:else if elkPending}
+			<div class="note dim">laying out…</div>
 		{:else if art === null}
 			<div class="note err">render(src) → null — nothing to draw for this source.</div>
 		{:else}

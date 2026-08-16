@@ -46,12 +46,20 @@ const OPTS: Record<string, string> = {
   // Reversed (cycle-breaking) edges route as feedback beside the flow
   // instead of wrapping the whole diagram to re-enter from the top.
   'elk.layered.feedbackEdges': 'true',
+  // Depth-first reverses far fewer edges than the greedy default here, so
+  // clusters land in causal order and the wrap-around bundles mostly
+  // disappear, at some width cost. (MODEL_ORDER crashes in elkjs 0.12.)
+  'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.padding': '[top=2,left=2,bottom=2,right=2]',
 }
 
 const DIR: Record<string, string> = { down: 'DOWN', up: 'UP', right: 'RIGHT', left: 'LEFT' }
 
-export async function renderElk(src: string): Promise<MermaidArt | null> {
+export async function renderElk(
+  src: string,
+  extraOpts?: Record<string, string>,
+): Promise<MermaidArt | null> {
+  const opts = { ...OPTS, ...extraOpts }
   src = stripControls(src)
   const graph = parseGraph(src)
   if (graph === null) return null
@@ -89,7 +97,7 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
     labels: [
       { text: graph.groups[gi].label, width: stringWidth(graph.groups[gi].label) + 2, height: 1 },
     ],
-    layoutOptions: { ...OPTS, 'elk.nodeLabels.placement': '[H_LEFT, V_TOP, OUTSIDE]' },
+    layoutOptions: { ...opts, 'elk.nodeLabels.placement': '[H_LEFT, V_TOP, OUTSIDE]' },
     children: [...nodesOf[gi].map(leafNode), ...groupChildren[gi].map(buildGroup)],
   })
 
@@ -109,7 +117,7 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
   const root: ElkNode = {
     id: 'root',
     layoutOptions: {
-      ...OPTS,
+      ...opts,
       'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       'elk.direction': DIR[graph.dir] ?? 'DOWN',
     },
