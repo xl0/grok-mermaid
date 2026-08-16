@@ -43,7 +43,7 @@ const OPTS: Record<string, string> = {
   'elk.spacing.edgeNode': '3',
   'elk.spacing.edgeEdge': '2',
   'elk.spacing.edgeLabel': '1',
-  'elk.padding': '[top=2,left=2,bottom=1,right=2]',
+  'elk.padding': '[top=2,left=2,bottom=2,right=2]',
 }
 
 const DIR: Record<string, string> = { down: 'DOWN', up: 'UP', right: 'RIGHT', left: 'LEFT' }
@@ -138,12 +138,14 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
     if (n.id.startsWith('g')) {
       // Border-only frame: no occupied fill and no occupied border, so ELK's
       // routes may run through the frame and cross its border — the crossing
-      // resolves to `┼` through the direction bits.
+      // resolves through the direction bits. Thick line so cluster bounds
+      // stand apart from node borders and edges.
       const gi = Number(n.id.slice(1))
-      canvas.set(x, y, '┌', 'border')
-      canvas.set(x + w - 1, y, '┐', 'border')
-      canvas.set(x, y + h - 1, '└', 'border')
-      canvas.set(x + w - 1, y + h - 1, '┘', 'border')
+      canvas.set(x, y, '┏', 'border')
+      canvas.set(x + w - 1, y, '┓', 'border')
+      canvas.set(x, y + h - 1, '┗', 'border')
+      canvas.set(x + w - 1, y + h - 1, '┛', 'border')
+      canvas.curStyle = STY_THICK
       for (let cx = x + 1; cx < x + w - 1; cx++) {
         canvas.addBits(cx, y, L | R, 'border')
         canvas.addBits(cx, y + h - 1, L | R, 'border')
@@ -152,6 +154,7 @@ export async function renderElk(src: string): Promise<MermaidArt | null> {
         canvas.addBits(x, cy, U | D, 'border')
         canvas.addBits(x + w - 1, cy, U | D, 'border')
       }
+      canvas.curStyle = STY_SOLID
       const title = graph.groups[gi].label
       if (title !== '') {
         drawTextOverEdges(canvas, ` ${fitLabel(title, sat(w, 4))} `, x + 1, y, 'text')
