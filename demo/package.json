@@ -22,7 +22,9 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@mermaid-js/layout-elk": "^0.2.2",
 		"jetbrains-mono": "^1.0.6",
+		"mermaid": "^11.16.1",
 		"svelte-asciiart": "^0.1.2"
 	}
 }

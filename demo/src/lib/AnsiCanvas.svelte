@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { clusters, clusterWidth } from 'lovely-ansi-svg';
 	import { contrastOn, type MermaidArt, resolveClassStyle, type Role } from 'lovely-mermaid';
 	import { type RoleKey, type RoleStyle, swatch, TERM } from './theme';
 
@@ -75,32 +76,14 @@
 	}
 
 	// --- the cell grid, rebuilt on art or theme change ------------------------
-	const seg = new Intl.Segmenter();
-	/** Prototype-grade wide detection (CJK, Hangul, fullwidth, emoji); the
-	 * real thing would share the library's width tables. */
-	function wideCluster(c: string): boolean {
-		if (c.includes('\uFE0F') || /\p{Emoji_Presentation}/u.test(c)) return true;
-		const cp = c.codePointAt(0) ?? 0;
-		return (
-			(cp >= 0x1100 && cp <= 0x115f) ||
-			(cp >= 0x2e80 && cp <= 0xa4cf) ||
-			(cp >= 0xac00 && cp <= 0xd7a3) ||
-			(cp >= 0xf900 && cp <= 0xfaff) ||
-			(cp >= 0xfe30 && cp <= 0xfe4f) ||
-			(cp >= 0xff00 && cp <= 0xff60) ||
-			(cp >= 0xffe0 && cp <= 0xffe6) ||
-			(cp >= 0x20000 && cp <= 0x3fffd)
-		);
-	}
-
 	const grid = $derived.by(() => {
 		return art.styled.map((row) => {
 			const cells: (Cell | null)[] = [];
 			for (const span of row) {
 				const paint = styleFor(span.role, span.classes);
-				for (const g of seg.segment(span.text)) {
-					const ch = g.segment;
-					const w = wideCluster(ch) ? 2 : 1;
+				for (const ch of clusters(span.text)) {
+					const w = clusterWidth(ch);
+					if (w === 0) continue;
 					// blank cells paint only when a class fills them
 					cells.push(ch === ' ' && paint.bg === null ? null : { ch, w, ...paint });
 					if (w === 2) cells.push(null);

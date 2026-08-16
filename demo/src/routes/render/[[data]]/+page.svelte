@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
+	import { displayWidth } from 'lovely-ansi-svg';
 	import { type AnsiTheme, render, toAnsi } from 'lovely-mermaid';
 	import { AsciiArt } from 'svelte-asciiart';
 	import AnsiCanvas from '$lib/AnsiCanvas.svelte';
@@ -65,6 +66,45 @@
 	const art = $derived(src === null ? null : render(src));
 	const ansi = $derived(art === null ? '' : toAnsi(art, ansiTheme).join('\n'));
 
+	// The official mermaid.js renderer as a second opinion; loaded on first
+	// use so the terminal path never pays for it. ELK layout is optional:
+	// dagre (mermaid's default) collapses clusters, so boundary-crossing
+	// edges stop at the cluster border — ELK routes them to the node.
+	let renderer = $state<'lovely' | 'mermaid'>('lovely');
+	let mmElk = $state(false);
+	let mmSvg = $state('');
+	let mmErr = $state('');
+	let mmSeq = 0;
+	$effect(() => {
+		if (renderer !== 'mermaid' || src === null || src.trim() === '') return;
+		const seq = ++mmSeq;
+		const source = src;
+		const mmTheme = dark ? 'dark' : 'default';
+		const elk = mmElk;
+		Promise.all([import('mermaid'), import('@mermaid-js/layout-elk')]).then(
+			async ([{ default: mermaid }, { default: elkLayouts }]) => {
+				mermaid.registerLayoutLoaders(elkLayouts);
+				mermaid.initialize({ startOnLoad: false, theme: mmTheme, layout: elk ? 'elk' : 'dagre' });
+				try {
+					const { svg } = await mermaid.render(`mm-${seq}`, source);
+					if (seq === mmSeq) {
+						mmSvg = svg;
+						mmErr = '';
+					}
+				} catch (e) {
+					if (seq === mmSeq) {
+						mmErr = String(e);
+						mmSvg = '';
+					}
+				}
+			}
+		);
+	});
+	const mmSize = $derived.by(() => {
+		const m = /viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/.exec(mmSvg);
+		return m ? { w: +m[3], h: +m[4] } : { w: 0, h: 0 };
+	});
+
 	// Same fixed pixels per cell as the main page: 9px cells land glyphs on
 	// whole pixels at scale 1.
 	const CELL = 15;
@@ -79,23 +119,34 @@
 	// size is arithmetic, not a DOM measurement (margin of 1 cell each side).
 	const artW = $derived(art === null ? 0 : (art.width + 2) * CELL * 0.6);
 	const artH = $derived(art === null ? 0 : (art.plain.length + 2) * CELL);
+	// What the camera frames: the cell art, or the mermaid SVG's viewBox.
+	const worldW = $derived(renderer === 'mermaid' ? mmSize.w : artW);
+	const worldH = $derived(renderer === 'mermaid' ? mmSize.h : artH);
 	let fitted = false;
 	$effect(() => {
-		if (!fitted && artW > 0 && vpW > 0) {
+		if (!fitted && worldW > 0 && vpW > 0) {
 			fitted = true;
+			fit();
+		}
+	});
+	// Refit once when the renderer switches (mermaid sizes arrive async).
+	let fitFor: typeof renderer = 'lovely';
+	$effect(() => {
+		if (renderer !== fitFor && worldW > 0 && vpW > 0) {
+			fitFor = renderer;
 			fit();
 		}
 	});
 
 	const clampS = (v: number): number => Math.min(8, Math.max(0.05, v));
 	function fit() {
-		if (artW === 0 || vpW === 0) return;
-		s = clampS(Math.min(vpW / artW, vpH / artH) * 0.95);
+		if (worldW === 0 || vpW === 0) return;
+		s = clampS(Math.min(vpW / worldW, vpH / worldH) * 0.95);
 		center();
 	}
 	function center() {
-		tx = (vpW - artW * s) / 2;
-		ty = (vpH - artH * s) / 2;
+		tx = (vpW - worldW * s) / 2;
+		ty = (vpH - worldH * s) / 2;
 	}
 	function zoomAt(px: number, py: number, factor: number) {
 		const next = clampS(s * factor);
@@ -107,6 +158,51 @@
 		e.preventDefault();
 		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
+	}
+
+	// Text search over the rendered cells: matches carry display-column
+	// geometry so highlights land exactly under the canvas glyphs.
+	let query = $state('');
+	let cur = $state(0);
+	let searchEl: HTMLInputElement | undefined = $state();
+	const matches = $derived.by(() => {
+		if (art === null || query === '') return [];
+		const q = query.toLowerCase();
+		const out: { row: number; x: number; w: number }[] = [];
+		art.plain.forEach((line, r) => {
+			const low = line.toLowerCase();
+			let i = low.indexOf(q);
+			while (i !== -1) {
+				out.push({
+					row: r,
+					x: displayWidth(line.slice(0, i)),
+					w: displayWidth(line.slice(i, i + q.length))
+				});
+				i = low.indexOf(q, i + q.length);
+			}
+		});
+		return out;
+	});
+	$effect(() => {
+		if (cur >= matches.length) cur = 0;
+	});
+	function jumpTo(i: number) {
+		const m = matches[i];
+		if (!m) return;
+		cur = i;
+		if (s < 0.9) s = clampS(1);
+		tx = vpW / 2 - (m.x + m.w / 2 + 1) * CELL * 0.6 * s;
+		ty = vpH / 2 - (m.row + 1.5) * CELL * s;
+	}
+	function onSearchKey(e: KeyboardEvent) {
+		if (e.key === 'Enter' && matches.length > 0) {
+			e.preventDefault();
+			jumpTo((cur + (e.shiftKey ? matches.length - 1 : 1)) % matches.length);
+		} else if (e.key === 'Escape') {
+			e.stopPropagation();
+			query = '';
+			searchEl?.blur();
+		}
 	}
 
 	let copied = $state(false);
@@ -178,6 +274,19 @@
 		if (e.key === 'Escape') {
 			menuOpen = false;
 			editOpen = false;
+		} else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+			// The stage is a canvas — native find has no text to see, so
+			// Ctrl+F drives the diagram search instead.
+			e.preventDefault();
+			searchEl?.focus();
+			searchEl?.select();
+		} else if (
+			e.key === '/' &&
+			document.activeElement?.tagName !== 'TEXTAREA' &&
+			document.activeElement?.tagName !== 'INPUT'
+		) {
+			e.preventDefault();
+			searchEl?.focus();
 		}
 	}}
 />
@@ -190,6 +299,30 @@
 			<span class="dim">{Math.round(s * 100)}%</span>
 		{/if}
 		<span class="spacer"></span>
+		<span class="search">
+			<input
+				bind:this={searchEl}
+				bind:value={query}
+				onkeydown={onSearchKey}
+				oninput={() => {
+					if (matches.length > 0) jumpTo(0);
+				}}
+				placeholder="/find"
+				aria-label="Search the diagram text"
+			/>
+			{#if query !== ''}
+				<span class="dim">{matches.length === 0 ? '0/0' : `${cur + 1}/${matches.length}`}</span>
+			{/if}
+		</span>
+		<button
+			class="ghost"
+			class:active={renderer === 'mermaid'}
+			onclick={() => (renderer = renderer === 'lovely' ? 'mermaid' : 'lovely')}
+			>[mermaid]</button
+		>
+		{#if renderer === 'mermaid'}
+			<button class="ghost" class:active={mmElk} onclick={() => (mmElk = !mmElk)}>[elk]</button>
+		{/if}
 		<button class="ghost" onclick={fit}>[fit]</button>
 		<button
 			class="ghost"
@@ -231,13 +364,39 @@
 			<div class="note dim">decoding…</div>
 		{:else if src.trim() === ''}
 			<div class="note dim">⏳ waiting for a diagram — type below</div>
+		{:else if renderer === 'mermaid'}
+			{#if mmErr !== ''}
+				<div class="note err">{mmErr}</div>
+			{:else if mmSvg === ''}
+				<div class="note dim">rendering…</div>
+			{:else}
+				<div
+					class="mm-layer"
+					style="transform: translate({tx}px, {ty}px) scale({s}); width: {mmSize.w}px; height: {mmSize.h}px"
+				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -- mermaid sanitizes its own output -->
+					{@html mmSvg}
+				</div>
+			{/if}
 		{:else if art === null}
 			<div class="note err">render(src) → null — nothing to draw for this source.</div>
 		{:else}
 			<AnsiCanvas {art} {theme} {dark} cell={CELL} {s} {tx} {ty} />
+			{#if matches.length > 0}
+				<div class="hl-layer" style="transform: translate({tx}px, {ty}px) scale({s})">
+					{#each matches as m, i (i)}
+						<div
+							class="hl"
+							class:cur={i === cur}
+							style="left: {(m.x + 1) * CELL * 0.6}px; top: {(m.row + 1) *
+								CELL}px; width: {m.w * CELL * 0.6}px; height: {CELL}px"
+						></div>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 
-		{#if art && artW > 0}
+		{#if renderer === 'lovely' && art && artW > 0}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="minimap"
@@ -366,6 +525,25 @@
 		color: var(--accent);
 	}
 
+	.search {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.search input {
+		font: inherit;
+		width: 9rem;
+		padding: 0 0.3rem;
+		border: none;
+		border-bottom: 1px solid var(--muted);
+		outline: none;
+		background: transparent;
+		color: var(--fg);
+	}
+	.search input:focus {
+		border-bottom-color: var(--accent);
+	}
+
 	.stage {
 		position: relative;
 		flex: 1;
@@ -384,6 +562,36 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+
+	.mm-layer {
+		position: absolute;
+		left: 0;
+		top: 0;
+		transform-origin: 0 0;
+	}
+	.mm-layer :global(svg) {
+		display: block;
+		width: 100%;
+		height: 100%;
+		max-width: none !important;
+	}
+
+	.hl-layer {
+		position: absolute;
+		left: 0;
+		top: 0;
+		transform-origin: 0 0;
+		pointer-events: none;
+	}
+	.hl {
+		position: absolute;
+		background: rgba(255, 200, 0, 0.28);
+		outline: 1px solid rgba(255, 200, 0, 0.6);
+	}
+	.hl.cur {
+		background: rgba(255, 130, 0, 0.45);
+		outline: 2px solid rgba(255, 130, 0, 0.95);
 	}
 
 	.minimap {

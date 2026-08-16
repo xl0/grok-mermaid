@@ -82,7 +82,12 @@ Trusted publisher recreated; staged releases flowing.
       as deflate+base64url (old plain-base64 links dropped); shared
       `$lib/{theme,hash,ThemeEditor}`; `/render/<data>` viewer route —
       pan/zoom canvas, minimap, theme drawer, copy, bottom editor drawer
-      that rewrites the URL live.
+      that rewrites the URL live. 2026-08-16: `AnsiCanvas` shares
+      lovely-ansi-svg's cluster width tables; text search (`/`, Enter
+      cycles, highlights under the camera); `[mermaid]` toggles the
+      official mermaid.js renderer (dynamic import, SVG under the same
+      pan/zoom), with an `[elk]` layout toggle — dagre stops
+      cluster-crossing edges at the border, ELK pierces to the node.
 - [ ] Maybe a `bin` CLI in the main package (mermaid/markdown → art).
 - [ ] Width work, both parked (2026-08-16): text discipline without an API
       (sequence message/note wrap at 32 cols, compartment rows truncate at
