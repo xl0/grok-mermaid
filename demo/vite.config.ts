@@ -1,5 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { existsSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 // The aliased lovely-mermaid source lives outside the demo's vite root, and
@@ -15,5 +16,15 @@ const linked = [
 
 export default defineConfig({
 	plugins: [sveltekit()],
+	resolve: {
+		alias: {
+			// layout-elk.ts lives in the aliased lovely-mermaid source outside
+			// this root; pin its elkjs import to the demo's own copy so the
+			// build never depends on a workspace-root install.
+			'elkjs/lib/elk.bundled.js': fileURLToPath(
+				new URL('./node_modules/elkjs/lib/elk.bundled.js', import.meta.url)
+			)
+		}
+	},
 	server: { fs: { allow: ['..', ...linked] } }
 });
