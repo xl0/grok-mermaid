@@ -1,0 +1,1 @@
+import"./BICK3FdT.js";import{n as e}from"./Duwt7o7T.js";export{e as createArchitectureServices};
