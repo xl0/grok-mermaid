@@ -1,0 +1,68 @@
+sequenceDiagram
+    autonumber
+    actor U as User / host
+    participant M as Run mode
+    participant S as AgentSession
+    participant X as ExtensionRunner
+    participant A as Agent and agent loop
+    participant R as ModelRuntime / pi-ai
+    participant P as Model provider
+    participant T as Tool
+    participant J as SessionManager
+
+    U->>M: Submit prompt
+    M->>S: prompt(text, images, queue behavior)
+    S->>X: input
+    X-->>S: continue, transform, or handled
+    S->>S: Dispatch extension command or expand skill/template
+
+    alt Agent is already streaming
+        S->>A: Queue steering or follow-up message
+        S-->>M: queue_update
+    else New run
+        S->>S: Validate model/auth and check pre-turn compaction
+        S->>X: before_agent_start
+        X-->>S: optional custom messages and system-prompt override
+        S->>A: prompt(user and custom messages)
+        A-->>S: agent_start, turn_start, message events
+        S->>J: Append completed input messages
+
+        loop Until no tool calls or queued messages remain
+            A->>X: context
+            X-->>A: transformed AgentMessage context
+            A->>A: Convert to provider-compatible messages
+            A->>R: stream(model, prompt, tools, transport)
+            R->>X: before_provider_headers / before_provider_request
+            R->>P: Provider request
+            P-->>R: Streaming text, thinking, tool calls, usage
+            R->>X: after_provider_response
+            R-->>A: Normalized stream events
+            A-->>S: message_start / update / end
+            S->>X: Mirrored lifecycle events
+            S->>J: Append final assistant message
+            S-->>M: Render or serialize events
+
+            opt Assistant requested tools
+                A->>A: Resolve tool and validate schema
+                A->>X: tool_call
+                X-->>A: allow or block
+                A->>T: execute(args, signal, onUpdate)
+                T-->>A: result, updates, usage, terminate flag
+                A->>X: tool_result
+                X-->>A: optional transformed result
+                A-->>S: tool execution and message events
+                S->>J: Append tool-result message
+            end
+
+            A->>A: Drain steering after turn and follow-up when otherwise done
+        end
+
+        A-->>S: agent_end
+        S->>S: Retry transient errors or compact overflow if needed
+        opt Retry or compact-and-retry
+            S->>A: continue()
+        end
+        S->>X: agent_settled
+        S-->>M: agent_settled
+        M-->>U: Final rendered, text, JSONL, RPC, or SDK result
+    end

@@ -1,0 +1,11 @@
+flowchart LR
+  subgraph P[Pipeline]
+    direction TB
+    parse --> check --> emit
+  end
+  subgraph W[Workers]
+    w1 --> w2
+  end
+  in[source] --> P
+  emit --> W
+  w2 --> out[artifact]

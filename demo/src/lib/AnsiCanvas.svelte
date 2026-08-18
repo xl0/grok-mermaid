@@ -101,6 +101,23 @@
 	let vw = $state(0);
 	let vh = $state(0);
 
+	// Arrowheads and diamonds come from whatever fallback font has the code
+	// point, so ▲ and ▼ can differ in size and shape. Drawn as paths they
+	// match exactly. Unit coords: x over the cell width, y over the height;
+	// hollow variants stroke the same outline.
+	const SHAPES: Record<string, { pts: [number, number][]; fill: boolean }> = {
+		'▼': { pts: [[0.05, 0.28], [0.95, 0.28], [0.5, 0.78]], fill: true },
+		'▲': { pts: [[0.05, 0.72], [0.95, 0.72], [0.5, 0.22]], fill: true },
+		'▶': { pts: [[0.12, 0.18], [0.12, 0.82], [0.92, 0.5]], fill: true },
+		'◄': { pts: [[0.88, 0.18], [0.88, 0.82], [0.08, 0.5]], fill: true },
+		'▽': { pts: [[0.05, 0.28], [0.95, 0.28], [0.5, 0.78]], fill: false },
+		'△': { pts: [[0.05, 0.72], [0.95, 0.72], [0.5, 0.22]], fill: false },
+		'▷': { pts: [[0.12, 0.18], [0.12, 0.82], [0.92, 0.5]], fill: false },
+		'◁': { pts: [[0.88, 0.18], [0.88, 0.82], [0.08, 0.5]], fill: false },
+		'◆': { pts: [[0.5, 0.16], [0.92, 0.5], [0.5, 0.84], [0.08, 0.5]], fill: true },
+		'◇': { pts: [[0.5, 0.16], [0.92, 0.5], [0.5, 0.84], [0.08, 0.5]], fill: false }
+	};
+
 	function drawCells(
 		ctx: CanvasRenderingContext2D,
 		c0: number,
@@ -140,6 +157,24 @@
 				if (cellV.fg !== curFill) {
 					curFill = cellV.fg;
 					ctx.fillStyle = curFill;
+				}
+				const shape = SHAPES[cellV.ch];
+				if (shape) {
+					const x0 = (c + margin) * cw;
+					const y0 = (r + margin) * cell;
+					ctx.beginPath();
+					shape.pts.forEach(([px, py], i) => {
+						if (i === 0) ctx.moveTo(x0 + px * cw, y0 + py * cell);
+						else ctx.lineTo(x0 + px * cw, y0 + py * cell);
+					});
+					ctx.closePath();
+					if (shape.fill) ctx.fill();
+					else {
+						ctx.strokeStyle = curFill;
+						ctx.lineWidth = Math.max(1, cell * 0.08);
+						ctx.stroke();
+					}
+					continue;
 				}
 				ctx.fillText(cellV.ch, (c + margin) * cw, y);
 			}

@@ -1,0 +1,9 @@
+%% regression: a cycle fully inside a subgraph crashes elkjs's
+%% MODEL_ORDER / GREEDY_MODEL_ORDER cycle breakers under INCLUDE_CHILDREN
+graph TD
+  subgraph S[Retry loop]
+    B[attempt] --> C[failed?]
+    C --> B
+  end
+  A[start] --> B
+  C --> D[give up]

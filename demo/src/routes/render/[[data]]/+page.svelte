@@ -55,30 +55,79 @@
 	const baseArt = $derived(src === null ? null : render(src));
 
 	// One [elk] toggle for both renderers: on the terminal renderer it swaps
-	// the layout engine to elkjs (flowcharts only — anything else falls back
-	// to the rule-based router); on mermaid.js it swaps dagre for ELK.
+	// the layout engine to elkjs; on mermaid.js it swaps dagre for ELK.
+	// Disabled for diagram kinds renderElk does not lay out.
 	let renderer = $state<'lovely' | 'mermaid'>('lovely');
 	let elkOn = $state(true);
+	const elkSupported = $derived(
+		src !== null && ['flowchart', 'state', 'class', 'er'].includes(diagramKind(src) ?? '')
+	);
+	// Experiment panel: each select overrides one ELK layoutOption; the first
+	// value is what renderElk's own OPTS resolve to, so picking it clears the
+	// override. Some combos genuinely crash elkjs (model-order strategies on
+	// hierarchy with in-cluster cycles) — a crash falls back to the rule
+	// render and shows the message.
+	const ELK_CHOICES: { key: string; label: string; values: string[] }[] = [
+		{
+			key: 'elk.layered.nodePlacement.strategy',
+			label: 'placement',
+			values: ['BRANDES_KOEPF', 'LINEAR_SEGMENTS', 'NETWORK_SIMPLEX', 'SIMPLE']
+		},
+		{
+			key: 'elk.layered.layering.strategy',
+			label: 'layering',
+			values: ['NETWORK_SIMPLEX', 'LONGEST_PATH', 'COFFMAN_GRAHAM', 'MIN_WIDTH']
+		},
+		{
+			key: 'elk.layered.cycleBreaking.strategy',
+			label: 'cycle breaking',
+			values: ['DEPTH_FIRST', 'GREEDY', 'GREEDY_MODEL_ORDER', 'MODEL_ORDER']
+		},
+		{
+			key: 'elk.layered.compaction.postCompaction.strategy',
+			label: 'compaction',
+			values: ['NONE', 'LEFT', 'RIGHT', 'EDGE_LENGTH']
+		},
+		{
+			key: 'elk.layered.considerModelOrder.strategy',
+			label: 'model order',
+			values: ['NONE', 'NODES_AND_EDGES', 'PREFER_NODES', 'PREFER_EDGES']
+		},
+		{ key: 'elk.layered.mergeEdges', label: 'merge edges', values: ['false', 'true'] },
+		{ key: 'elk.layered.feedbackEdges', label: 'feedback edges', values: ['false', 'true'] }
+	];
+	let elkExtra = $state<Record<string, string>>({});
+	let elkMenuOpen = $state(false);
+	let elkErr = $state('');
 	let elkArt = $state<MermaidArt | null>(null);
 	let elkSeq = 0;
 	$effect(() => {
+		const extra = { ...elkExtra };
 		if (!elkOn || renderer !== 'lovely' || src === null || src.trim() === '') {
 			elkArt = null;
+			elkErr = '';
 			return;
 		}
 		const seq = ++elkSeq;
 		const source = src;
 		import('lovely-mermaid-elk')
-			.then(({ renderElk }) => renderElk(source))
+			.then(({ renderElk }) => renderElk(source, extra))
 			.then((a) => {
-				if (seq === elkSeq) elkArt = a;
+				if (seq === elkSeq) {
+					elkArt = a;
+					elkErr = '';
+				}
+			})
+			.catch((e) => {
+				if (seq === elkSeq) {
+					elkArt = null;
+					elkErr = `elk crashed: ${e instanceof Error ? e.message : e}`;
+				}
 			});
 	});
-	// While ELK is still laying out a flowchart, hold the frame instead of
-	// flashing the rule-based render and swapping.
-	const elkPending = $derived(
-		elkOn && elkArt === null && src !== null && diagramKind(src) === 'flowchart'
-	);
+	// While ELK is still laying out, hold the frame instead of flashing the
+	// rule-based render and swapping.
+	const elkPending = $derived(elkOn && elkArt === null && elkErr === '' && elkSupported);
 	const art = $derived(elkPending ? null : elkOn && elkArt !== null ? elkArt : baseArt);
 
 	// The official mermaid.js renderer as a second opinion; loaded on first
@@ -144,7 +193,7 @@
 	});
 	// Refit once when the renderer switches (mermaid sizes arrive async).
 	let fitFor = 'lovely';
-	const fitKey = $derived(`${renderer}${elkOn ? '+elk' : ''}`);
+	const fitKey = $derived(`${renderer}${elkOn ? '+elk' : ''}${JSON.stringify(elkExtra)}`);
 	$effect(() => {
 		if (fitKey !== fitFor && worldW > 0 && vpW > 0) {
 			fitFor = fitKey;
@@ -362,7 +411,18 @@
 			onclick={() => (renderer = renderer === 'lovely' ? 'mermaid' : 'lovely')}
 			>[mermaid]</button
 		>
-		<button class="ghost" class:active={elkOn} onclick={() => (elkOn = !elkOn)}>[elk]</button>
+		<button
+			class="ghost"
+			class:active={elkOn && elkSupported}
+			disabled={!elkSupported}
+			onclick={() => (elkOn = !elkOn)}>[elk]</button
+		>
+		<button
+			class="ghost"
+			class:active={elkMenuOpen}
+			disabled={!elkSupported || !elkOn || renderer !== 'lovely'}
+			onclick={() => (elkMenuOpen = !elkMenuOpen)}>[opts]</button
+		>
 		<button class="ghost" onclick={fit}>[fit]</button>
 		<button
 			class="ghost"
@@ -486,6 +546,38 @@
 			>
 				<div class="menu-title">theme</div>
 				<ThemeEditor bind:theme onreset={() => setMode(dark)} />
+			</div>
+		{/if}
+		{#if elkMenuOpen}
+			<div
+				class="menu"
+				role="dialog"
+				aria-label="ELK layout options"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="menu-title">elk options</div>
+				{#each ELK_CHOICES as c}
+					<label class="elk-opt">
+						<span class="dim">{c.label}</span>
+						<select
+							value={elkExtra[c.key] ?? c.values[0]}
+							onchange={(e) => {
+								const v = e.currentTarget.value;
+								if (v === c.values[0]) delete elkExtra[c.key];
+								else elkExtra[c.key] = v;
+							}}
+						>
+							{#each c.values as v}<option value={v}>{v.toLowerCase()}</option>{/each}
+						</select>
+					</label>
+				{/each}
+				<button
+					class="ghost elk-reset"
+					disabled={Object.keys(elkExtra).length === 0}
+					onclick={() => (elkExtra = {})}>[reset]</button
+				>
+				{#if elkErr !== ''}<div class="elk-err">⚠ {elkErr}</div>{/if}
 			</div>
 		{/if}
 	</div>
@@ -673,6 +765,31 @@
 		color: var(--purple);
 		font-weight: bold;
 		margin-bottom: 0.5rem;
+	}
+	.elk-opt {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		margin: 0.25rem 0;
+	}
+	.elk-opt select {
+		font: inherit;
+		font-size: 0.85rem;
+		background: var(--bg);
+		color: var(--fg);
+		border: 1px solid var(--muted);
+		border-radius: 3px;
+		padding: 0.1rem 0.2rem;
+	}
+	.elk-reset {
+		margin-top: 0.4rem;
+	}
+	.elk-err {
+		max-width: 16rem;
+		margin-top: 0.5rem;
+		color: var(--warnc);
+		font-size: 0.85rem;
 	}
 
 	.warnings {

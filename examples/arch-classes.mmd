@@ -1,0 +1,285 @@
+classDiagram
+    direction LR
+
+    class AgentSessionRuntime {
+        -AgentSession currentSession
+        -AgentSessionServices services
+        -CreateRuntimeFactory createRuntime
+        +newSession(options)
+        +switchSession(path, options)
+        +fork(entryId, options)
+        +importFromJsonl(path, cwd)
+        +dispose()
+    }
+
+    class AgentSessionServices {
+        +string cwd
+        +string agentDir
+        +ModelRuntime modelRuntime
+        +SettingsManager settingsManager
+        +ResourceLoader resourceLoader
+        +Diagnostic[] diagnostics
+    }
+
+    class AgentSession {
+        +Agent agent
+        +SessionManager sessionManager
+        +SettingsManager settingsManager
+        +prompt(text, options)
+        +steer(text, images)
+        +followUp(text, images)
+        +compact(instructions)
+        +navigateTree(targetId, options)
+        +bindExtensions(bindings)
+        +reload()
+    }
+
+    class Agent {
+        +AgentState state
+        +QueueMode steeringMode
+        +QueueMode followUpMode
+        +prompt(messages)
+        +continue()
+        +steer(message)
+        +followUp(message)
+        +subscribe(listener)
+        +abort()
+        +waitForIdle()
+    }
+
+    class AgentState {
+        +string systemPrompt
+        +Model model
+        +ThinkingLevel thinkingLevel
+        +AgentTool[] tools
+        +AgentMessage[] messages
+        +boolean isStreaming
+        +AgentMessage streamingMessage
+    }
+
+    class AgentLoopConfig {
+        +Model model
+        +ThinkingLevel reasoning
+        +Transport transport
+        +ToolExecutionMode toolExecution
+        +convertToLlm(messages)
+        +transformContext(messages)
+        +beforeToolCall(context)
+        +afterToolCall(context)
+    }
+
+    class SessionManager {
+        -SessionEntry[] entries
+        -string leafId
+        -string sessionFile
+        +appendMessage(message)
+        +appendCompaction(summary)
+        +buildSessionContext()
+        +getBranch(fromId)
+        +getTree()
+        +branch(entryId)
+        +branchWithSummary(entryId, summary)
+        +createBranchedSession(leafId)
+    }
+
+    class SessionEntry {
+        <<interface>>
+        +string type
+        +string id
+        +string parentId
+        +string timestamp
+    }
+
+    class SettingsManager {
+        -Settings globalSettings
+        -Settings projectSettings
+        +getCompactionSettings()
+        +getRetrySettings()
+        +getSteeringMode()
+        +getFollowUpMode()
+        +getDefaultModel()
+        +applyOverrides(settings)
+        +reload()
+        +flush()
+    }
+
+    class ResourceLoader {
+        <<interface>>
+        +getExtensions()
+        +getSkills()
+        +getPrompts()
+        +getThemes()
+        +getAgentsFiles()
+        +getSystemPrompt()
+        +extendResources(paths)
+        +reload(options)
+    }
+
+    class DefaultResourceLoader {
+        -string cwd
+        -string agentDir
+        -SettingsManager settingsManager
+        +reload(options)
+        +extendResources(paths)
+    }
+
+    class ExtensionRunner {
+        -Extension[] extensions
+        -ExtensionRuntime runtime
+        +emit(event)
+        +emitInput(text, images, source)
+        +emitContext(messages)
+        +emitToolCall(event)
+        +emitToolResult(event)
+        +emitBeforeAgentStart(prompt)
+        +getRegisteredCommands()
+        +getAllRegisteredTools()
+    }
+
+    class ExtensionRuntime {
+        +Map handlers
+        +Map tools
+        +Map commands
+        +Map shortcuts
+        +Map flags
+        +Map messageRenderers
+        +Map entryRenderers
+        +registerProvider(name, config)
+        +unregisterProvider(name)
+    }
+
+    class ExtensionAPI {
+        <<interface>>
+        +on(event, handler)
+        +registerTool(definition)
+        +registerCommand(name, options)
+        +registerShortcut(key, options)
+        +registerProvider(name, config)
+        +sendMessage(message, options)
+        +sendUserMessage(content, options)
+        +appendEntry(type, data)
+    }
+
+    class ModelRuntime {
+        -CredentialStore credentials
+        -ModelsStore modelsStore
+        -ProviderComposer composer
+        +getProviders()
+        +getModels(providerId)
+        +getAvailable(providerId)
+        +getAuth(model)
+        +streamSimple(model, context)
+        +refresh(options)
+        +login(providerId, type)
+        +registerProvider(id, config)
+        +registerNativeProvider(provider)
+    }
+
+    class ModelRegistry {
+        -ModelRuntime runtime
+        +getAvailable()
+        +getModel(provider, modelId)
+        +registerProvider(name, config)
+        +unregisterProvider(name)
+    }
+
+    class Model {
+        <<pi-ai value>>
+        +string id
+        +string provider
+        +string api
+        +string baseUrl
+        +boolean reasoning
+        +number contextWindow
+        +number maxTokens
+    }
+
+    class Provider {
+        <<pi-ai interface>>
+        +string id
+        +string name
+        +AuthMethod[] auth
+        +Model[] models
+        +stream(model, context, options)
+    }
+
+    class CredentialStore {
+        <<interface>>
+        +get(providerId)
+        +set(providerId, credential)
+        +delete(providerId)
+        +list()
+    }
+
+    class ToolDefinition {
+        <<interface>>
+        +string name
+        +string label
+        +string description
+        +Schema parameters
+        +ExecutionMode executionMode
+        +execute(callId, params, signal)
+        +renderCall(args, options)
+        +renderResult(result, options)
+    }
+
+    class AgentTool {
+        <<agent-core interface>>
+        +string name
+        +string description
+        +Schema parameters
+        +execute(callId, args, signal)
+    }
+
+    class InteractiveMode {
+        -AgentSessionRuntime runtime
+        -TUI tui
+        +init()
+        +run()
+        +stop()
+        +rebindSession(session)
+    }
+
+    class PrintMode {
+        <<function adapter>>
+        +runPrintMode(runtime, options)
+    }
+
+    class RpcMode {
+        <<function adapter>>
+        +runRpcMode(runtime)
+        +handleCommand(command)
+        +createExtensionUIContext()
+    }
+
+    AgentSessionRuntime "1" *-- "1" AgentSessionServices : owns
+    AgentSessionRuntime "1" *-- "1" AgentSession : replaces
+    AgentSessionServices "1" *-- "1" SettingsManager
+    AgentSessionServices "1" *-- "1" ResourceLoader
+    AgentSessionServices "1" *-- "1" ModelRuntime
+    AgentSession "1" *-- "1" Agent
+    AgentSession "1" --> "1" SessionManager : persists through
+    AgentSession "1" --> "1" ExtensionRunner : dispatches hooks
+    AgentSession "1" --> "1" ModelRuntime : resolves auth and models
+    AgentSession "1" --> "1" ResourceLoader : consumes resources
+    Agent "1" *-- "1" AgentState
+    Agent --> AgentLoopConfig : snapshots each run
+    AgentLoopConfig --> Model : selects
+    AgentLoopConfig --> "0..*" AgentTool : exposes
+    SessionManager "1" *-- "0..*" SessionEntry : stores tree
+    DefaultResourceLoader ..|> ResourceLoader
+    DefaultResourceLoader --> SettingsManager : filters enabled resources
+    ExtensionRunner "1" *-- "1" ExtensionRuntime
+    ExtensionRunner --> ExtensionAPI : binds core actions
+    ExtensionRunner --> ModelRegistry : provider facade
+    ModelRegistry --> ModelRuntime : delegates
+    ModelRuntime "1" *-- "1" CredentialStore
+    ModelRuntime "1" o-- "0..*" Provider : composes
+    Provider "1" o-- "0..*" Model : publishes
+    ToolDefinition ..> AgentTool : wrapped as
+    ExtensionAPI ..> ToolDefinition : registers
+    InteractiveMode --> AgentSessionRuntime
+    PrintMode --> AgentSessionRuntime
+    RpcMode --> AgentSessionRuntime
+    InteractiveMode ..> ExtensionAPI : supplies TUI context
+    RpcMode ..> ExtensionAPI : supplies RPC UI context
