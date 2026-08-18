@@ -17,6 +17,13 @@ CHANGELOG.md              (in the package) release notes; current changes under 
   publish.yml             tag-triggered npm staging via trusted publishing
   pages.yml               deploys demo/ to GitHub Pages on push to master
 skills/lovely-mermaid/    copyable agent skill: what renders, in few words
+examples/                 .mmd corpus for eyeballing layout quality (also a
+                          crash regression: cluster-cycle.mmd)
+docs/layout-primer.md     field overview of graph layout/routing (for humans)
+docs/learn-plan.md        /learn lesson series roadmap + writing conventions
+demo/src/routes/          / (streaming demo), /render (renderer/ELK toggles +
+                          ELK options dropdown), /examples (gallery over
+                          examples/*.mmd, per-card viewer), /learn (lessons)
 tools/                    repo-level dev tooling, not shipped
   width-oracle/           emits per-code-point widths from the unicode-width crate
 packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sibling)
@@ -42,6 +49,16 @@ packages/lovely-mermaid/  the npm package (workspace member; demo/ will be a sib
       flowchart.ts  state.ts  class.ts  er.ts  sequence.ts
       pie.ts  mindmap.ts  timeline.ts  gitgraph.ts   (draw rows directly)
     layout.ts             rank, order, place, route, draw (flowchart/state/class/ER)
+    layout-elk.ts         PROTOTYPE elkjs layered layout (flowchart/state/class/ER); not in
+                          the package index, demo imports it via alias. Labels are
+                          withheld from ELK and placed post-route (into horizontal
+                          runs, straddling verticals, ellipsised last resort).
+                          When a model-order cycle-breaking strategy is chosen, cycles
+                          are pre-broken in declaration order (DFS; back edges handed
+                          to ELK reversed, chains flipped at draw) — restores declared
+                          order inside compounds and dodges an elkjs >= 0.11 crash
+                          (model-order strategy on a compound containing a cycle).
+                          Node widths forced even so centers land on integers.
     layout-seq.ts         sequence diagrams (own model in diagrams/sequence.ts, own geometry)
     source-box.ts         the source framed in a titled box
 ```

@@ -1,5 +1,8 @@
 /**
- * PROTOTYPE: flowchart layout via elkjs instead of the rule-based router.
+ * PROTOTYPE: graph layout via elkjs instead of the rule-based router, for
+ * every diagram kind that lowers to the shared `Graph`: flowchart, state,
+ * class and ER. (Cardinalities join the edge label mid-edge here instead of
+ * sitting at their own ends.)
  *
  * ELK's layered algorithm with orthogonal edge routing produces exactly the
  * geometry a terminal can draw — axis-aligned segments, right-angle bends,
@@ -16,10 +19,22 @@
 import type { ElkExtendedEdge, ElkNode } from 'elkjs'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import { Canvas, D, drawTextOverEdges, L, R, STY_DOT, STY_SOLID, STY_THICK, U } from './canvas.ts'
+import { parseClass } from './diagrams/class.ts'
+import { parseEr } from './diagrams/er.ts'
 import { parseGraph } from './diagrams/flowchart.ts'
+import { parseState } from './diagrams/state.ts'
 import type { Edge } from './graph.ts'
 import { fitLabel, MAX_LABEL, MAX_LINES, stripControls, WRAP_WIDTH, wrapLabel } from './labels.ts'
-import { drawBox, freeRun, half, headGlyph, MAX_CANVAS_CELLS, placeLabel, sat } from './layout.ts'
+import {
+  drawBox,
+  drawClassBox,
+  freeRun,
+  half,
+  headGlyph,
+  MAX_CANVAS_CELLS,
+  placeLabel,
+  sat,
+} from './layout.ts'
 import type { MermaidArt } from './types.ts'
 import { stringWidth } from './width.ts'
 
@@ -48,7 +63,8 @@ const OPTS: Record<string, string> = {
   // 'elk.layered.feedbackEdges': 'true',
   // Depth-first reverses far fewer edges than the greedy default here, so
   // clusters land in causal order and the wrap-around bundles mostly
-  // disappear, at some width cost. (MODEL_ORDER crashes in elkjs 0.12.)
+  // disappear, at some width cost. Model-order strategies also work now
+  // (root-only — see groupOpts) but measured wider on the arch corpus.
   'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.padding': '[top=2,left=2,bottom=2,right=2]',
 }
@@ -61,7 +77,7 @@ export async function renderElk(
 ): Promise<MermaidArt | null> {
   const opts = { ...OPTS, ...extraOpts }
   src = stripControls(src)
-  const graph = parseGraph(src)
+  const graph = parseGraph(src) ?? parseState(src) ?? parseClass(src) ?? parseEr(src)
   if (graph === null) return null
 
   // Node ids in the ELK graph: `n<i>` for nodes, `g<i>` for groups. A node
@@ -73,14 +89,39 @@ export async function renderElk(
   })
 
   const wrapped = graph.nodes.map((n) => wrapLabel(n.label, WRAP_WIDTH, MAX_LINES))
+  // Node widths are rounded up to EVEN: placement aligns node centres, so a
+  // width-parity mismatch between aligned nodes lands centres on x.5, and
+  // those halves round inconsistently between an edge's stub and its node —
+  // the source of most one-cell snapping artifacts. Even widths keep every
+  // centre integral. (Heights need no such care: along the flow axis layer
+  // positions accumulate from integer heights and spacings, no centring.)
+  const even = (v: number): number => v + (v % 2)
   const leafNode = (i: number): ElkNode => {
+    const sections = graph.nodes[i].sections
+    if (sections !== undefined) {
+      // Class/ER compartment box: widest line anywhere, one row per line
+      // plus a rule between non-empty compartments.
+      const w = even(Math.max(1, ...sections.flat().map(stringWidth)) + 4)
+      const filled = sections.filter((s) => s.length > 0).length
+      const h = sections.reduce((s, sec) => s + sec.length, 0) + sat(filled, 1) + 2
+      return { id: `n${i}`, width: w, height: h }
+    }
     const lines = wrapped[i]
-    const w = Math.max(1, ...lines.map(stringWidth)) + 4
+    const w = even(Math.max(1, ...lines.map(stringWidth)) + 4)
     return { id: `n${i}`, width: w, height: lines.length + 2 }
   }
 
   // Group tree: each group's ELK node carries its children; its title is an
-  // ELK label so the padding accounts for it.
+  // ELK label so the padding accounts for it. Groups repeat the options
+  // (spacing does not cascade into compounds, and even the cycle-breaking
+  // copy measurably changes the result) — except a model-order strategy:
+  // elkjs ≥ 0.11 crashes when one sits on a compound containing a cycle
+  // (regression, 0.10 was fine). Root-only works and is what the strategy
+  // means under INCLUDE_CHILDREN anyway.
+  const groupOpts = { ...opts }
+  if (groupOpts['elk.layered.cycleBreaking.strategy']?.includes('MODEL_ORDER')) {
+    delete groupOpts['elk.layered.cycleBreaking.strategy']
+  }
   const groupChildren: number[][] = graph.groups.map(() => [])
   graph.groups.forEach((g, gi) => {
     if (g.parent !== null) groupChildren[g.parent].push(gi)
@@ -97,7 +138,7 @@ export async function renderElk(
     labels: [
       { text: graph.groups[gi].label, width: stringWidth(graph.groups[gi].label) + 2, height: 1 },
     ],
-    layoutOptions: { ...opts, 'elk.nodeLabels.placement': '[H_LEFT, V_TOP, OUTSIDE]' },
+    layoutOptions: { ...groupOpts, 'elk.nodeLabels.placement': '[H_LEFT, V_TOP, OUTSIDE]' },
     children: [...nodesOf[gi].map(leafNode), ...groupChildren[gi].map(buildGroup)],
   })
 
@@ -105,13 +146,41 @@ export async function renderElk(
     const gi = proxy.get(ni)
     return gi === undefined ? `n${ni}` : `g${gi}`
   }
+  // Model-order strategies were stripped from compounds above, which would
+  // hand inner cycles to the order-blind default breaker. Instead, when a
+  // model-order strategy is chosen, break cycles ourselves — DFS in
+  // declaration order, back edges reversed — so ELK receives a DAG (which
+  // also cannot trip the elkjs crash) and declared order decides which side
+  // of a cycle sits on top. Reversed routes flip back at draw time.
+  const reversed = new Set<number>()
+  if (opts['elk.layered.cycleBreaking.strategy']?.includes('MODEL_ORDER')) {
+    const adj: number[][] = graph.nodes.map(() => [])
+    graph.edges.forEach((e, i) => {
+      if (e.from !== e.to) adj[e.from].push(i)
+    })
+    // 0 unvisited, 1 on the current path, 2 finished.
+    const mark = new Uint8Array(graph.nodes.length)
+    const visit = (n: number): void => {
+      mark[n] = 1
+      for (const ei of adj[n]) {
+        const m = graph.edges[ei].to
+        if (mark[m] === 1) reversed.add(ei)
+        else if (mark[m] === 0) visit(m)
+      }
+      mark[n] = 2
+    }
+    mark.forEach((v, n) => {
+      if (v === 0) visit(n)
+    })
+  }
+
   // ELK never sees the labels: reserving corridor space beside long
   // vertical runs is what spread the diagram. Labels are placed after
   // routing, set into a horizontal run of their own edge.
   const edges: ElkExtendedEdge[] = graph.edges.map((e, i) => ({
     id: `e${i}`,
-    sources: [elkId(e.from)],
-    targets: [elkId(e.to)],
+    sources: [elkId(reversed.has(i) ? e.to : e.from)],
+    targets: [elkId(reversed.has(i) ? e.from : e.to)],
   }))
 
   const root: ElkNode = {
@@ -165,10 +234,11 @@ export async function renderElk(
         canvas.addBits(x + w - 1, cy, U | D, 'border')
       }
       canvas.curStyle = STY_SOLID
-      // Interior cells carry the nesting depth; renderers tint per depth
-      // the way mermaid shades clusters. Nested frames stack via ++.
-      for (let cy = y + 1; cy < y + h - 1; cy++) {
-        for (let cx = x + 1; cx < x + w - 1; cx++) {
+      // The whole rect, border included, carries the nesting depth;
+      // renderers tint per depth the way mermaid shades clusters. Nested
+      // frames stack via ++.
+      for (let cy = y; cy < y + h; cy++) {
+        for (let cx = x; cx < x + w; cx++) {
           canvas.frame[canvas.idx(cx, cy)]++
         }
       }
@@ -181,6 +251,13 @@ export async function renderElk(
       const ni = Number(n.id.slice(1))
       canvas.curTag = graph.nodes[ni].classes?.join(' ')
       canvas.curHref = graph.nodes[ni].href
+      const sections = graph.nodes[ni].sections
+      if (sections !== undefined) {
+        drawClassBox(canvas, { x, y, w, h, cx: x + half(w), cy: y + half(h), rank: 0 }, sections)
+        canvas.curTag = undefined
+        canvas.curHref = undefined
+        return
+      }
       drawBox(
         canvas,
         { x, y, w, h, cx: x + half(w), cy: y + half(h), rank: 0 },
@@ -205,7 +282,7 @@ export async function renderElk(
   origins.set('root', { x: 0, y: 0 })
   for (const c of laid.children ?? []) collectOrigins(c, 0, 0)
 
-  const drawEdge = (e: ElkExtendedEdge, edge: Edge): { x: number; y: number }[] => {
+  const drawEdge = (e: ElkExtendedEdge, edge: Edge, flip: boolean): { x: number; y: number }[] => {
     const base = origins.get((e as { container?: string }).container ?? 'root') ?? { x: 0, y: 0 }
     canvas.curStyle =
       edge.line === 'dotted' ? STY_DOT : edge.line === 'thick' ? STY_THICK : STY_SOLID
@@ -237,8 +314,14 @@ export async function renderElk(
       if (a.y === b.y) canvas.segH(a.y, a.x, b.x)
       else canvas.segV(a.x, a.y, b.y)
     }
-    // Heads point along the last (first) segment's direction, drawn one
-    // cell short of the endpoint — ELK ends its routes on the node border.
+    // A pre-reversed edge (our model-order cycle breaking) routed backward;
+    // flip the chain so heads land at the declared ends.
+    if (flip) chain.reverse()
+    // Heads point along the last (first) segment's direction, in the cell
+    // adjacent to the node border. ELK ends routes on the node's geometric
+    // edge, which is half-open: a top/left coordinate IS the border cell
+    // (head one short of it), a bottom/right coordinate is one past it
+    // (the endpoint cell itself is the adjacent one).
     const head = (
       p: { x: number; y: number },
       q: { x: number; y: number },
@@ -247,7 +330,7 @@ export async function renderElk(
       const dx = q.x - p.x
       const dy = q.y - p.y
       const arrow = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? '▶' : '◄') : dy >= 0 ? '▼' : '▲'
-      canvas.set(q.x - Math.sign(dx), q.y - Math.sign(dy), glyph(arrow), 'edge')
+      canvas.set(q.x - (dx > 0 ? 1 : 0), q.y - (dy > 0 ? 1 : 0), glyph(arrow), 'edge')
     }
     if (chain.length >= 2) {
       if (edge.headTo !== 'none') {
@@ -259,7 +342,7 @@ export async function renderElk(
   }
   const chains: { x: number; y: number }[][] = []
   laid.edges?.forEach((e, i) => {
-    chains[i] = drawEdge(e, graph.edges[i])
+    chains[i] = drawEdge(e, graph.edges[i], reversed.has(i))
   })
 
   // Labels go onto a horizontal run of their own edge, once every edge has
@@ -298,7 +381,7 @@ export async function renderElk(
   // stroke interrupted like a lane label — sliding along the run from its
   // middle to find a row with lateral room. The run's own column is
   // welcome inside the window; any other vertical blocks it.
-  const placeAcrossV = (t: string, x: number, yA: number, yB: number): boolean => {
+  const placeAcrossV = (t: string, x: number, yA: number, yB: number, relaxed = false): boolean => {
     const lo = Math.min(yA, yB) + 1
     const hi = Math.max(yA, yB) - 1
     if (lo > hi) return false
@@ -310,8 +393,12 @@ export async function renderElk(
           const cx = x + dir * (1 + n)
           if (cx < 0 || cx >= canvas.w) break
           const ci = canvas.idx(cx, row)
-          if (canvas.occupied[ci] || canvas.ch[ci] !== ' ' || (canvas.mask[ci] & (U | D)) !== 0)
-            break
+          if (canvas.occupied[ci] || canvas.ch[ci] !== ' ') break
+          // Strict: crossing another vertical is blocked. Relaxed (the
+          // retry once every run failed strict): the label may straddle
+          // other edges — drawTextOverEdges interrupts the stroke
+          // cleanly — but never a frame border.
+          if ((canvas.mask[ci] & (U | D)) !== 0 && (!relaxed || canvas.role[ci] === 'border')) break
           n++
         }
         return n
@@ -362,6 +449,9 @@ export async function renderElk(
     vRuns.sort((a, b) => b.len - a.len)
     for (const run of vRuns) {
       if (placeAcrossV(t, run.x, run.yA, run.yB)) return
+    }
+    for (const run of vRuns) {
+      if (placeAcrossV(t, run.x, run.yA, run.yB, true)) return
     }
     if (vRuns.length > 0) {
       // Last resort: beside the longest vertical, ellipsised to the roomier

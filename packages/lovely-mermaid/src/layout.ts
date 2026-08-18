@@ -1456,7 +1456,12 @@ export function drawBox(
 }
 
 /** A class or ER box: sections separated by horizontal rules, title centred. */
-function drawClassBox(canvas: Canvas, p: Placed, sections: string[][], mirrored = false): void {
+export function drawClassBox(
+  canvas: Canvas,
+  p: Placed,
+  sections: string[][],
+  mirrored = false,
+): void {
   drawBox(canvas, p, [], 'rect')
   const inner = Math.max(1, sat(p.w, 2 * PAD + 2))
   const rows: ({ sep: true } | { sep?: undefined; text: string; center: boolean })[] = []
@@ -1482,10 +1487,10 @@ function drawClassBox(canvas: Canvas, p: Placed, sections: string[][], mirrored 
 /** A subgraph frame: a titled box with a finished sub-canvas centred inside. */
 function drawFrame(canvas: Canvas, p: Placed, title: string, sub: Canvas, mirrored = false): void {
   drawBox(canvas, p, [], 'rect')
-  // Interior cells carry the nesting depth (see Span.frame); the blit below
-  // adds the sub-canvas's own frame depths on top.
-  for (let cy = p.y + 1; cy < p.y + p.h - 1; cy++) {
-    for (let cx = p.x + 1; cx < p.x + p.w - 1; cx++) {
+  // The whole rect, border included, carries the nesting depth (see
+  // Span.frame); the blit below adds the sub-canvas's own depths on top.
+  for (let cy = p.y; cy < p.y + p.h; cy++) {
+    for (let cx = p.x; cx < p.x + p.w; cx++) {
       canvas.frame[canvas.idx(cx, cy)]++
     }
   }
