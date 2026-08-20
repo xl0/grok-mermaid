@@ -1,22 +1,26 @@
 name: Deploy demo to GitHub Pages
 
 # Pages serves the gh-pages branch (Settings → Pages → deploy from branch).
-# A master push deploys to the site root; a workflow_dispatch from any other
-# branch deploys that branch's demo to previews/<branch>/ beside it, without
-# touching the root. keep_files leaves the other deployments (and old hashed
-# assets) in place — clean up gh-pages by hand if it ever bloats.
+# A master push deploys to the site root; a push to any other branch deploys
+# that branch's demo to previews/<branch>/ beside it, without touching the
+# root. keep_files leaves the other deployments (and old hashed assets) in
+# place — clean up gh-pages by hand if it ever bloats (delete a branch's
+# previews/<slug> dir once the branch is gone).
 
 on:
   push:
-    branches: [master]
+    branches: ["**"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# One deploy at a time across all branches: every job commits to gh-pages,
+# and parallel pushes would reject each other. Queued, not cancelled, so a
+# branch push can't kill a master deploy.
 concurrency:
-  group: pages-${{ github.ref_name }}
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -86,3 +90,29 @@ jobs:
           destination_dir: ${{ steps.target.outputs.dest }}
           keep_files: true
           commit_message: "deploy ${{ github.ref_name }}@${{ github.sha }}"
+
+      # previews/index.html lists every preview present on gh-pages (read
+      # after the deploy above, so the current one is included). Regenerated
+      # on every run, master included, so it stays current as previews are
+      # added or hand-deleted.
+      - name: Build previews index
+        run: |
+          git fetch --depth=1 origin gh-pages
+          mkdir -p previews-index
+          {
+            echo '<!doctype html><meta charset="utf-8"><title>lovely-mermaid previews</title>'
+            echo '<style>body{font:16px/1.6 system-ui;max-width:40rem;margin:3rem auto;padding:0 1rem;background:#16161a;color:#d4d4d8}a{color:#8ab4f8}h1{font-size:1.2rem;font-weight:normal}</style>'
+            echo '<h1>lovely-mermaid / previews</h1><ul>'
+            { git ls-tree --name-only origin/gh-pages:previews 2>/dev/null || true; } |
+              grep -v '^index\.html$' | sort |
+              while read -r s; do echo "<li><a href=\"$s/\">$s</a></li>"; done
+            echo '</ul><p><a href="../">← main site</a></p>'
+          } > previews-index/index.html
+
+      - uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: previews-index
+          destination_dir: previews
+          keep_files: true
+          commit_message: "previews index"

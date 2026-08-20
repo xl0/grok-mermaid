@@ -15,7 +15,8 @@ CHANGELOG.md              (in the package) release notes; current changes under 
 .pi/prompts/cl.md         audits Unreleased changelog entries against the commits
 .github/workflows/
   publish.yml             tag-triggered npm staging via trusted publishing
-  pages.yml               deploys demo/ to GitHub Pages on push to master
+  pages.yml               deploys demo/ to GitHub Pages: master → site root, any
+                          other branch push → previews/<branch>/ (serialized)
 skills/lovely-mermaid/    copyable agent skill: what renders, in few words
 examples/                 .mmd corpus for eyeballing layout quality (also a
                           crash regression: cluster-cycle.mmd)
