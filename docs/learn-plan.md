@@ -36,9 +36,13 @@ claim is demonstrated, not illustrated. Each topic ends with a playground.
    NETWORK_SIMPLEX vs LONGEST_PATH on the widget graph, dummy dots shown,
    spans in captions; one-liners on COFFMAN_GRAHAM / MIN_WIDTH and the
    empirical note that width-targeting layerings often backfire (dummies
-   dominate); (6) playground — build-pipeline DAG with slack, layering
-   strategy select; (7) takeaways, next = crossing minimization. Ref
-   cards: Gansner et al. 1993 (network simplex), Coffman & Graham 1972.
+   dominate); (6) subgraphs — a box is one node on one outer layer, its
+   internal layers collapse into a tall row (flat-vs-boxed figure pair,
+   engine-verified); (7) playground — build-pipeline DAG, one edge per
+   line, elkjs run directly and drawn as SVG with layer bands, dummy dots
+   and per-layer real+dummy occupancy (the terminal renderer hid all
+   three); (8) takeaways, next = crossing minimization. Ref cards:
+   Gansner et al. 1993 (network simplex), Coffman & Graham 1972.
 3. Crossing minimization — layer sweep, barycenter, why spaghetti is dummies.
 4. Node placement — Brandes-Köpf vs linear segments, the width/symmetry trade.
 5. Edge routing — channels, tracks, orthogonal vs polyline.
@@ -70,6 +74,10 @@ sentence of definition first ("The badge on each node is the one number
 that strategy looked at"), and after that the same word is used
 consistently. When a standard term exists (source, reversal, declaration
 order), use it instead of a metaphor.
+
+Voice: first-person plural ("we assign", "we've measured") — the author
+walks with the reader. Don't overuse "let's"-style section openers; at
+most a couple per page, plain statements otherwise.
 
 Tone: plain instructive register, with humor. Cheeky jokes and sarcasm are
 welcome — as many as land. What is banned is the sales pitch: grand

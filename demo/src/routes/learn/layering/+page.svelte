@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import DiagramViewer from '$lib/DiagramViewer.svelte';
 	import Term from '$lib/learn/Term.svelte';
 
 	// ---- the layer-juggling widget -----------------------------------------
@@ -80,23 +79,177 @@
 	}
 
 	// ---- playground -------------------------------------------------------
-	const PIPE = `graph TD
-  src[source] --> lex
-  lex --> parse
-  parse --> types[typecheck]
-  types --> opt[optimize]
-  opt --> gen[codegen]
-  gen --> link
-  src --> cfg[config]
-  cfg --> link
-  src --> assets
-  assets --> pack[package]
-  link --> pack
-  types --> lint
-  lint --> pack`;
+	// Runs elkjs directly and draws the result in this page's own language:
+	// layer bands, dummy dots, per-layer occupancy. Layers are recovered by
+	// clustering node centers by y (uniform node heights make them exact);
+	// dummy positions by intersecting each routed edge with the skipped
+	// bands' centerlines.
+	const PIPE = `src[source] --> lex
+lex --> parse
+parse --> types[typecheck]
+types --> opt[optimize]
+opt --> gen[codegen]
+gen --> link
+src --> cfg[config]
+cfg --> link
+src --> assets
+assets --> pack[package]
+link --> pack
+types --> lint
+lint --> pack`;
 	let playSrc = $state(PIPE);
 	let playLay = $state('NETWORK_SIMPLEX');
-	const lay = (v: string) => ({ 'elk.layered.layering.strategy': v });
+
+	function parseEdges(src: string): { labels: Map<string, string>; edges: [string, string][] } {
+		const labels = new Map<string, string>();
+		const edges: [string, string][] = [];
+		const id = (tok: string): string | null => {
+			const m = tok.trim().match(/^(\w+)(?:\[([^\]]*)\])?$/);
+			if (!m) return null;
+			if (m[2] || !labels.has(m[1])) labels.set(m[1], m[2] ?? m[1]);
+			return m[1];
+		};
+		for (const line of src.split('\n')) {
+			const t = line.trim();
+			if (!t || /^graph\b/i.test(t)) continue;
+			const parts = t.split('-->');
+			for (let i = 0; i + 1 < parts.length; i++) {
+				const u = id(parts[i]);
+				const v = id(parts[i + 1]);
+				if (u && v) edges.push([u, v]);
+			}
+		}
+		return { labels, edges };
+	}
+
+	interface PNode {
+		id: string;
+		label: string;
+		x: number;
+		y: number;
+		w: number;
+		h: number;
+	}
+	interface PEdge {
+		pts: { x: number; y: number }[];
+		up: boolean;
+		dots: { x: number; y: number }[];
+	}
+	interface PFig {
+		w: number;
+		h: number;
+		nodes: PNode[];
+		edges: PEdge[];
+		bands: { y: number; real: number; dummy: number }[];
+		span: number;
+		dummies: number;
+	}
+	let pfig = $state<PFig | null>(null);
+	let perr = $state('');
+	let runToken = 0;
+
+	// x where a polyline crosses the horizontal line at y.
+	const xAtY = (pts: { x: number; y: number }[], y: number): number | null => {
+		for (let i = 0; i + 1 < pts.length; i++) {
+			const a = pts[i];
+			const b = pts[i + 1];
+			if (a.y !== b.y && (a.y - y) * (b.y - y) <= 0)
+				return a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x);
+		}
+		return null;
+	};
+
+	$effect(() => {
+		const { labels, edges } = parseEdges(playSrc);
+		const strat = playLay;
+		const token = ++runToken;
+		(async () => {
+			const { default: ELK } = await import('elkjs/lib/elk.bundled.js');
+			const laid = (await new ELK().layout({
+				id: 'root',
+				layoutOptions: {
+					'elk.algorithm': 'layered',
+					'elk.direction': 'DOWN',
+					'elk.layered.layering.strategy': strat,
+					'elk.spacing.nodeNode': '25',
+					'elk.layered.spacing.nodeNodeBetweenLayers': '45'
+				},
+				children: [...labels.entries()].map(([id, label]) => ({
+					id,
+					width: label.length * 7.2 + 20,
+					height: 26
+				})),
+				edges: edges.map(([u, v], i) => ({ id: `e${i}`, sources: [u], targets: [v] }))
+			})) as {
+				width?: number;
+				height?: number;
+				children?: { id: string; x?: number; y?: number; width?: number; height?: number }[];
+				edges?: {
+					sources: string[];
+					targets: string[];
+					sections?: {
+						startPoint: { x: number; y: number };
+						bendPoints?: { x: number; y: number }[];
+						endPoint: { x: number; y: number };
+					}[];
+				}[];
+			};
+			if (token !== runToken) return;
+			const nodes: PNode[] = (laid.children ?? []).map((c) => ({
+				id: c.id,
+				label: labels.get(c.id) ?? c.id,
+				x: (c.x ?? 0) + (c.width ?? 0) / 2,
+				y: (c.y ?? 0) + (c.height ?? 0) / 2,
+				w: c.width ?? 40,
+				h: c.height ?? 26
+			}));
+			// Uniform node heights -> nodes of one layer share an exact center y.
+			const ys = [...new Set(nodes.map((n) => Math.round(n.y)))].sort((a, b) => a - b);
+			const layerOf = (n: PNode) => ys.findIndex((y) => Math.abs(y - n.y) < 2);
+			const byId = new Map(nodes.map((n) => [n.id, n]));
+			const bands = ys.map((y) => ({ y, real: 0, dummy: 0 }));
+			for (const n of nodes) bands[layerOf(n)].real++;
+			const figEdges: PEdge[] = [];
+			let span = 0;
+			let dummies = 0;
+			for (const e of laid.edges ?? []) {
+				const a = byId.get(e.sources[0]);
+				const b = byId.get(e.targets[0]);
+				if (!a || !b) continue;
+				const sec = e.sections?.[0];
+				const pts = sec
+					? [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint]
+					: [
+							{ x: a.x, y: a.y },
+							{ x: b.x, y: b.y }
+						];
+				const la = layerOf(a);
+				const lb = layerOf(b);
+				const d = Math.abs(lb - la);
+				span += d;
+				dummies += Math.max(0, d - 1);
+				const dots: { x: number; y: number }[] = [];
+				for (let i = Math.min(la, lb) + 1; i < Math.max(la, lb); i++) {
+					bands[i].dummy++;
+					const x = xAtY(pts, ys[i]);
+					if (x !== null) dots.push({ x, y: ys[i] });
+				}
+				figEdges.push({ pts, up: lb < la, dots });
+			}
+			pfig = {
+				w: laid.width ?? 100,
+				h: laid.height ?? 100,
+				nodes,
+				edges: figEdges,
+				bands,
+				span,
+				dummies
+			};
+			perr = '';
+		})().catch((err) => {
+			if (token === runToken) perr = String(err);
+		});
+	});
 </script>
 
 <svelte:head>
@@ -140,10 +293,10 @@
 	<p class="crumbs"><a href="{base}/learn">learn</a> <span class="dim">/ layering</span></p>
 	<h1>Layering</h1>
 	<p class="lede">
-		<a href="{base}/learn/cycle-breaking">Cycle breaking</a> left us a DAG. Layering spends
-		it: every node gets a <b>layer</b> — a row number — and the one hard rule is that every
-		edge must point strictly downward, from a lower layer to a higher one. That rule alone
-		leaves enormous freedom, and this page is about how that freedom gets spent.
+		<a href="{base}/learn/cycle-breaking">Cycle breaking</a> left us a DAG. Now we assign
+		every node a <b>layer</b> — a row number — with one hard rule: every edge must point
+		strictly downward. That rule alone leaves enormous freedom, and this page is about how
+		we spend it.
 	</p>
 	<Term name="layer">
 		The row a node is assigned to; layer 0 is the top row. Not Photoshop layers — nothing is
@@ -154,11 +307,11 @@
 	<h2>Three prices, pick two</h2>
 	<p>
 		Any assignment with all edges pointing down is <em>valid</em>, so validity is cheap —
-		put every node on its own layer and you are done. Good is harder. A layering is judged on
-		three counts: <b>height</b> (how many layers), <b>total edge span</b> (how many layers all
-		the edges cross, added up), and <b>width</b> (how much sits on each layer — real nodes
-		plus dummy nodes). The three pull against each other:
-		squeezing height stretches edges, shortening edges can pile nodes onto the same layer.
+		put every node on its own layer and we're done. Good is harder. We judge a layering on
+		three counts: <b>height</b> (how many layers), <b>total edge span</b> (how many layers
+		all the edges cross, added up), and <b>width</b> (how much sits on each layer — real
+		nodes plus dummy nodes). The three pull against each other: squeezing height stretches
+		edges; shortening edges can pile nodes onto the same layer.
 	</p>
 	<Term name="edge span">
 		The number of layers an edge crosses: layer(target) − layer(source). Span 1 is the ideal —
@@ -167,16 +320,15 @@
 	</Term>
 	<p>
 		There is one more cost, and it is the important one. An edge with span 3 does not stay a
-		single line: at each of the 2 layers it skips, the engine inserts a <b>dummy node</b> — an
-		invisible placeholder that the later phases treat exactly like a node. The reason is that
-		those phases only ever reason about one layer at a time: they order nodes within a layer,
-		then pick coordinates for them. A long edge passing through a layer it has no node in
-		would be invisible to that machinery — nothing would count its crossings, keep nodes out
-		of its way, or reserve room for it. The dummy is the edge's stand-in, giving it a seat in
-		every layer it crosses. The price: a dummy occupies a slot in its layer, pushes real nodes
-		apart, and every one is a potential bend in the final edge. A layer's true width is real
-		nodes <em>plus</em> dummies. This is the bill promised last lesson: long edges quietly
-		cost width.
+		single line: at each of the 2 layers it skips, the engine inserts a <b>dummy node</b> —
+		an invisible placeholder that later phases treat exactly like a real node. Why? Those
+		phases only reason about one layer at a time: they order nodes within a layer, then pick
+		coordinates. A long edge passing through a layer where it has no node would be invisible
+		to that machinery — nothing would count its crossings, keep nodes out of its way, or
+		reserve room for it. The dummy is the edge's stand-in, giving it a seat in every layer
+		it crosses. The price: a dummy occupies a slot, pushes real nodes apart, and risks a
+		bend in the final edge. A layer's true width is real nodes <em>plus</em> dummies. This is
+		the bill we promised last lesson: long edges quietly cost width.
 	</p>
 	<Term name="dummy node">
 		A placeholder inserted at every intermediate layer of a long edge, splitting it into span-1
@@ -261,7 +413,7 @@
 
 	<h2>How engines choose</h2>
 	<p>
-		The two classic answers, applied to the same graph — dummies drawn in:
+		The two classic strategies, applied to the same graph — dummies drawn in:
 	</p>
 	<div class="row">
 		<figure>
@@ -287,28 +439,115 @@
 		rest of the pipeline these lessons cover.
 	</Term>
 	<p>
-		There are also strategies that target width directly — cap how many nodes a layer may hold
-		and fill layers like a scheduler assigning jobs to time slots (Coffman–Graham is the
-		classic). They have a blind spot: the cap counts <em>real</em> nodes, and on real diagrams
-		the dummies often outnumber them. A layering that proudly holds every layer to three nodes
-		can still come out wider than the default, because the long edges it created fill the
-		layers with dummies. We have measured exactly that on a corpus of real-world diagrams.
+		There are also strategies that target width directly — cap how many nodes a layer may
+		hold and fill layers like a scheduler assigning jobs to time slots (Coffman–Graham is
+		the classic). They have a blind spot: the cap counts <em>real</em> nodes, and on real
+		diagrams the dummies often outnumber them. A layering that proudly holds every layer to
+		three nodes can still come out wider than the default, because the long edges it created
+		fill the layers with dummies. We've measured exactly that on a corpus of real-world
+		diagrams.
 	</p>
 	<Term name="Coffman & Graham (1972)" href="https://doi.org/10.1007/BF00288685">
 		<em>Optimal scheduling for two-processor systems</em> — a scheduling algorithm, later
 		borrowed by graph drawing for layering with a width limit.
 	</Term>
 
+	<h2>Subgraphs</h2>
+	<p>
+		A subgraph gets a layering of its own. To the outer graph the finished box is a single —
+		large — node sitting on a single layer; inside it, the members have their own private
+		layers. Two consequences follow. First, layers stop being uniform in height: a row that
+		holds a box is as tall as the box's whole internal stack, and everything sharing that row
+		stretches to match. Second, span stops telling the whole truth: an edge running alongside
+		a box can have span 1 and still be the longest line in the drawing. Same graph, with and
+		without a box around the middle chain:
+	</p>
+	<div class="row">
+		<figure>
+			<svg viewBox="0 0 300 300" class="figsvg" role="img" aria-label="Flat layering">
+				{#each [30, 90, 150, 210, 270] as y, i}
+					<rect x="4" y={y - 20} width="292" height="40" class="band" />
+					<text x="8" y={y - 6} class="bandlabel">layer {i}</text>
+				{/each}
+				<line x1="120" y1="46" x2="120" y2="76" class="edge" marker-end="url(#arr)" />
+				<line x1="120" y1="106" x2="120" y2="136" class="edge" marker-end="url(#arr)" />
+				<line x1="120" y1="166" x2="120" y2="196" class="edge" marker-end="url(#arr)" />
+				<line x1="133" y1="46" x2="209" y2="137" class="edge" marker-end="url(#arr)" />
+				<line x1="214" y1="166" x2="177" y2="255" class="edge" marker-end="url(#arr)" />
+				<line x1="127" y1="226" x2="164" y2="256" class="edge" marker-end="url(#arr)" />
+				<circle cx="170" cy="90" r="4" class="dummy" />
+				<circle cx="196" cy="210" r="4" class="dummy" />
+				<rect x="90" y="18" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="34">fetch</text>
+				<rect x="90" y="78" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="94">clean</text>
+				<rect x="90" y="138" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="154">merge</text>
+				<rect x="190" y="138" width="60" height="24" rx="10" class="pill" />
+				<text x="220" y="154">log</text>
+				<rect x="90" y="198" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="214">stats</text>
+				<rect x="140" y="258" width="60" height="24" rx="10" class="pill" />
+				<text x="170" y="274">ship</text>
+			</svg>
+			<figcaption>
+				<b>Flat</b>: five layers. <code>fetch → log</code> and <code>log → ship</code>
+				each skip a layer — two dummies, span 8.
+			</figcaption>
+		</figure>
+		<figure>
+			<svg viewBox="0 0 320 320" class="figsvg" role="img" aria-label="Boxed layering">
+				<rect x="4" y="10" width="312" height="40" class="band" />
+				<text x="8" y="24" class="bandlabel">layer 0</text>
+				<rect x="4" y="65" width="312" height="190" class="band" />
+				<text x="8" y="79" class="bandlabel">layer 1</text>
+				<rect x="4" y="270" width="312" height="40" class="band" />
+				<text x="8" y="284" class="bandlabel">layer 2</text>
+				<rect x="60" y="70" width="120" height="180" class="cluster" />
+				<text x="70" y="86" class="cltitle">process</text>
+				<line x1="120" y1="42" x2="120" y2="94" class="edge" marker-end="url(#arr)" />
+				<line x1="120" y1="118" x2="120" y2="154" class="edge" marker-end="url(#arr)" />
+				<line x1="120" y1="178" x2="120" y2="214" class="edge" marker-end="url(#arr)" />
+				<line x1="132" y1="42" x2="242" y2="146" class="edge" marker-end="url(#arr)" />
+				<line x1="250" y1="172" x2="196" y2="275" class="edge" marker-end="url(#arr)" />
+				<line x1="122" y1="238" x2="176" y2="277" class="edge" marker-end="url(#arr)" />
+				<rect x="90" y="18" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="34">fetch</text>
+				<rect x="90" y="94" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="110">clean</text>
+				<rect x="90" y="154" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="170">merge</text>
+				<rect x="90" y="214" width="60" height="24" rx="10" class="pill" />
+				<text x="120" y="230">stats</text>
+				<rect x="220" y="148" width="60" height="24" rx="10" class="pill" />
+				<text x="250" y="164">log</text>
+				<rect x="155" y="278" width="60" height="24" rx="10" class="pill" />
+				<text x="185" y="294">ship</text>
+			</svg>
+			<figcaption>
+				<b>Boxed</b>: the outer layering sees three layers, and the box is one node on
+				one of them — its three internal layers collapse into a single tall row. Every
+				span is 1, zero dummies; yet <code>log</code>'s edges are the longest lines here.
+				Hierarchy re-denominates the cost, it does not refund it.
+			</figcaption>
+		</figure>
+	</div>
+	<p>
+		Everything else about subgraphs — edges that cross the border, boxes inside boxes, why
+		grouping inflates a drawing — is a lesson of its own, later in the series.
+	</p>
+
 	<h2>Playground</h2>
 	<p>
-		A build pipeline with three nodes of slack: <code>config</code>, <code>assets</code> and
-		<code>lint</code> each have a valid home on several layers. Watch where each strategy puts
-		them. Then add <code>src --&gt; pack</code> and follow the new edge through five layers of
-		dummies — every kink along the way is one.
+		A build pipeline with three nodes of slack, one <code>a --&gt; b</code> edge per line.
+		The engine runs live; we draw its answer with the layers, the dummies, and each layer's
+		occupancy (real + dummy) on the right. <code>config</code>, <code>assets</code>, and
+		<code>lint</code> can each sit on several layers — watch where each strategy puts them.
+		Then add <code>src --&gt; pack</code> and count what the new edge costs.
 	</p>
 	<div class="play">
 		<div class="controls">
-			<textarea bind:value={playSrc} rows="14" spellcheck="false" aria-label="Mermaid source"
+			<textarea bind:value={playSrc} rows="14" spellcheck="false" aria-label="Graph edges"
 			></textarea>
 			<label>
 				<span class="dim">layering</span>
@@ -320,17 +559,46 @@
 				</select>
 			</label>
 		</div>
-		<div class="fig play-fig">
-			<DiagramViewer src={playSrc} elkExtra={lay(playLay)} />
+		<div class="play-fig">
+			{#if pfig}
+				<svg viewBox="0 0 {pfig.w + 150} {pfig.h + 24}" class="playsvg" role="img" aria-label="Live layering result">
+					<g transform="translate(70, 12)">
+						{#each pfig.bands as b, i}
+							<rect x="-62" y={b.y - 21} width={pfig.w + 134} height="42" class="band" />
+							<text x="-58" y={b.y - 7} class="bandlabel">layer {i}</text>
+							<text x={pfig.w + 68} y={b.y + 4} class="occ">{b.real}+{b.dummy}</text>
+						{/each}
+						{#each pfig.edges as e}
+							<polyline
+								points={e.pts.map((p) => `${p.x},${p.y}`).join(' ')}
+								class="edge"
+								class:up={e.up}
+								marker-end={e.up ? 'url(#arr-up)' : 'url(#arr)'}
+							/>
+							{#each e.dots as d}
+								<circle cx={d.x} cy={d.y} r="4" class="dummy" />
+							{/each}
+						{/each}
+						{#each pfig.nodes as n}
+							<rect x={n.x - n.w / 2} y={n.y - n.h / 2} width={n.w} height={n.h} rx="12" class="pill" />
+							<text x={n.x} y={n.y + 4}>{n.label}</text>
+						{/each}
+					</g>
+				</svg>
+				<p class="dim stats">
+					layers: {pfig.bands.length} · total span: {pfig.span} · dummies: {pfig.dummies}
+				</p>
+			{/if}
+			{#if perr}<p class="dim">{perr}</p>{/if}
 		</div>
 	</div>
 
 	<h2>Takeaways</h2>
 	<ul>
 		<li>Layering assigns each node a layer; the only rule is that every edge points strictly down. Valid is trivial; good is a trade.</li>
-		<li>The currencies: height, total edge span, and width — and width is counted with the dummies in.</li>
-		<li>An edge spanning k layers becomes k−1 dummy nodes: slots taken, bends risked, width spent.</li>
-		<li>Longest path minimizes height in one pass; network simplex minimizes span; width caps count only the nodes you can see, which is their undoing.</li>
+		<li>The currencies: height, total edge span, and width — width counted with dummies included.</li>
+		<li>An edge spanning <em>k</em> layers becomes <em>k</em>−1 dummy nodes: slots taken, bends risked, width spent.</li>
+		<li>Longest-path minimizes height in one pass; network simplex minimizes span; width caps count only the nodes you can see, which is their undoing.</li>
 	</ul>
 	<p class="dim">
 		Next: crossing minimization — where the spaghetti is fought, one layer pair at a time.
@@ -369,13 +637,6 @@
 		padding: 0 0.25em;
 	}
 
-	.fig {
-		height: 24rem;
-		border: 1px solid var(--muted);
-		border-radius: 6px;
-		overflow: hidden;
-		margin: 1rem 0;
-	}
 	.row {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
@@ -405,6 +666,7 @@
 		margin: 0 auto 0.4rem;
 	}
 	.figsvg text,
+	.playsvg text,
 	.arena text {
 		fill: var(--fg);
 		font-size: 13px;
@@ -431,13 +693,22 @@
 	.band {
 		fill: color-mix(in srgb, var(--accent) 8%, transparent);
 	}
-	.bandlabel {
+	svg .bandlabel {
 		fill: var(--dim);
 		font-size: 10px;
 		text-anchor: start;
 	}
 	.dummy {
 		fill: var(--dim);
+	}
+	.cluster {
+		fill: color-mix(in srgb, var(--purple) 7%, transparent);
+		stroke: var(--muted);
+	}
+	svg .cltitle {
+		fill: var(--dim);
+		font-size: 11px;
+		text-anchor: start;
 	}
 
 	.arena {
@@ -487,7 +758,24 @@
 	}
 	.play-fig {
 		margin: 0;
-		height: 30rem;
+		min-width: 0;
+	}
+	.playsvg {
+		width: 100%;
+		max-height: 34rem;
+		display: block;
+	}
+	.playsvg polyline {
+		fill: none;
+	}
+	svg .occ {
+		fill: var(--dim);
+		font-size: 11px;
+		text-anchor: start;
+	}
+	.stats {
+		text-align: center;
+		margin: 0.2rem 0 0;
 	}
 	.controls textarea {
 		width: 100%;

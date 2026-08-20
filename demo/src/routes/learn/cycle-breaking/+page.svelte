@@ -220,11 +220,11 @@
 	<h1>Cycle breaking</h1>
 	<p class="lede">
 		<a href="{base}/learn/drawing-graphs">Lesson 0</a> showed that a graph with a cycle admits
-		no layer numbering — "every edge points forward" cannot hold. The fix is surgical —
-		pick a few edges and <b>temporarily reverse</b> them. The layering machinery then sees a
-		DAG; at draw time each reversed edge gets its arrowhead back and renders against the flow,
-		as a feedback edge. What matters — and what this page is about — is <em>which</em> edges
-		get picked, because that decides what ends up on top of what.
+		no layer numbering — "every edge points forward" cannot hold. The fix is surgical: we
+		pick a few edges and <b>temporarily reverse</b> them. Layering then sees a DAG; at draw
+		time each reversed edge gets its arrowhead back and renders against the flow as a
+		feedback edge. What matters — what this page is about — is <em>which</em> edges we pick,
+		because that decides what ends up on top of what.
 	</p>
 	<Term name="DAG">
 		Directed acyclic graph — a directed graph with no cycles. The shape layered layout actually
@@ -242,12 +242,11 @@
 
 	<h2>Choosing the victim is NP-hard</h2>
 	<p>
-		"Reverse as few edges as possible" has a name — the <b>minimum feedback arc set</b> problem —
-		and it is NP-hard (exact answers cost combinatorially exploding time — fine at 10 nodes,
-		hopeless at 100), so no engine solves it exactly. Every real engine uses a heuristic. One
-		mental model covers all of them — the <b>linear arrangement</b>: forget layers,
-		just put all nodes on a line. Every edge now points either forward (fine) or backward (must
-		be reversed). Cycle breaking <em>is</em> choosing that order.
+		"Reverse as few edges as possible" has a name — the <b>minimum feedback arc set</b>
+		problem — and it is NP-hard, so no engine solves it exactly. Every real engine uses a
+		heuristic. One mental model covers all of them — the <b>linear arrangement</b>: forget
+		layers, just put all nodes on a line. Every edge now points either forward (fine) or
+		backward (must be reversed). Cycle breaking <em>is</em> choosing that order.
 	</p>
 	<p>
 		Try it. Drag the nodes — arcs above the line point forward, arcs below (red) are the
@@ -314,9 +313,10 @@
 
 	<h2>The strategy zoo</h2>
 	<p>
-		One graph, one declaration, four strategies, four different drawings. A document pipeline:
-		a proof–edit–render loop (declared starting at <code>proof</code>), assets and fonts feeding
-		in, and an autosave branch where <code>save</code> and <code>sync</code> chase each other:
+		One graph, one declaration, four strategies, four different drawings. A
+		document pipeline with a proof–edit–render loop (declared starting at <code>proof</code>),
+		assets and fonts feeding in, and an autosave branch where <code>save</code> and
+		<code>sync</code> chase each other:
 	</p>
 	<pre>{ZOO}</pre>
 	<p>
@@ -374,9 +374,8 @@
 	<p>
 		The lesson: <b>fewest reversals is not the same as most readable</b>. The first three
 		drawings reverse a near-minimal number of edges and still disagree about everything else;
-		the fourth spends twice as many reversals to follow your declaration order to the letter.
-		Declaration order is information, and strategies differ in whether they listen — and how
-		hard.
+		the fourth spends twice as many reversals to follow declaration order to the letter.
+		Declaration order is information — strategies differ in whether they listen, and how hard.
 	</p>
 
 	<h2>Cycles inside subgraphs</h2>
@@ -510,11 +509,11 @@
 
 	<h2>Takeaways</h2>
 	<ul>
-		<li>A cycle forces at least one edge to render against the flow; layout reverses it temporarily, never deletes it.</li>
-		<li>Cycle breaking is choosing a linear order; backward edges in that order are the price.</li>
-		<li>Minimizing the price is NP-hard; the greedy default gets close — by looking at degrees alone.</li>
-		<li>Near-minimal reversals still leave huge freedom: same graph, four strategies, four drawings. Declaration order is information; some strategies read it.</li>
-		<li>The strategy is a per-diagram setting, worth reaching for when a loop renders upside down.</li>
+		<li>A cycle forces at least one edge to render against the flow; layout reverses it temporarily, never deletes.</li>
+		<li>Cycle breaking is choosing a linear order; backward edges in that order are the reversals.</li>
+		<li>Minimizing reversals is NP-hard; the greedy default gets close by looking at degrees alone.</li>
+		<li>Near-minimal still leaves huge freedom: same graph, four strategies, four drawings. Declaration order is information; some strategies read it.</li>
+		<li>Strategy is a per-diagram setting — worth reaching for when a loop renders upside down.</li>
 	</ul>
 	<p class="dim">
 		Next: <a href="{base}/learn/layering">layering</a> — what "pointing forward" turns into,
@@ -619,7 +618,7 @@
 	.band {
 		fill: color-mix(in srgb, var(--accent) 8%, transparent);
 	}
-	.bandlabel {
+	svg .bandlabel {
 		fill: var(--dim);
 		font-size: 10px;
 		text-anchor: start;
@@ -636,7 +635,7 @@
 		fill: color-mix(in srgb, var(--purple) 7%, transparent);
 		stroke: var(--muted);
 	}
-	.cltitle {
+	svg .cltitle {
 		fill: var(--dim);
 		font-size: 11px;
 		text-anchor: start;

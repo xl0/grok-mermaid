@@ -5,15 +5,23 @@
 		{
 			slug: 'drawing-graphs',
 			title: 'Drawing graphs',
-			blurb: 'what layout is, the families, why layered'
+			blurb: 'what layout is, the algorithm families, why layered wins for directed graphs'
 		},
-		{ slug: 'cycle-breaking', title: 'Cycle breaking', blurb: 'which edge renders against the flow' },
-		{ slug: 'layering', title: 'Layering', blurb: 'layers, dummy nodes, the cost of long edges' },
-		{ slug: null, title: 'Crossing minimization', blurb: 'ordering within layers' },
-		{ slug: null, title: 'Node placement', blurb: 'the width vs symmetry trade' },
-		{ slug: null, title: 'Edge routing', blurb: 'channels and tracks' },
-		{ slug: null, title: 'Compound graphs', blurb: 'clusters, piercing, inflation' },
-		{ slug: null, title: 'The terminal grid', blurb: 'from float coordinates to cells' }
+		{
+			slug: 'cycle-breaking',
+			title: 'Cycle breaking',
+			blurb: 'why some arrows point the "wrong" way'
+		},
+		{
+			slug: 'layering',
+			title: 'Layering',
+			blurb: 'rows, dummy nodes, and the hidden cost of long edges'
+		},
+		{ slug: null, title: 'Crossing minimization', blurb: 'ordering nodes within each layer' },
+		{ slug: null, title: 'Node placement', blurb: 'the width-vs-symmetry trade' },
+		{ slug: null, title: 'Edge routing', blurb: 'channels, tracks, and orthogonal lines' },
+		{ slug: null, title: 'Compound graphs', blurb: 'nested boxes, border-crossing edges' },
+		{ slug: null, title: 'The terminal grid', blurb: 'from float coordinates to character cells' }
 	];
 </script>
 

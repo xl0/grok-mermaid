@@ -514,12 +514,10 @@
 	<p class="crumbs"><a href="{base}/learn">learn</a> <span class="dim">/ drawing graphs</span></p>
 	<h1>Lesson 0: how do you draw a graph at all?</h1>
 	<p class="lede">
-		A graph is not a picture. It is pure structure — a list of things and a list of arrows
-		between them — and it says nothing about where anything sits on a screen. Layout is the act
-		of <em>inventing</em> geometry for structure that has none. This page is the map: what makes
-		a drawing good, the main families of layout algorithms, and why diagrams like the ones in
-		flowcharts and architecture drawings use the <b>layered</b> family — which the rest of the series dissects phase by
-		phase.
+		A graph is not a picture. It is structure — things and arrows — with no inherent geometry.
+		Layout invents that geometry. This page is our map: what makes a drawing good, the main
+		families of layout algorithms, and why flowcharts and architecture diagrams use the
+		<b>layered</b> family — which we'll dissect phase by phase.
 	</p>
 	<Term name="graph">
 		Things and connections: <em>nodes</em> (the things) and <em>edges</em> (the connections).
@@ -529,8 +527,9 @@
 
 	<h2>Same graph, three drawings</h2>
 	<p>
-		Here is one small dependency graph — <code>ui</code> calls <code>api</code>, which fans out
-		to services — drawn three ways. Every drawing contains exactly the same nodes and arrows:
+		Let's start with one small dependency graph — <code>ui</code> calls <code>api</code>, which
+		fans out to services — drawn three ways. Every drawing contains exactly the same nodes and
+		arrows:
 	</p>
 	<svg width="0" height="0" aria-hidden="true">
 		<defs>
@@ -566,18 +565,16 @@
 
 	<h2>What "good" means</h2>
 	<p>
-		Decades of experiments on human readers boil down to a short list of aesthetic criteria:
-		few edge crossings, short edges, evenly spread nodes, few bends, symmetry where the
-		structure has it, and — for directed graphs — a consistent flow direction. The catch: the
-		criteria <b>contradict each other</b> (perfectly uniform spacing creates crossings;
-		minimizing crossings stretches edges), and optimizing almost any of them exactly is
-		NP-hard (no known method beats trying astronomical numbers of combinations, and it is
-		believed none exists). So every
-		practical layout algorithm is a bundle of heuristics that picks which criteria it cares
-		about most. That choice is what defines the families.
+		Decades of readability research boil down to a short list of aesthetic criteria: few edge
+		crossings, short edges, evenly spread nodes, few bends, symmetry where the structure has
+		it, and — for directed graphs — a consistent flow direction. The catch: the criteria
+		<b>contradict each other</b> (uniform spacing creates crossings; minimizing crossings
+		stretches edges), and optimizing almost any of them exactly is NP-hard. So every practical
+		layout algorithm is a bundle of heuristics that picks which criteria matter most. That
+		choice defines the families.
 	</p>
 
-	<h2>The families, in the weeds</h2>
+	<h2>The families, up close</h2>
 	<div class="fam">
 		<p>
 			<b>Force-directed.</b> Treat edges as springs and nodes as charged particles; simulate
@@ -702,10 +699,10 @@
 	</div>
 	<div class="fam">
 		<p>
-			<b>Trees and radial.</b> If the graph is a hierarchy with no sharing — every node has
+			<b>Trees and radial.</b> If the graph is a strict hierarchy — every node has exactly
 			one parent — layout is nearly solved: tidy-tree algorithms produce the textbook picture
 			in linear time, and radial variants wrap the same tree around its root. The moment two
-			parents share a child, you are out of tree territory.
+			parents share a child, you leave tree territory.
 		</p>
 		<div class="pair">
 			{@render famfig('mrtree', 'a module tree')}
@@ -874,11 +871,11 @@
 	<h2>"Layers", precisely</h2>
 	<p>
 		The word is unfortunate: these are not Photoshop layers stacked toward the viewer. A layer
-		(graphviz says <b>rank</b>) is a <em>row</em> — look at the third drawing above. The
-		algorithm sorts nodes into consecutive rows along the flow direction, like the levels of an
-		org chart: the CEO's row, the VPs' row, the row of everyone who reports to a VP. In a
-		top-down diagram layers are horizontal rows; flip the direction to left-right and they
-		become columns. Same idea, rotated.
+		(Graphviz says <b>rank</b>) is a <em>row</em> — look at the third drawing above. The
+		algorithm sorts nodes into consecutive rows along the flow direction, like the levels of
+		an org chart: the CEO's row, the VPs' row, everyone who reports to a VP. In a top-down
+		diagram layers are horizontal rows; flip to left-right and they become columns. Same idea,
+		rotated.
 	</p>
 	<p>
 		The layered figure in the families section is exactly this picture, computed: the layer
@@ -890,19 +887,19 @@
 		The layered promise — every edge points to a strictly later row — quietly assumes the graph
 		has an ordering at all. Rows are numbered: an edge from row 2 to row 5 is fine; an edge
 		from row 5 back to row 2 breaks the promise. Suppose the graph has a cycle,
-		<code>A → B → C → A</code>, and try to number the rows.
+		<code>A → B → C → A</code> — try to number those rows.
 	</p>
 	<p>
-		Force-directed layout never notices (it does not promise direction). Layered layout must do
+		Force-directed layout never notices (it makes no direction promise). Layered layout must do
 		something about it <em>before anything else can run</em> — which is why "cycle breaking" is
-		phase one of the pipeline, and the subject of
+		phase one of the pipeline, and where we pick up in
 		<a href="{base}/learn/cycle-breaking">lesson 1</a>.
 	</p>
 
 	<h2>The pipeline</h2>
 	<p>
-		A layered engine is an assembly line of five phases, each solving one sub-problem and
-		committing to its answer:
+		A layered engine is an assembly line of five phases. Each solves one sub-problem and
+		commits to its answer:
 	</p>
 	<svg
 		viewBox="-4 0 {PHASES_W + 8} 40"
@@ -922,7 +919,7 @@
 		The order is not incidental: each phase consumes the previous phase's commitment and
 		cannot revisit it. That is what makes the whole thing fast, and it is also why layered
 		output sometimes looks locally dumb — the information needed to fix a bad decision often
-		only appears two phases later. Here is what each phase actually decides.
+		only appears two phases later. Let's see what each phase actually decides.
 	</p>
 
 	<div class="">
