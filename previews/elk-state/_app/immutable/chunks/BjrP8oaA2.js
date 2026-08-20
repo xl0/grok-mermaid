@@ -1,0 +1,1 @@
+import"./BICK3FdT2.js";import{n as e}from"./BfuL0RKT2.js";export{e as createPacketServices};
